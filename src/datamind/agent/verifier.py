@@ -95,10 +95,17 @@ def _is_calendar_or_bullet(raw_num_str: str, sentence: str, match_start: int) ->
     return False
 
 
-def verify_citations(text: str, evidence_store: EvidenceStore) -> CitationReport:
-    """Extract and verify all citations and perform deterministic numeric reconciliation."""
+def verify_citations(
+    text: str,
+    evidence_store: EvidenceStore,
+    semantic_model: Any = None,
+) -> CitationReport:
+    """Extract and verify all citations and perform deterministic numeric, currency, and date reconciliation."""
     report = CitationReport()
     seen_citation_ids: set[str] = set()
+
+    expected_currency = getattr(semantic_model, "default_currency", "USD") if semantic_model else "USD"
+    expected_symbol = getattr(semantic_model, "currency_symbol", "$") if semantic_model else "$"
 
     # 1. Provenance Verification
     all_bracket_tokens = LOOSE_CITATION_PATTERN.findall(text)
@@ -171,6 +178,21 @@ def verify_citations(text: str, evidence_store: EvidenceStore) -> CitationReport
     segments = [s.strip() for s in re.split(r"[\n\r]+|\.\s+", text) if s.strip()]
 
     for segment in segments:
+        # Check date semantic accuracy: order_month represents the start of the month, not period ending
+        if re.search(r"\b(?:period ending|ended|ending)\s+\d{4}-\d{2}-01\b", segment, re.I):
+            msg = "Date semantic discrepancy: 'period ending YYYY-MM-01' is invalid; order_month represents the start of the monthly period."
+            report.numeric_checks.append(
+                NumericCheck(
+                    raw_text="period ending",
+                    claimed_value=0.0,
+                    sentence=segment,
+                    status="DISCREPANCY",
+                    message=msg,
+                )
+            )
+            report.discrepancy_count += 1
+            report.is_clean = False
+
         # Find citations in this segment
         all_segment_citations = [
             c_id for c_id in CITATION_PATTERN.findall(segment)
@@ -188,10 +210,39 @@ def verify_citations(text: str, evidence_store: EvidenceStore) -> CitationReport
         has_lower_bound = bool(re.search(r"\b(?:over|more than|exceeding|above|\+)\b", segment, re.I))
 
         for match in NUMERIC_PATTERN.finditer(cleaned_segment):
+            raw_full = match.group(0).strip()
             raw_matched_num = match.group(1).replace(",", "")
             claimed_float = _parse_float(raw_matched_num)
             if claimed_float is None:
                 continue
+
+            # Check currency symbol mismatch
+            claimed_symbol = None
+            if raw_full.startswith("$") or "dollar" in segment.lower() or "usd" in segment.lower():
+                claimed_symbol = "$"
+            elif raw_full.startswith("£") or "pound" in segment.lower() or "gbp" in segment.lower():
+                claimed_symbol = "£"
+            elif raw_full.startswith("€") or "euro" in segment.lower() or "eur" in segment.lower():
+                claimed_symbol = "€"
+
+            if claimed_symbol and semantic_model:
+                if claimed_symbol != expected_symbol:
+                    msg = (
+                        f"Currency unit mismatch: claimed '{claimed_symbol}' ({raw_full}) "
+                        f"but declared semantic model currency is '{expected_symbol}' ({expected_currency})."
+                    )
+                    report.numeric_checks.append(
+                        NumericCheck(
+                            raw_text=raw_full,
+                            claimed_value=claimed_float,
+                            sentence=segment,
+                            status="DISCREPANCY",
+                            message=msg,
+                        )
+                    )
+                    report.discrepancy_count += 1
+                    report.is_clean = False
+                    continue
 
             # Skip calendar years or list bullets
             if _is_calendar_or_bullet(raw_matched_num, cleaned_segment, match.start()):

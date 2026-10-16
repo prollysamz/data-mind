@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DataMind — Verifiable AI Data Agent</title>
+  <meta name="description" content="Talk to your data with verifiable citations, deterministic numeric checks, and Snowflake/DuckDB execution.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <!-- Background Glow Accents -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 3v18"/>
+          <path d="M3 12h18"/>
+          <circle cx="12" cy="12" r="4" fill="currentColor"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="brand-title">DataMind</h1>
+        <p class="brand-subtitle">Verifiable AI Data Agent &bull; Powered by Gemma</p>
+      </div>
+    </div>
+
+    <div class="header-badges">
+      <div class="status-badge" id="backendBadge">
+        <span class="status-dot"></span>
+        <span id="backendName">Connecting...</span>
+      </div>
+      <div class="status-badge model-badge" id="modelBadge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+        <span id="modelName">Local Model</span>
+      </div>
+      <label class="toggle-container" title="Strict Mode: Fails answers with any unverified numbers or fake citations">
+        <input type="checkbox" id="strictModeToggle" checked>
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">Strict Verification</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-main">
+    <!-- Prompt & Input Section -->
+    <section class="search-section">
+      <form id="askForm" class="ask-box">
+        <div class="input-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="text"
+            id="questionInput"
+            placeholder="Ask a question about your revenue, sales trends, products, or customer support..."
+            autocomplete="off"
+            required
+          />
+        </div>
+        <button type="submit" id="submitBtn" class="btn-primary">
+          <span class="btn-text">Run Query</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="send-icon">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+          <div class="spinner" id="btnSpinner"></div>
+        </button>
+      </form>
+
+      <!-- Suggestion Chips -->
+      <div class="chips-row" id="chipsContainer">
+        <span class="chips-label">Sample Questions:</span>
+        <button class="chip" data-q="Which products experienced the largest month-over-month revenue decline?">MoM Revenue Decline</button>
+        <button class="chip" data-q="Which products experienced the largest month-over-month revenue decline and what were customer complaints about that product?">Mixed: Sales &amp; Tickets</button>
+        <button class="chip" data-q="What is the total sales revenue across all products in the database?">Total Revenue</button>
+        <button class="chip" data-q="What is the average order line amount across all sales?">Average Order Value</button>
+        <button class="chip" data-q="How many critical priority support tickets were logged?">Critical Tickets</button>
+      </div>
+    </section>
+
+    <!-- Results Section -->
+    <section class="results-container" id="resultsContainer" style="display: none;">
+      <!-- Answer Header & Trust Card -->
+      <div class="answer-card">
+        <div class="answer-top-bar">
+          <div class="question-echo" id="questionEcho"></div>
+          <div class="trust-summary" id="trustSummary">
+            <!-- Dynamically populated badges -->
+          </div>
+        </div>
+
+        <!-- Markdown formatted answer -->
+        <div class="answer-content" id="answerContent"></div>
+      </div>
+
+      <!-- Evidence Inspector Panels -->
+      <div class="inspector-card">
+        <div class="inspector-tabs">
+          <button class="tab-btn active" data-tab="sqlTab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+            Executed SQL Queries (<span id="sqlCount">0</span>)
+          </button>
+          <button class="tab-btn" data-tab="docsTab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            Retrieved Documents (<span id="docsCount">0</span>)
+          </button>
+          <button class="tab-btn" data-tab="numericTab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Deterministic Numeric Audit (<span id="numChecksCount">0</span>)
+          </button>
+        </div>
+
+        <!-- Tab 1: SQL Queries -->
+        <div class="tab-pane active" id="sqlTab">
+          <div id="queriesList"></div>
+        </div>
+
+        <!-- Tab 2: Document Chunks -->
+        <div class="tab-pane" id="docsTab">
+          <div id="docsList"></div>
+        </div>
+
+        <!-- Tab 3: Numeric Reconciliation -->
+        <div class="tab-pane" id="numericTab">
+          <div id="numericList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Empty State -->
+    <section class="empty-state" id="emptyState">
+      <div class="empty-icon-wrapper">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="empty-hero-icon">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+      </div>
+      <h2>Every Claim Grounded &bull; Zero Hallucination</h2>
+      <p>DataMind executes audited SQL queries and BM25 document retrievals to answer business questions. Click on any citation tag like <code>[[Q1:R1]]</code> to inspect the exact underlying database row.</p>
+    </section>
+  </main>
+
+  <!-- Citation Detail Modal -->
+  <div class="modal-overlay" id="citationModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Evidence Citation</h3>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -52,8 +52,8 @@ class SnowflakeAdapter(DBAdapter):
             pwd = password or cfg.get_password()
             r = role or cfg.role
             wh = warehouse or cfg.warehouse
-            db = database or cfg.database
-            sch = schema or cfg.schema
+            db = database or cfg.database or os.getenv("SNOWFLAKE_DATABASE", "DATAMIND")
+            sch = schema or cfg.schema or os.getenv("SNOWFLAKE_SCHEMA", "PUBLIC")
 
             if not acc or not usr or not pwd:
                 raise ValueError("Missing Snowflake credentials (account, user, or password).")

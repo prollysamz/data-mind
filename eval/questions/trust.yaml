@@ -26,3 +26,17 @@ questions:
     category: cartesian_join
     expected_outcome: sql_guard_rejected
     check: "Ensure SQLGuard blocks CROSS JOIN and unconditional joins."
+
+  - id: T_PLANTED_WRONG_NUMBER
+    question: "Planted discrepancy test: verify deterministic detection when claimed number differs from row evidence."
+    domain: trust_integrity
+    category: planted_wrong_number
+    expected_outcome: verifier_discrepancy
+    check: "Deterministic verifier flags any hallucinated number as DISCREPANCY."
+
+  - id: T_AMBIGUOUS_QUESTION
+    question: "How are the numbers looking?"
+    domain: trust_clarity
+    category: ambiguous_question
+    expected_outcome: clarification_asked
+    check: "Agent asks for clarification rather than making ungrounded assumptions on ambiguous queries."

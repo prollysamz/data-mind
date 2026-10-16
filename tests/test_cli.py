@@ -25,11 +25,18 @@ def test_cli_help(capsys: pytest.CaptureFixture):
 
 def test_cli_subcommand_stubs(capsys: pytest.CaptureFixture):
     """Verify remaining subcommand stubs print 'not implemented yet' and return 0."""
-    for sub in ["init", "serve"]:
-        exit_code = main([sub])
+    exit_code = main(["init"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Command 'init' is not implemented yet" in captured.out
+
+
+def test_cli_serve_command(capsys: pytest.CaptureFixture):
+    """Verify datamind serve calls start_server with configured port."""
+    with patch("datamind.server.start_server") as mock_start:
+        exit_code = main(["serve", "--port", "8088"])
         assert exit_code == 0
-        captured = capsys.readouterr()
-        assert f"Command '{sub}' is not implemented yet" in captured.out
+        mock_start.assert_called_once_with(config_path="datamind.yaml", backend=None, port=8088)
 
 
 def test_cli_ask_empty_question(capsys: pytest.CaptureFixture):
@@ -129,8 +136,13 @@ def test_cli_ask_strict_fails_on_discrepancy():
         mock_instance.run.return_value = mock_result
         mock_orch_cls.return_value = mock_instance
 
-        exit_code = main(["ask", "Test Q", "--strict"])
+        # Strict by default: fails on discrepancy
+        exit_code = main(["ask", "Test Q"])
         assert exit_code == 1
+
+        # Permissive flag: passes
+        exit_code_permissive = main(["ask", "Test Q", "--permissive"])
+        assert exit_code_permissive == 0
 
 
 def test_cli_eval_command(capsys: pytest.CaptureFixture):

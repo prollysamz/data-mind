@@ -67,7 +67,8 @@ def handle_ask(args: argparse.Namespace) -> int:
         adapter.close()
         retriever.close()
 
-    is_strict = getattr(args, "strict", False)
+    is_permissive = getattr(args, "permissive", False)
+    is_strict = not is_permissive
     is_success = result.success and (result.citation_report.is_clean if is_strict else True)
 
     if getattr(args, "json", False):
@@ -197,6 +198,18 @@ def handle_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_serve(args: argparse.Namespace) -> int:
+    """Start DataMind UI and API HTTP server."""
+    from datamind.server import start_server
+
+    backend = getattr(args, "backend", None)
+    port = getattr(args, "port", 8000)
+    config_path = getattr(args, "config", "datamind.yaml")
+
+    start_server(config_path=config_path, backend=backend, port=port)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Main CLI entrypoint for DataMind."""
     parser = argparse.ArgumentParser(
@@ -232,6 +245,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=8000,
         help="Port to bind server (default: 8000)",
     )
+    serve_parser.add_argument(
+        "--backend",
+        choices=["duckdb", "snowflake"],
+        default=None,
+        help="Database backend to query (default: from config)",
+    )
 
     # ask
     ask_parser = subparsers.add_parser(
@@ -256,9 +275,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Database backend to query (default: from config)",
     )
     ask_parser.add_argument(
-        "--strict",
+        "--permissive",
         action="store_true",
-        help="Enforce strict numeric verification (fail on any discrepancy or unsupported claim)",
+        help="Permissive mode: do not exit with error on numeric discrepancies or unsupported claims (strict mode is default)",
     )
     ask_parser.add_argument(
         "--json",
@@ -309,7 +328,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.subcommand == "index":
         return handle_index(args)
 
-    if args.subcommand in {"init", "serve"}:
+    if args.subcommand == "serve":
+        return handle_serve(args)
+
+    if args.subcommand == "init":
         print(f"Command '{args.subcommand}' is not implemented yet.")
         return 0
 

@@ -1,5 +1,7 @@
 name: saas_sales_and_support
 description: E-commerce SaaS sales transactions, products catalog, and customer support tickets.
+default_currency: USD
+currency_symbol: "$"
 
 tables:
   - name: PRODUCTS

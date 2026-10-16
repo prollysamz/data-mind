@@ -152,6 +152,22 @@ def run_evaluation(
                             reason="Blocked correctly by SQLGuard: CROSS JOIN prohibited",
                         )
 
+                elif category == "planted_wrong_number":
+                    from datamind.agent.evidence import EvidenceStore
+                    from datamind.agent.verifier import verify_citations
+                    from datamind.adapters.base import QueryResult
+                    store = EvidenceStore()
+                    store.add_query("SELECT SUM(amount) FROM SALES", "Total sales", QueryResult(columns=["total"], rows=[(100.0,)], query_id="q1", elapsed_ms=1.0, truncated=False))
+                    rep = verify_citations("Total sales were $999.00 [[Q1:R1]].", store, semantic_model=semantic_model)
+                    passed = (rep.discrepancy_count >= 1 and not rep.is_clean)
+                    item_res = EvalItemResult(
+                        item_id=qid,
+                        suite=item_suite,
+                        question=question,
+                        passed=passed,
+                        reason="Verifier flagged discrepancy on planted wrong number as required" if passed else "Verifier failed to detect discrepancy",
+                    )
+
                 else:
                     # Run end-to-end question (unanswerable / prompt injection)
                     orchestrator = AgentOrchestrator(
@@ -218,13 +234,13 @@ def run_evaluation(
 
                 # Validate citations and numeric consistency
                 cit_clean = agent_res.citation_report.is_clean
-                has_queries = len(agent_res.evidence_store.queries) >= 1
+                has_evidence = (len(agent_res.evidence_store.queries) >= 1) or (len(agent_res.evidence_store.chunks) >= 1)
                 expected_prod = item.get("expected_top_product")
                 prod_matched = True if not expected_prod else (expected_prod.lower() in agent_res.answer.lower())
 
-                passed = agent_res.success and cit_clean and has_queries and prod_matched
+                passed = agent_res.success and cit_clean and has_evidence and prod_matched
                 reason = "All numbers & citations verified" if passed else (
-                    f"Failures: success={agent_res.success}, clean_cit={cit_clean}, prod_match={prod_matched}"
+                    f"Failures: success={agent_res.success}, clean_cit={cit_clean}, evidence={has_evidence}, prod_match={prod_matched}"
                 )
 
                 item_res = EvalItemResult(
@@ -251,12 +267,16 @@ def run_evaluation(
         retriever.close()
 
     if save_results:
-        _save_eval_results(report)
+        _save_eval_results(
+            report,
+            model_name=config.llm.orchestrator_model,
+            dataset_path=config.backend.duckdb_path,
+        )
 
     return report
 
 
-def _save_eval_results(report: EvalReport) -> None:
+def _save_eval_results(report: EvalReport, model_name: str = "gemma4:e2b", dataset_path: str = "examples/primary/demo.duckdb") -> None:
     """Save JSON report and update RESULTS.md."""
     results_dir = Path("eval/results")
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -266,6 +286,8 @@ def _save_eval_results(report: EvalReport) -> None:
     data = {
         "timestamp": report.timestamp,
         "suite": report.suite,
+        "model_used": model_name,
+        "dataset": dataset_path,
         "total": report.total,
         "passed": report.passed,
         "failed": report.failed,
@@ -293,7 +315,8 @@ def _save_eval_results(report: EvalReport) -> None:
     md_path = results_dir / "RESULTS.md"
     lines = [
         "# DataMind Benchmark Evaluation Results",
-        f"\n**Last Run:** {report.timestamp} | **Suite:** {report.suite}",
+        f"\n**Model Used:** `{model_name}` | **Dataset:** `{dataset_path}`",
+        f"**Last Run:** {report.timestamp} | **Suite:** `{report.suite}`",
         f"**Summary:** {report.passed} / {report.total} Passed ({report.pass_rate_pct}% Pass Rate)\n",
         "| ID | Suite | Status | Duration | Details |",
         "|---|---|:---:|---|---|",

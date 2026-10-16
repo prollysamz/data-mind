@@ -60,13 +60,20 @@ class AgentOrchestrator:
             dialect=db_adapter.dialect,
         )
 
-    def run(self, question: str, max_turns: int = 6) -> AgentResult:
+    def run(
+        self,
+        question: str,
+        max_turns: int = 6,
+        conversation_history: list[dict[str, Any]] | None = None,
+    ) -> AgentResult:
         """Execute end-to-end question answering loop."""
         system_prompt = build_system_prompt(self.semantic_model)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
         ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": question})
 
         turns_taken = 0
         for turn_idx in range(max_turns):
@@ -77,7 +84,7 @@ class AgentOrchestrator:
             if not tool_calls:
                 # Model produced final answer
                 final_text = reply.get("content") or ""
-                report = verify_citations(final_text, self.evidence_store)
+                report = verify_citations(final_text, self.evidence_store, self.semantic_model)
                 return AgentResult(
                     question=question,
                     answer=final_text,

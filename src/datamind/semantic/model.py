@@ -1,6 +1,6 @@
 """Semantic model definitions for DataMind.
 
-Defines tables, columns, metrics, join relationships, and verified queries.
+Defines tables, columns, metrics, join relationships, currency, and verified queries.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ class ColumnDef(BaseModel):
     name: str
     type: str
     description: str = ""
+    unit: str = ""
     is_primary_key: bool = False
     nullable: bool = True
 
@@ -32,6 +33,7 @@ class MetricDef(BaseModel):
     description: str = ""
     table: str
     expression: str
+    unit: str = ""
     dimensions: list[str] = Field(default_factory=list)
     sql_template: str = ""
 
@@ -53,6 +55,8 @@ class VerifiedQuery(BaseModel):
 class SemanticModel(BaseModel):
     name: str = "default"
     description: str = ""
+    default_currency: str = "USD"
+    currency_symbol: str = "$"
     tables: list[TableDef] = Field(default_factory=list)
     metrics: list[MetricDef] = Field(default_factory=list)
     joins: list[JoinDef] = Field(default_factory=list)
@@ -79,17 +83,23 @@ class SemanticModel(BaseModel):
     def to_prompt_context(self) -> str:
         """Render a concise markdown description of tables, metrics, and joins for the LLM."""
         lines: list[str] = ["# Semantic Data Model\n"]
+        lines.append(f"**Declared Currency:** {self.default_currency} ({self.currency_symbol})\n")
+        lines.append("Note: `order_month` represents the starting date of the monthly period (YYYY-MM-01).\n")
 
         lines.append("## Approved Tables and Columns")
         for t in self.tables:
-            cols_str = ", ".join(f"{c.name} ({c.type})" for c in t.columns)
+            cols_str = ", ".join(
+                f"{c.name} ({c.type}{f', unit: {c.unit}' if c.unit else ''})"
+                for c in t.columns
+            )
             lines.append(f"- **{t.name}**: {t.description}")
             lines.append(f"  Columns: {cols_str}")
 
         if self.metrics:
             lines.append("\n## Business Metrics")
             for m in self.metrics:
-                lines.append(f"- **{m.name}** ({m.table}): {m.description}")
+                unit_str = f" [Unit: {m.unit}]" if m.unit else ""
+                lines.append(f"- **{m.name}** ({m.table}){unit_str}: {m.description}")
                 lines.append(f"  Formula: `{m.expression}`")
                 if m.sql_template:
                     lines.append(f"  Reference SQL:\n```sql\n{m.sql_template.strip()}\n```")

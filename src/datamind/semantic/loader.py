@@ -52,6 +52,8 @@ def load_semantic_model(yaml_path: str | Path) -> SemanticModel:
     return SemanticModel(
         name=data.get("name", path.stem),
         description=data.get("description", ""),
+        default_currency=data.get("default_currency", "USD"),
+        currency_symbol=data.get("currency_symbol", "$"),
         tables=tables,
         metrics=metrics,
         joins=joins,

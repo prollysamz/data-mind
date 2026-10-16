@@ -95,3 +95,45 @@ def test_bullet_and_calendar_year_not_flagged(evidence_store):
     assert report.discrepancy_count == 0
     assert report.unsupported_claims_count == 0
     assert report.verified_numbers_count == 1
+
+
+def test_currency_mismatch_detected(evidence_store):
+    """Verify that claiming $738,876.88 when semantic model declares GBP (£) is marked a discrepancy."""
+    from datamind.semantic.model import SemanticModel
+
+    model_gbp = SemanticModel(
+        name="retail_uk",
+        description="UK retail dataset in GBP",
+        default_currency="GBP",
+        currency_symbol="£",
+    )
+    # Add revenue query result
+    evidence_store.add_query(
+        "SELECT SUM(amount) FROM SALES",
+        "Total sales",
+        QueryResult(
+            columns=["total_revenue"],
+            rows=[(738876.88,)],
+            query_id="qid-curr-1",
+            elapsed_ms=10.0,
+            truncated=False,
+        ),
+    )
+
+    # Agent wrote $738,876.88 instead of £738,876.88
+    text = "Total sales reached $738,876.88 [[Q2:R1]]."
+    report = verify_citations(text, evidence_store, semantic_model=model_gbp)
+
+    assert report.is_clean is False
+    assert report.discrepancy_count >= 1
+    assert any("Currency unit mismatch" in d for d in report.get_discrepancies())
+
+
+def test_date_semantic_period_ending_flagged(evidence_store):
+    """Verify that 'period ending YYYY-MM-01' is caught because row represents month start."""
+    text = "For the period ending 2026-03-01, Novaship declined by $53,803.23 [[Q1:R1]]."
+    report = verify_citations(text, evidence_store)
+
+    assert report.is_clean is False
+    assert report.discrepancy_count >= 1
+    assert any("Date semantic discrepancy" in d for d in report.get_discrepancies())
