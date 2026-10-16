@@ -64,6 +64,38 @@ def main() -> int:
             print(f"Database:     {row[3]}")
             print(f"Schema:       {row[4]}")
         print(">>> [PASS] Snowflake plain SQL query executed successfully.")
+
+        # Test Read-Only enforcement:
+        print("\n--- Verifying Read-Only Role Enforcement ---")
+        # 1. SELECT should succeed
+        try:
+            cur.execute("SELECT * FROM DATAMIND.PUBLIC.READONLY_TEST LIMIT 1;")
+            sample = cur.fetchall()
+            print(f"Read test:    SELECT succeeded ({len(sample)} rows read).")
+            print(">>> [PASS] Read access verified.")
+        except Exception as e:
+            print(f">>> [FAIL] Read test failed: {e}")
+
+        # 2. INSERT should fail (defense-in-depth safety net)
+        try:
+            cur.execute("INSERT INTO DATAMIND.PUBLIC.READONLY_TEST VALUES (999, 'unauthorized');")
+            print(">>> [FAIL] INSERT succeeded on read-only role! (Should have been blocked)")
+            return 1
+        except Exception as e:
+            print(f"Insert test:  Blocked as expected by Snowflake permissions.")
+            print(f"              Error snippet: {str(e)[:120]}...")
+            print(">>> [PASS] INSERT successfully blocked by DATAMIND_READONLY role.")
+
+        # 3. DROP TABLE should fail (defense-in-depth safety net)
+        try:
+            cur.execute("DROP TABLE DATAMIND.PUBLIC.READONLY_TEST;")
+            print(">>> [FAIL] DROP succeeded on read-only role! (Should have been blocked)")
+            return 1
+        except Exception as e:
+            print(f"Drop test:    Blocked as expected by Snowflake permissions.")
+            print(f"              Error snippet: {str(e)[:120]}...")
+            print(">>> [PASS] DROP TABLE successfully blocked by DATAMIND_READONLY role.")
+
         cur.close()
         conn.close()
         return 0

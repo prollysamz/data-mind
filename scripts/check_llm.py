@@ -18,7 +18,7 @@ from datamind.config import load_config
 from datamind.llm.client import LLMClient, build_tool_messages
 
 
-def step_banner(num: int, title: str) -> None:
+def step_banner(num: int | str, title: str) -> None:
     print(f"\n{'='*20} STEP {num}: {title} {'='*20}")
 
 
@@ -69,6 +69,42 @@ def main() -> int:
     except Exception as e:
         results["1_ping"] = "FAIL"
         print(f">>> [FAIL] Ping failed with error: {e}")
+
+    # ----------------------------------------------------
+    # Step 1b: Token Parameter Compatibility (max_tokens vs max_completion_tokens)
+    # ----------------------------------------------------
+    step_banner("1b", "Token Parameter Compatibility Probe")
+    try:
+        # Test max_tokens
+        client.config.token_param = "max_tokens"
+        res_mt = client.chat(
+            messages=[{"role": "user", "content": "Reply with 'MT'"}],
+            model=target_model,
+            max_tokens=15,
+        )
+        print(f"max_tokens reply:             {res_mt.get('content', '').strip()}")
+        results["1b_max_tokens"] = "PASS"
+        print(">>> [PASS] max_tokens accepted by endpoint")
+    except Exception as e:
+        results["1b_max_tokens"] = f"FAIL ({e})"
+        print(f">>> [FAIL] max_tokens rejected: {e}")
+
+    try:
+        # Test max_completion_tokens
+        client.config.token_param = "max_completion_tokens"
+        res_mct = client.chat(
+            messages=[{"role": "user", "content": "Reply with 'MCT'"}],
+            model=target_model,
+            max_tokens=15,
+        )
+        print(f"max_completion_tokens reply:  {res_mct.get('content', '').strip()}")
+        results["1b_max_completion_tokens"] = "PASS"
+        print(">>> [PASS] max_completion_tokens accepted by endpoint")
+    except Exception as e:
+        results["1b_max_completion_tokens"] = f"FAIL ({e})"
+        print(f">>> [FAIL] max_completion_tokens rejected: {e}")
+    finally:
+        client.config.token_param = config.llm.token_param
 
     # ----------------------------------------------------
     # Step 2: Single-tool call
