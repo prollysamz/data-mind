@@ -1,0 +1,41 @@
+questions:
+  - id: Q_MOM_DECLINE
+    question: "Which products experienced the largest month-over-month revenue decline?"
+    domain: sales
+    required_tools: [run_sql]
+    expected_top_product: "Novaship"
+    expected_decline_month: "2026-03-01"
+    ground_truth_sql: |
+      WITH monthly_revenue AS (
+          SELECT
+              product_name,
+              order_month,
+              SUM(amount) AS monthly_sales
+          FROM SALES
+          GROUP BY product_name, order_month
+      ),
+      revenue_changes AS (
+          SELECT
+              product_name,
+              order_month,
+              monthly_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline
+          FROM monthly_revenue
+      )
+      SELECT
+          product_name,
+          order_month,
+          prev_month_sales,
+          monthly_sales,
+          mom_revenue_decline
+      FROM revenue_changes
+      WHERE prev_month_sales IS NOT NULL AND mom_revenue_decline > 0
+      ORDER BY mom_revenue_decline DESC;
+
+  - id: Q_MIXED_REVENUE_SUPPORT
+    question: "Which products experienced the largest month-over-month revenue decline and what were customer complaints about that product?"
+    domain: mixed
+    required_tools: [run_sql, search_documents]
+    expected_top_product: "Novaship"
+    expected_complaint_themes: ["API latency", "504 gateway timeouts", "billing", "duplicate billing", "outage", "downtime"]

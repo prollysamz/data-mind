@@ -1,0 +1,165 @@
+name: saas_sales_and_support
+description: E-commerce SaaS sales transactions, products catalog, and customer support tickets.
+
+tables:
+  - name: PRODUCTS
+    description: Master catalog of SaaS products and list prices.
+    primary_key: [product_id]
+    columns:
+      - name: product_id
+        type: INTEGER
+        description: Unique product identifier
+        is_primary_key: true
+      - name: product_name
+        type: VARCHAR
+        description: Product commercial name (e.g. Novaship, CloudSync, DataFlow)
+      - name: category
+        type: VARCHAR
+        description: Product category (e.g. Logistics, Infrastructure, Analytics)
+      - name: base_price
+        type: DECIMAL(10, 2)
+        description: Default list price in USD
+
+  - name: SALES
+    description: Individual order sales transactions recorded by date and product.
+    primary_key: [order_id, line_no]
+    columns:
+      - name: order_id
+        type: INTEGER
+        description: Unique order identifier
+        is_primary_key: true
+      - name: line_no
+        type: INTEGER
+        description: Line item number within order
+        is_primary_key: true
+      - name: order_date
+        type: DATE
+        description: Exact timestamp date of the sale
+      - name: order_month
+        type: DATE
+        description: Truncated first day of the month for the order (YYYY-MM-01)
+      - name: product_id
+        type: INTEGER
+        description: Foreign key referencing PRODUCTS.product_id
+      - name: product_name
+        type: VARCHAR
+        description: Product name at time of sale
+      - name: quantity
+        type: INTEGER
+        description: Quantity of units sold
+      - name: amount
+        type: DECIMAL(12, 2)
+        description: Total line amount in USD
+
+  - name: SUPPORT_TICKETS
+    description: Customer support complaints, outage reports, and feedback.
+    primary_key: [ticket_id]
+    columns:
+      - name: ticket_id
+        type: VARCHAR
+        description: Unique ticket identifier (e.g. TK-1001)
+        is_primary_key: true
+      - name: created_at
+        type: DATE
+        description: Date ticket was opened
+      - name: product_name
+        type: VARCHAR
+        description: Product associated with the complaint or feedback
+      - name: category
+        type: VARCHAR
+        description: Ticket category (e.g. Performance, Billing, Outage, Churn)
+      - name: priority
+        type: VARCHAR
+        description: Ticket severity priority (e.g. Critical, Urgent, High, Medium, Low)
+      - name: body
+        type: VARCHAR
+        description: Full text description of the customer issue or complaint
+
+metrics:
+  - name: revenue
+    description: Total gross sales revenue
+    table: SALES
+    expression: SUM(amount)
+    dimensions: [product_name, order_month]
+
+  - name: mom_revenue_decline
+    description: Month-over-month decline in sales revenue. Positive value indicates revenue drop from previous month.
+    table: SALES
+    expression: LAG(SUM(amount)) OVER (PARTITION BY product_name ORDER BY order_month) - SUM(amount)
+    dimensions: [product_name, order_month]
+    sql_template: |
+      WITH monthly_revenue AS (
+          SELECT
+              product_name,
+              order_month,
+              SUM(amount) AS monthly_sales
+          FROM SALES
+          GROUP BY product_name, order_month
+      ),
+      revenue_changes AS (
+          SELECT
+              product_name,
+              order_month,
+              monthly_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline
+          FROM monthly_revenue
+      )
+      SELECT
+          product_name,
+          order_month,
+          prev_month_sales,
+          monthly_sales,
+          mom_revenue_decline
+      FROM revenue_changes
+      WHERE prev_month_sales IS NOT NULL
+      ORDER BY mom_revenue_decline DESC;
+
+  - name: ticket_count
+    description: Total number of customer support tickets
+    table: SUPPORT_TICKETS
+    expression: COUNT(ticket_id)
+    dimensions: [product_name, category, priority]
+
+joins:
+  - from_table: SALES
+    to_table: PRODUCTS
+    on_condition: SALES.product_id = PRODUCTS.product_id
+    join_type: LEFT
+
+  - from_table: SUPPORT_TICKETS
+    to_table: SALES
+    on_condition: SUPPORT_TICKETS.product_name = SALES.product_name
+    join_type: LEFT
+
+verified_queries:
+  - name: mom_revenue_decline_ranking
+    question: "Which products experienced the largest month-over-month revenue decline?"
+    sql: |
+      WITH monthly_revenue AS (
+          SELECT
+              product_name,
+              order_month,
+              SUM(amount) AS monthly_sales
+          FROM SALES
+          GROUP BY product_name, order_month
+      ),
+      revenue_changes AS (
+          SELECT
+              product_name,
+              order_month,
+              monthly_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline
+          FROM monthly_revenue
+      )
+      SELECT
+          product_name,
+          order_month,
+          prev_month_sales,
+          monthly_sales,
+          mom_revenue_decline
+      FROM revenue_changes
+      WHERE prev_month_sales IS NOT NULL AND mom_revenue_decline > 0
+      ORDER BY mom_revenue_decline DESC;
+    explanation: "Aggregates revenue by product and month, computes LAG window function, filters to positive declines, and sorts descending."
