@@ -39,3 +39,15 @@ questions:
     required_tools: [run_sql, search_documents]
     expected_top_product: "Novaship"
     expected_complaint_themes: ["API latency", "504 gateway timeouts", "billing", "duplicate billing", "outage", "downtime"]
+
+  - id: Q_TOTAL_REVENUE
+    question: "What is the total sales revenue across all products in the database?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT SUM(amount) AS total_revenue FROM SALES;"
+
+  - id: Q_PRODUCTS_CATALOG
+    question: "List all product categories and their default base prices from the products catalog."
+    domain: catalog
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT category, base_price FROM PRODUCTS ORDER BY category;"

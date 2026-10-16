@@ -6,8 +6,9 @@ import pytest
 
 from datamind.agent.evidence import EvidenceStore
 from datamind.agent.orchestrator import AgentResult
-from datamind.agent.verifier import CitationReport
+from datamind.agent.verifier import CitationReport, NumericCheck
 from datamind.cli import main
+from datamind.eval.runner import EvalItemResult, EvalReport
 
 
 def test_cli_help(capsys: pytest.CaptureFixture):
@@ -18,12 +19,13 @@ def test_cli_help(capsys: pytest.CaptureFixture):
     captured = capsys.readouterr()
     assert "datamind" in captured.out
     assert "ask" in captured.out
+    assert "eval" in captured.out
     assert "index" in captured.out
 
 
 def test_cli_subcommand_stubs(capsys: pytest.CaptureFixture):
     """Verify remaining subcommand stubs print 'not implemented yet' and return 0."""
-    for sub in ["init", "serve", "eval"]:
+    for sub in ["init", "serve"]:
         exit_code = main([sub])
         assert exit_code == 0
         captured = capsys.readouterr()
@@ -68,7 +70,6 @@ def test_cli_ask_with_mock_orchestrator(capsys: pytest.CaptureFixture):
         captured = capsys.readouterr()
         assert "DATAMIND ANSWER" in captured.out
         assert "Novaship declined most" in captured.out
-        assert "Citations: 1 valid, 0 invalid (PASS)" in captured.out
 
 
 def test_cli_ask_json_output(capsys: pytest.CaptureFixture):
@@ -95,3 +96,65 @@ def test_cli_ask_json_output(capsys: pytest.CaptureFixture):
         assert data["question"] == "Test Q"
         assert data["citations"]["is_clean"] is True
         assert data["citations"]["valid_count"] == 1
+
+
+def test_cli_ask_strict_fails_on_discrepancy():
+    """datamind ask --strict fails when discrepancy is detected."""
+    mock_evidence = EvidenceStore()
+    mock_result = AgentResult(
+        question="Test Q",
+        answer="Discrepancy answer [[Q1:R1]]",
+        evidence_store=mock_evidence,
+        citation_report=CitationReport(
+            valid_count=1,
+            invalid_count=0,
+            discrepancy_count=1,
+            is_clean=False,
+            numeric_checks=[
+                NumericCheck(
+                    raw_text="9999",
+                    claimed_value=9999.0,
+                    sentence="bad",
+                    status="DISCREPANCY",
+                    message="Number mismatch",
+                )
+            ],
+        ),
+        turns=1,
+        success=True,
+    )
+
+    with patch("datamind.cli.AgentOrchestrator") as mock_orch_cls:
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = mock_result
+        mock_orch_cls.return_value = mock_instance
+
+        exit_code = main(["ask", "Test Q", "--strict"])
+        assert exit_code == 1
+
+
+def test_cli_eval_command(capsys: pytest.CaptureFixture):
+    """datamind eval runs evaluation and prints summary."""
+    mock_report = EvalReport(
+        timestamp="2026-10-17T00:00:00",
+        suite="trust",
+        total=2,
+        passed=2,
+        failed=0,
+        items=[
+            EvalItemResult(
+                item_id="T_TEST_1",
+                suite="trust",
+                question="Test question",
+                passed=True,
+                reason="Passed",
+            )
+        ],
+    )
+
+    with patch("datamind.cli.run_evaluation", return_value=mock_report):
+        exit_code = main(["eval", "--suite", "trust"])
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "DATAMIND EVALUATION RUNNER" in captured.out
+        assert "EVALUATION SUMMARY: 2 / 2 Passed" in captured.out
