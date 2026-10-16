@@ -1,0 +1,32 @@
+llm:
+  base_url: ${LLM_BASE_URL}          # OpenAI-compatible endpoint (Bedrock mantle, Ollama, Gemini-compatible, etc.)
+  api_key_env: LLM_API_KEY
+  orchestrator_model: google.gemma-4-26b-a4b   # name as the endpoint expects (VERIFY exact id per provider)
+  reasoning_model: google.gemma-4-31b
+  fast_model: google.gemma-4-e2b
+  token_param: max_tokens            # max_tokens | max_completion_tokens
+  max_tokens: 4096                   # raise if replies come back empty/truncated (reasoning can consume output tokens)
+  temperature: 0.0
+  timeout_seconds: 60
+backend:
+  type: duckdb                       # duckdb | snowflake
+  duckdb_path: examples/primary/demo.duckdb
+  snowflake:                         # all values from env
+    account_env: SNOWFLAKE_ACCOUNT
+    user_env: SNOWFLAKE_USER
+    password_env: SNOWFLAKE_PASSWORD
+    role: DATAMIND_READONLY
+    warehouse: DATAMIND_XS
+    database: ""
+    schema: ""
+guardrails:
+  max_rows: 1000
+  statement_timeout_seconds: 30
+  max_plan_cost: null                # backend-specific; see 8.2
+agent:
+  max_steps: 6
+  max_sql_repairs: 2
+semantic_model: examples/primary/semantic_model.yaml
+retrieval:
+  index_path: .datamind/fts.sqlite
+  top_k: 5
