@@ -17,6 +17,23 @@ import yaml
 ENV_PATTERN = re.compile(r"\$\{([A-Za-z0-9_]+)(?::-(.*?))?\}")
 
 
+def load_dotenv(dotenv_path: str | Path = ".env") -> None:
+    """Load variables from .env file into os.environ if not already set."""
+    p = Path(dotenv_path)
+    if not p.exists():
+        return
+    with open(p, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip("'\"")
+            if k and k not in os.environ:
+                os.environ[k] = v
+
+
 def _interpolate_env(value: Any) -> Any:
     """Recursively interpolate ${VAR} and ${VAR:-default} from environment."""
     if isinstance(value, str):
@@ -137,8 +154,10 @@ def apply_env_overrides(config: AppConfig) -> AppConfig:
     return config
 
 
-def load_config(config_path: str | Path | None = None) -> AppConfig:
+def load_config(config_path: str | Path | None = None, load_env: bool = True) -> AppConfig:
     """Load configuration from YAML file and apply environment variable overrides."""
+    if load_env:
+        load_dotenv()
     data: dict[str, Any] = {}
     if config_path is not None:
         path = Path(config_path)

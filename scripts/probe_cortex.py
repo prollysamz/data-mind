@@ -58,7 +58,11 @@ def probe_cortex_agents(conn) -> tuple[str, str]:
     return "INCONCLUSIVE", "Endpoint requires configured Agent specification and REST authentication."
 
 
+from datamind.config import load_dotenv
+
+
 def main() -> int:
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Conclusive probe for Snowflake Cortex capabilities")
     parser.add_argument("--analyst", action="store_true", help="Probe Cortex Analyst")
     parser.add_argument("--search", action="store_true", help="Probe Cortex Search")

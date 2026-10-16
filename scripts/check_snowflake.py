@@ -4,7 +4,11 @@ import os
 import sys
 
 
+from datamind.config import load_dotenv
+
+
 def main() -> int:
+    load_dotenv()
     print("Checking Snowflake credentials from environment...")
     account = os.getenv("SNOWFLAKE_ACCOUNT")
     user = os.getenv("SNOWFLAKE_USER")

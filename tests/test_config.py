@@ -23,7 +23,11 @@ backend:
     config_file = tmp_path / "datamind.yaml"
     config_file.write_text(yaml_content, encoding="utf-8")
 
-    cfg = load_config(config_file)
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_ORCHESTRATOR_MODEL", raising=False)
+
+    cfg = load_config(config_file, load_env=False)
     assert cfg.llm.base_url == "https://api.example.com/v1"
     assert cfg.llm.orchestrator_model == "default-model-123"
     assert cfg.backend.snowflake.account_env == "my_snowflake_acc"
@@ -47,7 +51,7 @@ llm:
 
     # Set overriding environment variables
     monkeypatch.setenv("LLM_BASE_URL", "http://env-override-url:9999/v1")
-    monkeypatch.setenv("LLM_API_KEY", "env-secret-api-key")
+    monkeypatch.setenv("LLM_API_KEY", "mock-test-key")  # pragma: allowlist secret
     monkeypatch.setenv("LLM_ORCHESTRATOR_MODEL", "google.gemma-4-26b-a4b")
     monkeypatch.setenv("LLM_REASONING_MODEL", "google.gemma-4-31b")
     monkeypatch.setenv("LLM_FAST_MODEL", "google.gemma-4-e2b")
@@ -55,8 +59,8 @@ llm:
     cfg = load_config(config_file)
 
     assert cfg.llm.base_url == "http://env-override-url:9999/v1"
-    assert cfg.llm.api_key == "env-secret-api-key"
-    assert cfg.llm.get_api_key() == "env-secret-api-key"
+    assert cfg.llm.api_key == "mock-test-key"  # pragma: allowlist secret
+    assert cfg.llm.get_api_key() == "mock-test-key"  # pragma: allowlist secret
     assert cfg.llm.orchestrator_model == "google.gemma-4-26b-a4b"
     assert cfg.llm.reasoning_model == "google.gemma-4-31b"
     assert cfg.llm.fast_model == "google.gemma-4-e2b"
