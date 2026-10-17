@@ -606,6 +606,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to configuration YAML (default: datamind.yaml)",
     )
 
+    # mcp
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="Run Model Context Protocol (MCP) server over stdio for IDE and agent integrations",
+    )
+    mcp_parser.add_argument(
+        "--config",
+        default="datamind.yaml",
+        help="Path to configuration YAML (default: datamind.yaml)",
+    )
+
     args = parser.parse_args(argv)
 
     if not args.subcommand:
@@ -637,6 +648,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         from datamind.doctor import print_doctor_report, run_diagnostics
         checks = run_diagnostics(config_path=getattr(args, "config", "datamind.yaml"))
         return print_doctor_report(checks)
+
+    if args.subcommand == "mcp":
+        from datamind.mcp_server import DataMindMCPServer
+        server = DataMindMCPServer(config_path=getattr(args, "config", "datamind.yaml"))
+        server.run_stdio()
+        return 0
 
     parser.print_help()
     return 1
