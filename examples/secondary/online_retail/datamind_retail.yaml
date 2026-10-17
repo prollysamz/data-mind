@@ -1,0 +1,24 @@
+# DataMind Configuration for UCI Online Retail Secondary Demo (Zero Code Changes)
+backend:
+  type: duckdb
+  duckdb_path: examples/secondary/online_retail/online_retail.duckdb
+
+semantic_model: examples/secondary/online_retail/semantic_model.yaml
+
+retrieval:
+  top_k: 5
+
+guardrails:
+  max_rows: 1000
+  statement_timeout_seconds: 30.0
+
+agent:
+  max_steps: 6
+
+llm:
+  base_url: ${LLM_BASE_URL:-http://localhost:11434/v1}
+  orchestrator_model: ${LLM_ORCHESTRATOR_MODEL:-gemma4:e2b}
+  fast_model: ${LLM_FAST_MODEL:-gemma4:e2b}
+  token_param: max_tokens
+  max_tokens: 8192
+  temperature: 0.0

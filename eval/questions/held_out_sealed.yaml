@@ -1,0 +1,100 @@
+questions:
+  - id: S_Q1_AVG_UNIT_PRICE_BY_CAT
+    question: "What is the average realized price per unit (amount / quantity) for each product category?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT p.category, ROUND(SUM(s.amount) / SUM(s.quantity), 2) AS avg_unit_price
+      FROM SALES s
+      JOIN PRODUCTS p ON s.product_id = p.product_id
+      GROUP BY p.category
+      ORDER BY avg_unit_price DESC;
+
+  - id: S_Q2_ORDERS_OVER_1000
+    question: "How many customer orders had a total order value greater than $1,000?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(*) AS high_value_order_count
+      FROM (
+          SELECT order_id, SUM(amount) AS ord_total
+          FROM SALES
+          GROUP BY order_id
+          HAVING SUM(amount) > 1000
+      );
+
+  - id: S_Q3_PRODUCT_HIGH_SEVERITY_TICKETS
+    question: "Which product received the greatest number of High, Urgent, or Critical support tickets?"
+    domain: support
+    required_tools: [run_sql]
+    expected_top_product: "Novaship"
+    ground_truth_sql: |
+      SELECT product_name, COUNT(*) AS urgent_tickets
+      FROM SUPPORT_TICKETS
+      WHERE priority IN ('High', 'Urgent', 'Critical')
+      GROUP BY product_name
+      ORDER BY urgent_tickets DESC
+      LIMIT 1;
+
+  - id: S_Q4_FEB_REVENUE_PERCENT
+    question: "What percentage of overall sales revenue was generated in February 2026?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      WITH totals AS (SELECT SUM(amount) AS all_rev FROM SALES),
+      feb AS (SELECT SUM(amount) AS feb_rev FROM SALES WHERE order_month = '2026-02-01')
+      SELECT ROUND(feb.feb_rev * 100.0 / totals.all_rev, 2) AS feb_pct
+      FROM totals, feb;
+
+  - id: S_Q5_DISTINCT_SALE_DATES
+    question: "Across how many distinct calendar dates were sales transactions recorded?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(DISTINCT order_date) AS active_days
+      FROM SALES;
+
+  - id: S_Q6_BASE_PRICE_SPREAD
+    question: "What is the difference between the highest and lowest catalog base price?"
+    domain: catalog
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT MAX(base_price) - MIN(base_price) AS price_spread
+      FROM PRODUCTS;
+
+  - id: S_Q7_LOGISTICS_SUPPORT_TICKETS
+    question: "How many customer support tickets were submitted for products in the Logistics category?"
+    domain: mixed
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(*) AS logistics_ticket_count
+      FROM SUPPORT_TICKETS st
+      JOIN PRODUCTS p ON st.product_name = p.product_name
+      WHERE p.category = 'Logistics';
+
+  - id: S_Q8_SINGLE_UNIT_ORDERS
+    question: "How many sales line items had a quantity of exactly 1 unit?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(*) AS single_unit_lines
+      FROM SALES
+      WHERE quantity = 1;
+
+  - id: S_Q9_TICKETS_BY_PRIORITY
+    question: "What is the total number of support tickets broken down by priority level?"
+    domain: support
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT priority, COUNT(*) AS ticket_count
+      FROM SUPPORT_TICKETS
+      GROUP BY priority
+      ORDER BY ticket_count DESC;
+
+  - id: S_Q10_TOTAL_CATALOG_PRODUCTS
+    question: "How many distinct products are listed in the product catalog?"
+    domain: catalog
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(*) AS catalog_product_count
+      FROM PRODUCTS;

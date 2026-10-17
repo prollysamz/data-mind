@@ -99,6 +99,9 @@ class LLMClient:
             if response_format is not None:
                 kwargs["response_format"] = response_format
 
+            # Enforce 16384 context window and dynamic prediction limit in Ollama options
+            kwargs["extra_body"] = {"options": {"num_ctx": 16384, "num_predict": current_tokens}}
+
             return self._client.chat.completions.create(**kwargs)
 
         response = _make_call(token_limit)

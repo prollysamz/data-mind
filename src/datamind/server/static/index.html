@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DataMind — Verifiable AI Data Agent</title>
   <meta name="description" content="Talk to your data with verifiable citations, deterministic numeric checks, and Snowflake/DuckDB execution.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- 100% Local Self-Contained System Fonts (No CDN / No External Tracking) -->
   <link rel="stylesheet" href="/index.css">
 </head>
 <body>
@@ -90,6 +88,30 @@
       </div>
     </section>
 
+    <!-- Interactive Loading State Indicator -->
+    <section class="loading-card" id="loadingState" style="display: none;">
+      <div class="loading-pulse-ring"></div>
+      <div class="loading-text-wrap">
+        <h3 class="loading-title">Synthesizing Answer &amp; Verifying Ground Truth...</h3>
+        <p class="loading-subtitle">Planning SQL, inspecting schema guardrails, and auditing citations</p>
+      </div>
+    </section>
+
+    <!-- Error & Refusal Callout State -->
+    <section class="error-card" id="errorState" style="display: none;">
+      <div class="error-icon-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+      <div class="error-body">
+        <h3 class="error-title" id="errorTitle">Notice</h3>
+        <p class="error-message" id="errorMessage"></p>
+      </div>
+    </section>
+
     <!-- Results Section -->
     <section class="results-container" id="resultsContainer" style="display: none;">
       <!-- Answer Header & Trust Card -->
@@ -103,6 +125,22 @@
 
         <!-- Markdown formatted answer -->
         <div class="answer-content" id="answerContent"></div>
+      </div>
+
+      <!-- Visual Data Chart Container -->
+      <div class="chart-card" id="chartCard" style="display: none;">
+        <div class="chart-header">
+          <div class="chart-title-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <h3 class="chart-title" id="chartTitle">Data Visualization</h3>
+          </div>
+          <span class="chart-badge">Automated Chart</span>
+        </div>
+        <div class="chart-body" id="chartBody"></div>
       </div>
 
       <!-- Evidence Inspector Panels -->

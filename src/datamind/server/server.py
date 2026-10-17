@@ -202,15 +202,21 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             for nc in result.citation_report.numeric_checks
         ]
 
+        is_truncated = getattr(result, "is_truncated", False) or getattr(result.citation_report, "is_truncated", False)
+        finish_reason = getattr(result, "finish_reason", None)
+
         response_data = {
             "question": result.question,
             "answer": result.answer,
-            "success": overall_success,
+            "success": overall_success and not is_truncated,
             "turns": result.turns,
             "error": result.error,
             "backend": self.backend_name,
+            "is_truncated": is_truncated,
+            "finish_reason": finish_reason,
             "citation_report": {
-                "is_clean": is_clean,
+                "is_clean": is_clean and not is_truncated,
+                "is_truncated": is_truncated,
                 "valid_count": result.citation_report.valid_count,
                 "invalid_count": result.citation_report.invalid_count,
                 "verified_numbers_count": result.citation_report.verified_numbers_count,

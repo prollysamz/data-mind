@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 from typing import Sequence
+import yaml
 
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
 from datamind.adapters.snowflake_adapter import SnowflakeAdapter
@@ -210,6 +211,56 @@ def handle_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_init(args: argparse.Namespace) -> int:
+    """Introspect schema and auto-generate semantic_model.yaml and datamind configuration."""
+    db_path = getattr(args, "db", None) or "examples/primary/demo.duckdb"
+    out_path = Path(getattr(args, "output", None) or "semantic_model.yaml")
+
+    if not Path(db_path).exists():
+        print(f"Error: Database file '{db_path}' not found.", file=sys.stderr)
+        return 1
+
+    import duckdb
+    con = duckdb.connect(db_path, read_only=True)
+    try:
+        tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+        schema_tables = []
+        for t in tables:
+            desc = con.execute(f"DESCRIBE {t}").fetchall()
+            cols = []
+            for c in desc:
+                col_name = c[0]
+                col_type = c[1]
+                cols.append({
+                    "name": col_name,
+                    "type": col_type,
+                    "description": f"{col_name} ({col_type}) auto-introspected from schema",
+                })
+            schema_tables.append({
+                "name": t,
+                "description": f"Table {t} containing {len(cols)} columns auto-introspected by datamind init",
+                "columns": cols,
+            })
+    finally:
+        con.close()
+
+    model_data = {
+        "name": Path(db_path).stem,
+        "description": f"Auto-generated semantic model for {db_path} created via datamind init.",
+        "default_currency": "USD",
+        "currency_symbol": "$",
+        "tables": schema_tables,
+    }
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        yaml.dump(model_data, f, sort_keys=False)
+
+    print(f"Successfully introspected {len(tables)} tables ({', '.join(tables)}) from '{db_path}'.")
+    print(f"Generated semantic model at: {out_path}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Main CLI entrypoint for DataMind."""
     parser = argparse.ArgumentParser(
@@ -222,6 +273,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     init_parser = subparsers.add_parser(
         "init",
         help="Introspect database schema and draft semantic model YAML",
+    )
+    init_parser.add_argument(
+        "--db",
+        default="examples/primary/demo.duckdb",
+        help="Path to database to introspect (default: examples/primary/demo.duckdb)",
+    )
+    init_parser.add_argument(
+        "--output",
+        default="semantic_model.yaml",
+        help="Path to write semantic model YAML (default: semantic_model.yaml)",
     )
     init_parser.add_argument(
         "--accept",
@@ -252,9 +313,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Database backend to query (default: from config)",
     )
 
-    # ask
+    # ask / run
     ask_parser = subparsers.add_parser(
         "ask",
+        aliases=["run"],
         help="Ask a natural language question against configured dataset",
     )
     ask_parser.add_argument(
@@ -292,7 +354,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     eval_parser.add_argument(
         "--suite",
-        choices=["all", "business", "trust"],
+        choices=["all", "business", "trust", "held_out", "held_out_fresh", "held_out_sealed"],
         default="all",
         help="Evaluation suite to run",
     )
@@ -319,7 +381,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    if args.subcommand == "ask":
+    if args.subcommand in ("ask", "run"):
         return handle_ask(args)
 
     if args.subcommand == "eval":
@@ -332,8 +394,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return handle_serve(args)
 
     if args.subcommand == "init":
-        print(f"Command '{args.subcommand}' is not implemented yet.")
-        return 0
+        return handle_init(args)
 
     parser.print_help()
     return 1

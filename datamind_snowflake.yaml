@@ -1,0 +1,32 @@
+# DataMind Configuration for Live Snowflake Backend
+backend:
+  type: snowflake
+  snowflake:
+    account_env: SNOWFLAKE_ACCOUNT
+    user_env: SNOWFLAKE_USER
+    password_env: SNOWFLAKE_PASSWORD
+    role: DATAMIND_READONLY
+    warehouse: DATAMIND_XS
+    database: DATAMIND
+    schema: PUBLIC
+
+semantic_model: examples/primary/semantic_model.yaml
+
+retrieval:
+  index_path: .datamind/fts.sqlite
+  top_k: 5
+
+guardrails:
+  max_rows: 1000
+  statement_timeout_seconds: 30.0
+
+agent:
+  max_steps: 6
+
+llm:
+  base_url: ${LLM_BASE_URL:-http://localhost:11434/v1}
+  orchestrator_model: ${LLM_ORCHESTRATOR_MODEL:-gemma4:e2b}
+  fast_model: ${LLM_FAST_MODEL:-gemma4:e2b}
+  token_param: max_tokens
+  max_tokens: 8192
+  temperature: 0.0

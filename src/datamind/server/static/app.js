@@ -46,12 +46,20 @@ async function executeQuery(question) {
   const sendIcon = submitBtn.querySelector('.send-icon');
   const emptyState = document.getElementById('emptyState');
   const resultsContainer = document.getElementById('resultsContainer');
+  const loadingState = document.getElementById('loadingState');
+  const errorState = document.getElementById('errorState');
   const isStrict = document.getElementById('strictModeToggle').checked;
 
   submitBtn.disabled = true;
   btnSpinner.style.display = 'block';
   sendIcon.style.display = 'none';
   btnText.textContent = 'Analyzing...';
+
+  // Toggle loading UI states
+  if (emptyState) emptyState.style.display = 'none';
+  if (resultsContainer) resultsContainer.style.display = 'none';
+  if (errorState) errorState.style.display = 'none';
+  if (loadingState) loadingState.style.display = 'flex';
 
   try {
     const res = await fetch('/api/ask', {
@@ -63,19 +71,24 @@ async function executeQuery(question) {
       }),
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Server returned error ${res.status}`);
+      throw new Error(data.error || `Server returned HTTP ${res.status}`);
     }
 
-    const data = await res.json();
     currentResult = data;
     renderResult(data);
 
-    emptyState.style.display = 'none';
-    resultsContainer.style.display = 'flex';
+    if (loadingState) loadingState.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'flex';
   } catch (err) {
-    alert(`Query execution failed: ${err.message}`);
+    if (loadingState) loadingState.style.display = 'none';
+    if (errorState) {
+      document.getElementById('errorTitle').textContent = 'Query Execution Failed';
+      document.getElementById('errorMessage').textContent = err.message || 'An unexpected error occurred during execution.';
+      errorState.style.display = 'flex';
+    }
   } finally {
     submitBtn.disabled = false;
     btnSpinner.style.display = 'none';
@@ -96,12 +109,64 @@ function renderResult(data) {
   const discrepancies = data.citation_report ? data.citation_report.discrepancy_count : 0;
   const unsupported = data.citation_report ? data.citation_report.unsupported_claims_count : 0;
 
-  const cleanBadge = document.createElement('span');
-  cleanBadge.className = `trust-badge ${isClean ? 'badge-clean-pass' : 'badge-clean-fail'}`;
-  cleanBadge.innerHTML = isClean
-    ? '&#10003; 100% Grounded & Verified'
-    : '&#9888; Verification Discrepancy';
-  trustDiv.appendChild(cleanBadge);
+  // Check for Refusal or Schema limitation
+  const isTruncated = data.is_truncated || (data.citation_report && data.citation_report.is_truncated) || data.finish_reason === 'length';
+  const ansLower = (data.answer || '').toLowerCase();
+  const isRefusal = ansLower.includes('does not contain') || ansLower.includes('not available') || ansLower.includes('do not have') || ansLower.includes('cannot answer') || ansLower.includes('no table');
+  const isClarification = (data.answer || '').includes('?') && (ansLower.includes('clarify') || ansLower.includes('specify') || ansLower.includes('which'));
+  const isPartial = (
+    ansLower.includes('search failed') ||
+    ansLower.includes('cannot report') ||
+    ansLower.includes('unable to retrieve') ||
+    ansLower.includes('partially answered') ||
+    ansLower.includes('could not find customer complaints') ||
+    ansLower.includes('sub-question is unanswered') ||
+    ansLower.includes('retrieval failed')
+  );
+
+  if (isTruncated) {
+    const truncBadge = document.createElement('span');
+    truncBadge.className = 'trust-badge badge-clean-fail';
+    truncBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+    truncBadge.style.color = '#ef4444';
+    truncBadge.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+    truncBadge.innerHTML = '&#9888; Partially Answered (Token Limit Truncated)';
+    trustDiv.appendChild(truncBadge);
+  } else if (isRefusal) {
+    const refBadge = document.createElement('span');
+    refBadge.className = 'trust-badge';
+    refBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+    refBadge.style.color = '#f59e0b';
+    refBadge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
+    refBadge.innerHTML = '&#9888; Refusal: Schema Boundary';
+    trustDiv.appendChild(refBadge);
+  } else if (isClarification) {
+    const clarBadge = document.createElement('span');
+    clarBadge.className = 'trust-badge';
+    clarBadge.style.background = 'rgba(168, 85, 247, 0.15)';
+    clarBadge.style.color = '#a855f7';
+    clarBadge.style.border = '1px solid rgba(168, 85, 247, 0.35)';
+    clarBadge.innerHTML = '&#9432; Clarification Requested';
+    trustDiv.appendChild(clarBadge);
+  } else if (isPartial) {
+    const partBadge = document.createElement('span');
+    partBadge.className = 'trust-badge';
+    partBadge.style.background = 'rgba(234, 179, 8, 0.15)';
+    partBadge.style.color = '#eab308';
+    partBadge.style.border = '1px solid rgba(234, 179, 8, 0.35)';
+    partBadge.innerHTML = '&#9888; Partially Answered (Tool Limitation)';
+    trustDiv.appendChild(partBadge);
+  } else if (!isClean || discrepancies > 0 || unsupported > 0) {
+    const failBadge = document.createElement('span');
+    failBadge.className = 'trust-badge badge-clean-fail';
+    failBadge.innerHTML = '&#9888; Verification Discrepancy';
+    trustDiv.appendChild(failBadge);
+  } else {
+    const cleanBadge = document.createElement('span');
+    cleanBadge.className = 'trust-badge badge-clean-pass';
+    cleanBadge.innerHTML = '&#10003; 100% Grounded & Verified';
+    trustDiv.appendChild(cleanBadge);
+  }
 
   if (verifiedCount > 0) {
     const numBadge = document.createElement('span');
@@ -130,6 +195,9 @@ function renderResult(data) {
     });
   });
 
+  // Render Visual Chart if numeric data is available
+  renderChart(data);
+
   // Render Inspector Tab 1: SQL Queries
   const queries = (data.evidence && data.evidence.queries) || [];
   document.getElementById('sqlCount').textContent = queries.length;
@@ -146,10 +214,119 @@ function renderResult(data) {
   renderNumericChecks(checks);
 }
 
+function renderChart(data) {
+  const chartCard = document.getElementById('chartCard');
+  const chartBody = document.getElementById('chartBody');
+  chartBody.innerHTML = '';
+
+  const queries = (data.evidence && data.evidence.queries) || [];
+  if (!queries.length) {
+    chartCard.style.display = 'none';
+    return;
+  }
+
+  // Look for query with at least 2 rows and columns suitable for charting
+  let targetQuery = null;
+  for (let q of queries) {
+    if (q.result && q.result.rows && q.result.rows.length >= 2) {
+      targetQuery = q;
+      break;
+    }
+  }
+
+  if (!targetQuery) {
+    chartCard.style.display = 'none';
+    return;
+  }
+
+  const cols = targetQuery.result.columns || [];
+  const rows = targetQuery.result.rows || [];
+
+  function parseNum(v) {
+    if (typeof v === 'number') return v;
+    if (v === null || v === undefined) return NaN;
+    const cleaned = String(v).replace(/[$,£€]/g, '').trim();
+    if (cleaned === '') return NaN;
+    return Number(cleaned);
+  }
+
+  // Find a string/label column and a numeric column (prioritize last numeric column like decline or sales)
+  let labelColIdx = 0;
+  let valColIdx = -1;
+
+  for (let c = cols.length - 1; c >= 0; c--) {
+    const num = parseNum(rows[0][c]);
+    if (!isNaN(num)) {
+      valColIdx = c;
+      break;
+    }
+  }
+
+  if (valColIdx === -1) {
+    chartCard.style.display = 'none';
+    return;
+  }
+
+  // Find label column (first non-numeric column)
+  for (let c = 0; c < cols.length; c++) {
+    if (isNaN(parseNum(rows[0][c]))) {
+      labelColIdx = c;
+      break;
+    }
+  }
+
+  // Extract top items (up to 6)
+  const items = rows.slice(0, 6).map(r => ({
+    label: String(r[labelColIdx] ?? `Item`),
+    value: parseNum(r[valColIdx]),
+  })).filter(item => !isNaN(item.value));
+
+  if (!items.length) {
+    chartCard.style.display = 'none';
+    return;
+  }
+
+  const maxVal = Math.max(...items.map(it => Math.abs(it.value)), 1);
+
+  document.getElementById('chartTitle').textContent = `Metric Comparison: ${cols[valColIdx] || 'Value'} by ${cols[labelColIdx] || 'Dimension'}`;
+
+  items.forEach(it => {
+    const pct = Math.min(100, Math.max(5, Math.round((Math.abs(it.value) / maxVal) * 100)));
+    const formattedVal = it.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+    const row = document.createElement('div');
+    row.className = 'chart-bar-row';
+    row.innerHTML = `
+      <div class="chart-bar-meta">
+        <span class="chart-bar-label">${it.label}</span>
+        <span class="chart-bar-value">${formattedVal}</span>
+      </div>
+      <div class="chart-bar-track">
+        <div class="chart-bar-fill" style="width: ${pct}%"></div>
+      </div>
+    `;
+    chartBody.appendChild(row);
+  });
+
+  chartCard.style.display = 'flex';
+}
+
 function formatMarkdownWithCitations(text, data) {
   if (!text) return '<p>No answer text produced.</p>';
 
   let formatted = text;
+
+  // Clean raw markdown link syntax around citations if pasted e.g. [\[◆ Q1:R1\]](http...) or [Q1:R1](...)
+  formatted = formatted.replace(/\[\\?\[?[◆\s]*(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\\?\]?\]\([^\)]+\)/g, '[[$1]]');
+
+  // Convert markdown headings:
+  // 1. Heading with newline after it: ### Heading\n
+  // 2. Heading without newline (inline with sentence text): ### Heading Sentence starts here...
+  formatted = formatted.replace(/(?:^|\n)\s*###\s+(Revenue Decline (?:Details|Analysis)|[A-Z][A-Za-z0-9\s/&,\-]{2,40}?)\s+(?=[A-Z][a-z]+)/g, '\n<h3>$1</h3>\n');
+  formatted = formatted.replace(/(?:^|\n)\s*####\s*([^\n<]+)/g, '\n<h4>$1</h4>\n');
+  formatted = formatted.replace(/(?:^|\n)\s*###\s*([^\n<]+)/g, '\n<h3>$1</h3>\n');
+  formatted = formatted.replace(/(?:^|\n)\s*##\s*([^\n<]+)/g, '\n<h2>$1</h2>\n');
+  formatted = formatted.replace(/(?:^|\n)\s*#\s*([^\n<]+)/g, '\n<h1>$1</h1>\n');
 
   // Convert markdown tables
   const lines = formatted.split('\n');
@@ -184,21 +361,68 @@ function formatMarkdownWithCitations(text, data) {
     outputLines.push(tableHtml.join(''));
   }
 
-  formatted = outputLines.join('\n');
+  // Process bullet points and numbered list items into <li>
+  let processedLines = outputLines;
+  let inList = false;
+  let finalLines = [];
 
-  // Convert paragraph breaks
-  formatted = formatted.replace(/\n\n+/g, '</p><p>');
-  if (!formatted.startsWith('<table') && !formatted.startsWith('<p>')) {
-    formatted = '<p>' + formatted + '</p>';
+  for (let l of processedLines) {
+    const listMatch = l.match(/^\s*([*•-]|\d+\.)\s+(.*)$/);
+    if (listMatch) {
+      if (!inList) {
+        inList = true;
+        finalLines.push('<ul class="answer-list">');
+      }
+      finalLines.push(`<li>${listMatch[2]}</li>`);
+    } else {
+      if (inList) {
+        inList = false;
+        finalLines.push('</ul>');
+      }
+      finalLines.push(l);
+    }
   }
+  if (inList) {
+    finalLines.push('</ul>');
+  }
+  formatted = finalLines.join('\n');
 
-  // Replace citation bracket tokens [[...]] with interactive pills
-  formatted = formatted.replace(/\[\[(Q\d+:R\d+)\]\]/g, (match, id) => {
-    return `<a href="#${id}" class="citation-token token-sql" data-citation="${id}">[&#9670; ${id}]</a>`;
+  // Markdown bold, italic, code styling
+  formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  formatted = formatted.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
+  formatted = formatted.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+  // Wrap loose paragraphs in <p>...</p>
+  const rawParagraphs = formatted.split(/\n\n+/);
+  formatted = rawParagraphs.map(p => {
+    const trimmed = p.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('<h') || trimmed.startsWith('<table') || trimmed.startsWith('<ul') || trimmed.startsWith('<div')) {
+      return trimmed;
+    }
+    return `<p>${trimmed}</p>`;
+  }).join('\n');
+
+  // Replace single or grouped citation bracket tokens with interactive pills
+  formatted = formatted.replace(/\[\[(.*?)\]\]/g, (match, inner) => {
+    const ids = inner.match(/Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+/g);
+    if (ids && ids.length > 0) {
+      return ids.map(id => {
+        const isSql = id.startsWith('Q');
+        const icon = isSql ? '&#9670;' : '&#128196;';
+        const cls = isSql ? 'token-sql' : 'token-doc';
+        return `<a href="#${id}" class="citation-token ${cls}" data-citation="${id}">[${icon} ${id}]</a>`;
+      }).join(' ');
+    }
+    return match;
   });
 
-  formatted = formatted.replace(/\[\[(D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\]\]/g, (match, id) => {
-    return `<a href="#${id}" class="citation-token token-doc" data-citation="${id}">[&#128196; ${id}]</a>`;
+  // Also replace single-bracketed tags if model omitted double brackets
+  formatted = formatted.replace(/(?<!\[)\[(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\](?!\])/g, (match, id) => {
+    const isSql = id.startsWith('Q');
+    const icon = isSql ? '&#9670;' : '&#128196;';
+    const cls = isSql ? 'token-sql' : 'token-doc';
+    return `<a href="#${id}" class="citation-token ${cls}" data-citation="${id}">[${icon} ${id}]</a>`;
   });
 
   return formatted;

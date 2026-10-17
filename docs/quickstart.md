@@ -94,3 +94,20 @@ Check that the CLI entrypoint works:
 ```bash
 datamind --help
 ```
+
+---
+
+## 5. Local Ollama Context Window Configuration
+
+By default, Ollama initializes models with a 2,048 or 4,096 token context window, which can cause multi-turn analytical reasoning to truncate (`finish_reason=length`). DataMind automatically passes `{"options": {"num_ctx": 16384}}` in its API requests, but for optimal local performance, configure the 16k context window directly:
+
+```bash
+# Export existing model definition
+ollama show gemma4:e2b --modelfile > Modelfile
+
+# Add the 16k context parameter:
+# PARAMETER num_ctx 16384
+
+# Re-create the model definition
+ollama create gemma4:e2b -f Modelfile
+```

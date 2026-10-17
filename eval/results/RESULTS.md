@@ -1,28 +1,18 @@
 # DataMind Benchmark Evaluation Results
 
-**Last Run:** 2026-10-17T04:02:18.467525 | **Suite:** business
-**Summary:** 21 / 21 Passed (100.0% Pass Rate)
+**Model Used:** `gemma4:e2b` | **Dataset:** `examples/primary/demo.duckdb`
+**Last Run:** 2026-10-17T13:20:02.160767 | **Suite:** `held_out_sealed`
+**Summary:** 6 / 10 Passed (60.0% Pass Rate)
 
 | ID | Suite | Status | Duration | Details |
 |---|---|:---:|---|---|
-| `Q_MOM_DECLINE` | business | **PASS** | 7917ms | All numbers & citations verified |
-| `Q_MIXED_REVENUE_SUPPORT` | business | **PASS** | 18044ms | All numbers & citations verified |
-| `Q_TOTAL_REVENUE` | business | **PASS** | 1951ms | All numbers & citations verified |
-| `Q_PRODUCTS_CATALOG` | business | **PASS** | 2484ms | All numbers & citations verified |
-| `Q_TOP_SELLING_PRODUCT` | business | **PASS** | 2746ms | All numbers & citations verified |
-| `Q_TOTAL_UNITS_SOLD` | business | **PASS** | 1711ms | All numbers & citations verified |
-| `Q_AVG_ORDER_VALUE` | business | **PASS** | 2027ms | All numbers & citations verified |
-| `Q_MONTHLY_REVENUE_TREND` | business | **PASS** | 2634ms | All numbers & citations verified |
-| `Q_LOGISTICS_CATEGORY_REVENUE` | business | **PASS** | 3120ms | All numbers & citations verified |
-| `Q_SECURITY_CATEGORY_REVENUE` | business | **PASS** | 3144ms | All numbers & citations verified |
-| `Q_NOVASHIP_MARCH_SALES` | business | **PASS** | 2894ms | All numbers & citations verified |
-| `Q_NOVASHIP_FEB_SALES` | business | **PASS** | 2860ms | All numbers & citations verified |
-| `Q_ORDERS_PER_PRODUCT` | business | **PASS** | 3634ms | All numbers & citations verified |
-| `Q_CRITICAL_SUPPORT_TICKETS` | business | **PASS** | 2032ms | All numbers & citations verified |
-| `Q_OUTAGE_TICKETS_PRODUCT` | business | **PASS** | 3845ms | All numbers & citations verified |
-| `Q_TICKETS_PER_PRODUCT` | business | **PASS** | 3146ms | All numbers & citations verified |
-| `Q_MAX_SINGLE_ORDER` | business | **PASS** | 1987ms | All numbers & citations verified |
-| `Q_MIN_SINGLE_ORDER` | business | **PASS** | 1736ms | All numbers & citations verified |
-| `Q_AVG_QUANTITY_PER_LINE` | business | **PASS** | 2085ms | All numbers & citations verified |
-| `Q_PRODUCT_COUNT_BY_CAT` | business | **PASS** | 2771ms | All numbers & citations verified |
-| `Q_CLOUDSYNC_TOTAL_REVENUE` | business | **PASS** | 2561ms | All numbers & citations verified |
+| `S_Q1_AVG_UNIT_PRICE_BY_CAT` | held_out_sealed | **FAIL** | 21093ms | Failures: Result-set mismatch (expected 5 rows matching ground truth SQL) |
+| `S_Q2_ORDERS_OVER_1000` | held_out_sealed | **FAIL** | 2728ms | Failures: citation_discrepancy |
+| `S_Q3_PRODUCT_HIGH_SEVERITY_TICKETS` | held_out_sealed | **PASS** | 3172ms | All numbers, citations, and ground-truth result sets verified |
+| `S_Q4_FEB_REVENUE_PERCENT` | held_out_sealed | **FAIL** | 14920ms | Failures: no_evidence, Agent executed no SQL queries |
+| `S_Q5_DISTINCT_SALE_DATES` | held_out_sealed | **PASS** | 2212ms | All numbers, citations, and ground-truth result sets verified |
+| `S_Q6_BASE_PRICE_SPREAD` | held_out_sealed | **PASS** | 2140ms | All numbers, citations, and ground-truth result sets verified |
+| `S_Q7_LOGISTICS_SUPPORT_TICKETS` | held_out_sealed | **PASS** | 3824ms | All numbers, citations, and ground-truth result sets verified |
+| `S_Q8_SINGLE_UNIT_ORDERS` | held_out_sealed | **FAIL** | 2170ms | Failures: citation_discrepancy |
+| `S_Q9_TICKETS_BY_PRIORITY` | held_out_sealed | **PASS** | 2660ms | All numbers, citations, and ground-truth result sets verified |
+| `S_Q10_TOTAL_CATALOG_PRODUCTS` | held_out_sealed | **PASS** | 1832ms | All numbers, citations, and ground-truth result sets verified |

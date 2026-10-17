@@ -26,7 +26,7 @@ class SQLiteFTSRetriever(Retriever):
         if self.index_path != ":memory:":
             Path(self.index_path).parent.mkdir(parents=True, exist_ok=True)
 
-        self.conn = sqlite3.connect(self.index_path)
+        self.conn = sqlite3.connect(self.index_path, check_same_thread=False)
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -93,6 +93,10 @@ class SQLiteFTSRetriever(Retriever):
 
         duck_conn = duckdb.connect(self.source_db_path, read_only=True)
         try:
+            existing_tables = [r[0].upper() for r in duck_conn.execute("SHOW TABLES").fetchall()]
+            if "SUPPORT_TICKETS" not in existing_tables:
+                return
+
             tickets = duck_conn.execute("""
                 SELECT ticket_id, created_at, product_name, category, priority, body
                 FROM SUPPORT_TICKETS

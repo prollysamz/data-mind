@@ -23,12 +23,14 @@ def test_cli_help(capsys: pytest.CaptureFixture):
     assert "index" in captured.out
 
 
-def test_cli_subcommand_stubs(capsys: pytest.CaptureFixture):
-    """Verify remaining subcommand stubs print 'not implemented yet' and return 0."""
-    exit_code = main(["init"])
+def test_cli_init_command(capsys: pytest.CaptureFixture, tmp_path):
+    """Verify datamind init introspects database and writes semantic_model.yaml."""
+    out_file = tmp_path / "model.yaml"
+    exit_code = main(["init", "--db", "examples/primary/demo.duckdb", "--output", str(out_file)])
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Command 'init' is not implemented yet" in captured.out
+    assert "Successfully introspected" in captured.out
+    assert out_file.exists()
 
 
 def test_cli_serve_command(capsys: pytest.CaptureFixture):

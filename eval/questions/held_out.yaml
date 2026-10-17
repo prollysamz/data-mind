@@ -1,0 +1,125 @@
+questions:
+  - id: H_Q1_HIGH_VALUE_ORDERS
+    question: "How many orders had a total combined invoice value exceeding $3,000?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(*) AS high_value_order_count
+      FROM (
+          SELECT order_id, SUM(amount) AS order_total
+          FROM SALES
+          GROUP BY order_id
+          HAVING SUM(amount) > 3000
+      ) t;
+
+  - id: H_Q2_PRODUCT_AVG_UNIT_PRICE
+    question: "What is the average effective unit price (total revenue divided by total quantity) for each product?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT product_name, ROUND(SUM(amount) / SUM(quantity), 2) AS avg_unit_price
+      FROM SALES
+      GROUP BY product_name
+      ORDER BY avg_unit_price DESC;
+
+  - id: H_Q3_TICKET_BURDEN
+    question: "Which product generates the highest ratio of support tickets relative to its distinct order volume?"
+    domain: mixed
+    required_tools: [run_sql]
+    expected_top_product: "OmniChat"
+    ground_truth_sql: |
+      WITH order_counts AS (
+          SELECT product_name, COUNT(DISTINCT order_id) AS orders
+          FROM SALES
+          GROUP BY product_name
+      ),
+      ticket_counts AS (
+          SELECT product_name, COUNT(*) AS tickets
+          FROM SUPPORT_TICKETS
+          GROUP BY product_name
+      )
+      SELECT o.product_name, t.tickets, o.orders, ROUND(CAST(t.tickets AS DOUBLE) / o.orders, 4) AS ticket_ratio
+      FROM order_counts o
+      JOIN ticket_counts t ON o.product_name = t.product_name
+      ORDER BY ticket_ratio DESC
+      LIMIT 1;
+
+  - id: H_Q4_DISCOUNT_BELOW_BASE
+    question: "Are there any transactions where the effective unit price was sold below the catalog base price?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT DISTINCT s.product_name, p.base_price, ROUND(s.amount / s.quantity, 2) AS effective_price
+      FROM SALES s
+      JOIN PRODUCTS p ON s.product_id = p.product_id
+      WHERE (s.amount / s.quantity) < p.base_price;
+
+  - id: H_Q5_MULTI_ITEM_INVOICES
+    question: "What percentage of customer orders contain multiple items rather than a single line item?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      WITH order_sizes AS (
+          SELECT order_id, COUNT(*) AS items
+          FROM SALES
+          GROUP BY order_id
+      )
+      SELECT COUNT(CASE WHEN items > 1 THEN 1 END) AS multi_item_orders,
+             COUNT(*) AS total_orders,
+             ROUND(COUNT(CASE WHEN items > 1 THEN 1 END) * 100.0 / COUNT(*), 2) AS multi_item_pct
+      FROM order_sizes;
+
+  - id: H_Q6_TICKETS_BY_PRIORITY
+    question: "How are customer support tickets distributed across different priority levels?"
+    domain: support
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT priority, COUNT(*) AS ticket_count
+      FROM SUPPORT_TICKETS
+      GROUP BY priority
+      ORDER BY ticket_count DESC;
+
+  - id: H_Q7_MARCH_HIGH_SEVERITY_TICKETS
+    question: "Which product received the most High or Critical priority support tickets during March 2026?"
+    domain: support
+    required_tools: [run_sql]
+    expected_top_product: "Novaship"
+    ground_truth_sql: |
+      SELECT product_name, COUNT(*) AS high_priority_tickets
+      FROM SUPPORT_TICKETS
+      WHERE created_at BETWEEN '2026-03-01' AND '2026-03-31'
+        AND priority IN ('High', 'Critical')
+      GROUP BY product_name
+      ORDER BY high_priority_tickets DESC
+      LIMIT 1;
+
+  - id: H_Q8_QUARTERLY_RUN_RATE
+    question: "What was the total gross revenue generated during Q1 2026 (January through March)?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT SUM(amount) AS q1_revenue
+      FROM SALES
+      WHERE order_month BETWEEN '2026-01-01' AND '2026-03-31';
+
+  - id: H_Q9_LOWEST_VOLUME_PRODUCT
+    question: "Which product had the lowest overall total units sold (quantity) across all orders?"
+    domain: sales
+    required_tools: [run_sql]
+    expected_top_product: "OmniChat"
+    ground_truth_sql: |
+      SELECT product_name, SUM(quantity) AS total_qty
+      FROM SALES
+      GROUP BY product_name
+      ORDER BY total_qty ASC
+      LIMIT 1;
+
+  - id: H_Q10_SINGLE_LARGEST_TRANSACTION
+    question: "What was the product name, date, and revenue of the single largest transaction in the database?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT order_date, product_name, amount
+      FROM SALES
+      ORDER BY amount DESC
+      LIMIT 1;

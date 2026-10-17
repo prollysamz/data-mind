@@ -1,0 +1,85 @@
+name: uci_online_retail
+description: Real-world transnational e-commerce sales dataset from the UC Irvine Machine Learning Repository.
+default_currency: GBP
+currency_symbol: "£"
+
+tables:
+  - name: ONLINE_RETAIL
+    description: Individual line item retail transactions for a UK-based online gift and homeware retailer.
+    primary_key: [invoice_no, stock_code]
+    columns:
+      - name: invoice_no
+        type: VARCHAR
+        description: Unique invoice transaction identifier. Starts with 'C' for cancellations.
+      - name: stock_code
+        type: VARCHAR
+        description: Unique SKU or product item code.
+      - name: description
+        type: VARCHAR
+        description: Product commercial description/name.
+      - name: quantity
+        type: INTEGER
+        description: Number of units purchased (negative values represent returns/cancellations).
+      - name: invoice_date
+        type: TIMESTAMP
+        description: Exact date and time invoice was generated.
+      - name: unit_price
+        type: DECIMAL(10, 2)
+        description: Unit price per item in GBP (£).
+      - name: customer_id
+        type: VARCHAR
+        description: Unique identifier for customer account.
+      - name: country
+        type: VARCHAR
+        description: Country of billing/shipping.
+      - name: line_total
+        type: DECIMAL(12, 2)
+        description: Total line amount in GBP (£), calculated as quantity * unit_price.
+
+metrics:
+  - name: total_revenue
+    description: Total sales revenue in GBP across all completed transactions
+    table: ONLINE_RETAIL
+    expression: SUM(line_total)
+    dimensions: [country, description]
+
+  - name: total_units_sold
+    description: Total number of units sold across positive sales orders
+    table: ONLINE_RETAIL
+    expression: SUM(quantity)
+    dimensions: [description, country]
+
+  - name: distinct_orders_count
+    description: Total count of distinct invoice orders placed
+    table: ONLINE_RETAIL
+    expression: COUNT(DISTINCT invoice_no)
+    dimensions: [country]
+
+  - name: avg_order_value
+    description: Average revenue per distinct invoice order in GBP
+    table: ONLINE_RETAIL
+    expression: SUM(line_total) / COUNT(DISTINCT invoice_no)
+
+joins: []
+
+verified_queries:
+  - name: top_products_by_revenue
+    question: "Which products generated the highest total revenue?"
+    sql: |
+      SELECT description, SUM(line_total) AS total_revenue
+      FROM ONLINE_RETAIL
+      WHERE quantity > 0 AND description IS NOT NULL
+      GROUP BY description
+      ORDER BY total_revenue DESC
+      LIMIT 5;
+    explanation: "Aggregates line_total for positive sales by product description and returns top 5."
+
+  - name: orders_by_country
+    question: "How many distinct orders were placed from each country?"
+    sql: |
+      SELECT country, COUNT(DISTINCT invoice_no) AS order_count
+      FROM ONLINE_RETAIL
+      GROUP BY country
+      ORDER BY order_count DESC
+      LIMIT 10;
+    explanation: "Counts unique invoices per country."

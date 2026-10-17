@@ -28,6 +28,14 @@ class EvidenceStore:
     _chunks_by_id: dict[str, Chunk] = field(default_factory=dict)
     _query_counter: int = 0
 
+    def clear(self) -> None:
+        """Reset the evidence store to an empty state."""
+        self.queries.clear()
+        self.chunks.clear()
+        self._rows.clear()
+        self._chunks_by_id.clear()
+        self._query_counter = 0
+
     def add_query(self, sql: str, purpose: str, result: QueryResult) -> str:
         """Add query result to store, assign Q<n>:R<m> IDs to each row, return query label (e.g. 'Q1')."""
         self._query_counter += 1

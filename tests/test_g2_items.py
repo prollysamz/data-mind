@@ -132,6 +132,33 @@ def test_ambiguous_question_clarification(setup_env):
     assert len(evidence_store.queries) == 0
 
 
+def test_multiple_vague_questions_trigger_clarification(setup_env):
+    """Verify that 5 differently worded vague queries reliably trigger clarification without executing SQL."""
+    semantic_model, adapter, retriever = setup_env
+    vague_questions = [
+        "How are the numbers looking?",
+        "Can you give me a status update on everything?",
+        "What's the overall situation right now?",
+        "How are things going with the data?",
+        "Give me an overview of recent trends",
+    ]
+
+    mock_llm = MockLLMClient([])
+    orchestrator = AgentOrchestrator(
+        llm_client=mock_llm,
+        db_adapter=adapter,
+        retriever=retriever,
+        semantic_model=semantic_model,
+    )
+
+    for vq in vague_questions:
+        res = orchestrator.run(vq)
+        assert res.success is True
+        assert "clarify" in res.answer.lower() or "clarification" in res.answer.lower()
+        # Zero queries executed
+        assert len(res.evidence_store.queries) == 0
+
+
 def test_follow_up_context_preservation(setup_env):
     """G2 Check 3: Multi-turn context resolution across consecutive questions."""
     semantic_model, adapter, retriever = setup_env

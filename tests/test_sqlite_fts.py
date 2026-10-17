@@ -54,3 +54,32 @@ def test_sqlite_fts_empty_query():
     retriever = SQLiteFTSRetriever(":memory:")
     assert retriever.search("", k=5) == []
     assert retriever.search("   ", k=5) == []
+
+
+def test_sqlite_fts_multithreaded_search_regression():
+    """Regression test: SQLite connection created on one thread must not raise
+    sqlite3.ProgrammingError when searched from worker threads in ThreadingHTTPServer.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Initialize retriever on main thread
+    retriever = SQLiteFTSRetriever(":memory:")
+    retriever.index_document(
+        doc_name="SUPPORT_TICKETS",
+        source_pk="TK-1002",
+        content="Novaship customers experienced 504 gateway timeout errors on March 12.",
+        metadata={"product": "Novaship"},
+    )
+
+    def worker_search(query_str: str):
+        return retriever.search(query_str, k=3)
+
+    # Execute searches across 8 worker threads concurrently
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(worker_search, "Novaship 504 timeout") for _ in range(16)]
+        for f in futures:
+            results = f.result()
+            assert len(results) == 1
+            assert results[0].chunk_id == "D:SUPPORT_TICKETS:TK-1002"
+            assert "Novaship" in results[0].text
+

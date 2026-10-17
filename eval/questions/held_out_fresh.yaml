@@ -1,0 +1,104 @@
+questions:
+  - id: F_Q1_AVG_ORDER_SIZE_BY_PRODUCT
+    question: "What is the average quantity per line item for each product?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT product_name, ROUND(AVG(quantity), 2) AS avg_qty
+      FROM SALES
+      GROUP BY product_name
+      ORDER BY avg_qty DESC;
+
+  - id: F_Q2_CRITICAL_TICKETS_RATIO
+    question: "What percentage of all customer support tickets are marked with Critical priority?"
+    domain: support
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT ROUND(COUNT(CASE WHEN priority = 'Critical' THEN 1 END) * 100.0 / COUNT(*), 2) AS crit_pct
+      FROM SUPPORT_TICKETS;
+
+  - id: F_Q3_PRODUCT_REVENUE_CONTRIBUTION
+    question: "What percentage of total gross sales revenue did Novaship contribute?"
+    domain: sales
+    required_tools: [run_sql]
+    expected_top_product: "Novaship"
+    ground_truth_sql: |
+      WITH totals AS (
+          SELECT SUM(amount) AS all_rev FROM SALES
+      ),
+      nova AS (
+          SELECT SUM(amount) AS nova_rev FROM SALES WHERE product_name = 'Novaship'
+      )
+      SELECT ROUND(nova.nova_rev * 100.0 / totals.all_rev, 2) AS pct
+      FROM totals, nova;
+
+  - id: F_Q4_MONTH_WITH_MOST_ORDERS
+    question: "In which calendar month were the most distinct customer orders placed?"
+    domain: sales
+    required_tools: [run_sql]
+    expected_decline_month: "2026-02-01"
+    ground_truth_sql: |
+      SELECT order_month, COUNT(DISTINCT order_id) AS order_count
+      FROM SALES
+      GROUP BY order_month
+      ORDER BY order_count DESC
+      LIMIT 1;
+
+  - id: F_Q5_MAX_DISCOUNT_DIFF
+    question: "What is the largest dollar discount between the catalog base price and the actual unit sale price?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT MAX(p.base_price - (s.amount / s.quantity)) AS max_discount
+      FROM SALES s
+      JOIN PRODUCTS p ON s.product_id = p.product_id
+      WHERE (s.amount / s.quantity) < p.base_price;
+
+  - id: F_Q6_TICKETS_BEFORE_FEB
+    question: "How many customer support tickets were logged prior to February 1, 2026?"
+    domain: support
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(*) AS early_tickets
+      FROM SUPPORT_TICKETS
+      WHERE created_at < '2026-02-01';
+
+  - id: F_Q7_PRODUCTS_ZERO_OUTAGES
+    question: "Which products in the catalog have zero recorded outage tickets?"
+    domain: mixed
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT p.product_name
+      FROM PRODUCTS p
+      WHERE p.product_name NOT IN (
+          SELECT DISTINCT product_name FROM SUPPORT_TICKETS WHERE category = 'Outage'
+      )
+      ORDER BY p.product_name;
+
+  - id: F_Q8_TOP_REVENUE_DAY
+    question: "Which single calendar date generated the highest total daily sales revenue?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT order_date, SUM(amount) AS daily_rev
+      FROM SALES
+      GROUP BY order_date
+      ORDER BY daily_rev DESC
+      LIMIT 1;
+
+  - id: F_Q9_BILLING_COMPLAINTS_COUNT
+    question: "How many customer support tickets belong to the Billing category?"
+    domain: support
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(*) AS billing_tickets
+      FROM SUPPORT_TICKETS
+      WHERE category = 'Billing';
+
+  - id: F_Q10_QUANTITY_DISTRIBUTION
+    question: "What is the minimum, maximum, and average unit quantity per sale in the sales table?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT MIN(quantity) AS min_qty, MAX(quantity) AS max_qty, ROUND(AVG(quantity), 2) AS avg_qty
+      FROM SALES;

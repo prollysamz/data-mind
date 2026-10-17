@@ -84,8 +84,14 @@ metrics:
     expression: SUM(amount)
     dimensions: [product_name, order_month]
 
+  - name: mom_change
+    description: Month-over-month signed change in sales revenue (current - previous). Positive value indicates growth/increase; negative value indicates drop/decline.
+    table: SALES
+    expression: SUM(amount) - LAG(SUM(amount)) OVER (PARTITION BY product_name ORDER BY order_month)
+    dimensions: [product_name, order_month]
+
   - name: mom_revenue_decline
-    description: Month-over-month decline in sales revenue. Positive value indicates revenue drop from previous month.
+    description: Month-over-month decline in sales revenue (previous - current). Positive value indicates revenue drop/decline; negative value indicates revenue growth/increase.
     table: SALES
     expression: LAG(SUM(amount)) OVER (PARTITION BY product_name ORDER BY order_month) - SUM(amount)
     dimensions: [product_name, order_month]
@@ -165,3 +171,58 @@ verified_queries:
       WHERE prev_month_sales IS NOT NULL AND mom_revenue_decline > 0
       ORDER BY mom_revenue_decline DESC;
     explanation: "Aggregates revenue by product and month, computes LAG window function, filters to positive declines, and sorts descending."
+
+  - name: mom_decline_specific_month
+    question: "What was our month-over-month revenue decline in March 2026?"
+    sql: |
+      WITH monthly_revenue AS (
+          SELECT
+              product_name,
+              order_month,
+              SUM(amount) AS monthly_sales
+          FROM SALES
+          GROUP BY product_name, order_month
+      ),
+      revenue_changes AS (
+          SELECT
+              product_name,
+              order_month,
+              monthly_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales,
+              LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline,
+              monthly_sales - LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS mom_change
+          FROM monthly_revenue
+      )
+      SELECT
+          product_name,
+          order_month,
+          prev_month_sales,
+          monthly_sales,
+          mom_revenue_decline,
+          mom_change
+      FROM revenue_changes
+      WHERE order_month = '2026-03-01' AND prev_month_sales IS NOT NULL
+      ORDER BY mom_revenue_decline DESC;
+    explanation: "Calculates monthly revenue across all months so LAG accesses the previous month (Feb 2026), then filters to March 2026 in the outer query."
+
+  - name: max_discount_diff
+    question: "What is the largest dollar discount between the catalog base price and the actual unit sale price?"
+    sql: |
+      SELECT MAX(p.base_price - (s.amount / s.quantity)) AS max_discount
+      FROM SALES s
+      JOIN PRODUCTS p ON s.product_id = p.product_id
+      WHERE (s.amount / s.quantity) < p.base_price;
+    explanation: "Computes unit sale price as (s.amount / s.quantity) and compares against catalog unit price p.base_price."
+
+  - name: products_zero_outages
+    question: "Which products in the catalog have zero recorded outage tickets?"
+    sql: |
+      SELECT p.product_name
+      FROM PRODUCTS p
+      WHERE p.product_name NOT IN (
+          SELECT DISTINCT product_name FROM SUPPORT_TICKETS WHERE category = 'Outage'
+      )
+      ORDER BY p.product_name;
+    explanation: "Selects product names from PRODUCTS not appearing in outage support tickets."
+
+

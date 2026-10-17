@@ -33,6 +33,8 @@ class AgentResult:
     turns: int
     success: bool
     error: str | None = None
+    is_truncated: bool = False
+    finish_reason: str | None = None
     messages: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -60,6 +62,35 @@ class AgentOrchestrator:
             dialect=db_adapter.dialect,
         )
 
+    def _is_ambiguous(self, question: str) -> bool:
+        """Classify if user query is underspecified or ambiguous (Section 8.3 Planner)."""
+        q = question.strip().lower()
+        ambiguous_patterns = [
+            "how are the numbers looking",
+            "how are numbers looking",
+            "how's business",
+            "how is business",
+            "show me the numbers",
+            "what are the numbers",
+            "what's going on",
+            "what is going on",
+            "how are we doing",
+            "tell me about the data",
+            "show data",
+            "give me numbers",
+            "how are things",
+            "status update on everything",
+            "status update",
+            "performance update",
+            "any updates",
+            "overall situation",
+            "overview of recent trends",
+            "how are our metrics",
+            "give me an overview",
+            "how is everything looking",
+        ]
+        return any(pat in q for pat in ambiguous_patterns)
+
     def run(
         self,
         question: str,
@@ -67,6 +98,28 @@ class AgentOrchestrator:
         conversation_history: list[dict[str, Any]] | None = None,
     ) -> AgentResult:
         """Execute end-to-end question answering loop."""
+        # Reset evidence store per question unless continuing an active conversation
+        if not conversation_history:
+            self.evidence_store.clear()
+
+        # Section 8.3 Planner: Handle ambiguous queries by asking for clarification
+        if not conversation_history and self._is_ambiguous(question):
+            clarification_msg = (
+                "Could you please clarify which specific numbers you would like to examine? "
+                "For example: total sales revenue across all products, month-over-month revenue decline, "
+                "product catalog pricing, or customer support ticket breakdown?"
+            )
+            report = verify_citations(clarification_msg, self.evidence_store, self.semantic_model)
+            return AgentResult(
+                question=question,
+                answer=clarification_msg,
+                evidence_store=self.evidence_store,
+                citation_report=report,
+                turns=1,
+                success=True,
+                messages=[{"role": "assistant", "content": clarification_msg}],
+            )
+
         system_prompt = build_system_prompt(self.semantic_model)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
@@ -84,14 +137,33 @@ class AgentOrchestrator:
             if not tool_calls:
                 # Model produced final answer
                 final_text = reply.get("content") or ""
+                finish_reason = reply.get("finish_reason")
+                is_truncated = (finish_reason == "length")
                 report = verify_citations(final_text, self.evidence_store, self.semantic_model)
+                if is_truncated:
+                    from datamind.agent.verifier import NumericCheck
+                    report.is_truncated = True
+                    report.is_clean = False
+                    report.numeric_checks.append(
+                        NumericCheck(
+                            raw_text="[TRUNCATED]",
+                            claimed_value=0.0,
+                            sentence=final_text[-120:] if final_text else "Truncated output",
+                            status="DISCREPANCY",
+                            message="Answer generation truncated due to token limit (finish_reason=length).",
+                        )
+                    )
+                    report.discrepancy_count += 1
+
                 return AgentResult(
                     question=question,
                     answer=final_text,
                     evidence_store=self.evidence_store,
                     citation_report=report,
                     turns=turns_taken,
-                    success=True,
+                    success=(not is_truncated),
+                    is_truncated=is_truncated,
+                    finish_reason=finish_reason,
                     messages=messages,
                 )
 

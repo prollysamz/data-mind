@@ -58,7 +58,7 @@ class LLMConfig(BaseModel):
     reasoning_model: str = Field(default="google.gemma-4-31b")
     fast_model: str = Field(default="google.gemma-4-e2b")
     token_param: Literal["max_tokens", "max_completion_tokens"] = Field(default="max_tokens")
-    max_tokens: int = Field(default=4096)
+    max_tokens: int = Field(default=8192)
     temperature: float = Field(default=0.0)
     timeout_seconds: float = Field(default=60.0)
 

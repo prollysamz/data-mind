@@ -44,6 +44,7 @@ htmlcov/
 *.duckdb.wal
 .datamind/
 fts.sqlite
+scratch/
 
 # IDE & OS
 .idea/
