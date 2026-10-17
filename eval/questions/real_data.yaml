@@ -1,0 +1,198 @@
+questions:
+  # 1. Total Records
+  - id: R_Q01_TOTAL_RECORDS
+    question: "What is the total number of transaction records in the online retail dataset?"
+    domain: transactions
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(*) AS total_records FROM online_retail;"
+
+  # 2. Total Gross Revenue
+  - id: R_Q02_TOTAL_GROSS_REVENUE
+    question: "What is the total gross revenue (quantity * unitprice) for all positive transactions?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT ROUND(SUM(quantity * unitprice), 2) AS total_gross_rev FROM online_retail WHERE unitprice > 0 AND quantity > 0;"
+
+  # 3. Distinct Invoices
+  - id: R_Q03_DISTINCT_INVOICES
+    question: "How many unique invoice numbers exist in the retail dataset?"
+    domain: transactions
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(DISTINCT invoiceno) AS unique_invoices FROM online_retail;"
+
+  # 4. Distinct Customers
+  - id: R_Q04_DISTINCT_CUSTOMERS
+    question: "How many unique customer IDs are recorded with purchases?"
+    domain: customers
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(DISTINCT customerid) AS unique_customers FROM online_retail WHERE customerid IS NOT NULL;"
+
+  # 5. Top Product by Revenue
+  - id: R_Q05_TOP_PRODUCT_REVENUE
+    question: "Which product description generated the highest total sales revenue?"
+    domain: sales
+    required_tools: [run_sql]
+    expected_top_product: "DOTCOM POSTAGE"
+    ground_truth_sql: |
+      SELECT description, ROUND(SUM(quantity * unitprice), 2) AS total_rev
+      FROM online_retail
+      WHERE description IS NOT NULL AND unitprice > 0 AND quantity > 0
+      GROUP BY description
+      ORDER BY total_rev DESC
+      LIMIT 1;
+
+  # 6. Top Country by Quantity
+  - id: R_Q06_TOP_COUNTRY_QTY
+    question: "Which country purchased the highest total quantity of items?"
+    domain: geographic
+    required_tools: [run_sql]
+    expected_top_product: "United Kingdom"
+    ground_truth_sql: |
+      SELECT country, SUM(quantity) AS total_qty
+      FROM online_retail
+      WHERE quantity > 0
+      GROUP BY country
+      ORDER BY total_qty DESC
+      LIMIT 1;
+
+  # 7. UK Share of Total Revenue
+  - id: R_Q07_UK_REVENUE_SHARE
+    question: "What percentage of total gross sales revenue came from customers in the United Kingdom?"
+    domain: geographic
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      WITH total_rev AS (
+          SELECT SUM(quantity * unitprice) AS all_sales FROM online_retail WHERE unitprice > 0 AND quantity > 0
+      ),
+      uk_rev AS (
+          SELECT SUM(quantity * unitprice) AS uk_sales FROM online_retail WHERE country = 'United Kingdom' AND unitprice > 0 AND quantity > 0
+      )
+      SELECT ROUND((uk_sales * 100.0 / all_sales), 2) AS uk_revenue_pct
+      FROM total_rev, uk_rev;
+
+  # 8. Average Unit Price
+  - id: R_Q08_AVG_UNIT_PRICE
+    question: "What is the average unit price across all catalog transactions?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT ROUND(AVG(unitprice), 2) AS avg_price FROM online_retail WHERE unitprice > 0;"
+
+  # 9. Total Units Sold
+  - id: R_Q09_TOTAL_UNITS_SOLD
+    question: "What is the total quantity of units sold across all positive transactions?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT SUM(quantity) AS total_units FROM online_retail WHERE quantity > 0;"
+
+  # 10. Distinct Products Sold
+  - id: R_Q10_DISTINCT_STOCK_CODES
+    question: "How many distinct stock codes were traded in the dataset?"
+    domain: catalog
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(DISTINCT stockcode) AS distinct_products FROM online_retail;"
+
+  # 11. Returns & Cancellations Count
+  - id: R_Q11_CANCELLATIONS_COUNT
+    question: "How many cancellation transactions (invoices starting with 'C') were recorded?"
+    domain: returns
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(*) AS cancellation_count FROM online_retail WHERE invoiceno LIKE 'C%';"
+
+  # 12. Returns Dollar Value
+  - id: R_Q12_CANCELLATIONS_AMOUNT
+    question: "What is the total negative refund value associated with cancelled invoices starting with 'C'?"
+    domain: returns
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT ROUND(ABS(SUM(quantity * unitprice)), 2) AS total_refunds FROM online_retail WHERE invoiceno LIKE 'C%';"
+
+  # 13. Average Order Value (AOV)
+  - id: R_Q13_AVG_ORDER_VALUE
+    question: "What is the average order revenue per distinct invoice across positive transactions?"
+    domain: sales
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      WITH invoice_totals AS (
+          SELECT invoiceno, SUM(quantity * unitprice) AS inv_total
+          FROM online_retail
+          WHERE unitprice > 0 AND quantity > 0
+          GROUP BY invoiceno
+      )
+      SELECT ROUND(AVG(inv_total), 2) AS avg_order_value
+      FROM invoice_totals;
+
+  # 14. Customer Concentration (Top 10 Customers Share)
+  - id: R_Q14_TOP_10_CUSTOMERS_REVENUE
+    question: "What is the combined revenue of the top 10 highest-spending customers?"
+    domain: customers
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      WITH customer_totals AS (
+          SELECT customerid, SUM(quantity * unitprice) AS cust_rev
+          FROM online_retail
+          WHERE customerid IS NOT NULL AND unitprice > 0 AND quantity > 0
+          GROUP BY customerid
+          ORDER BY cust_rev DESC
+          LIMIT 10
+      )
+      SELECT ROUND(SUM(cust_rev), 2) AS top_10_cust_rev
+      FROM customer_totals;
+
+  # 15. Single Highest Invoice Value
+  - id: R_Q15_MAX_SINGLE_INVOICE
+    question: "What was the highest gross value of any single positive invoice in the dataset?"
+    domain: transactions
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT ROUND(SUM(quantity * unitprice), 2) AS max_invoice_val
+      FROM online_retail
+      WHERE unitprice > 0 AND quantity > 0
+      GROUP BY invoiceno
+      ORDER BY max_invoice_val DESC
+      LIMIT 1;
+
+  # 16. Transactions Without Customer ID
+  - id: R_Q16_ANONYMOUS_TRANSACTIONS
+    question: "How many transaction records have a missing or null customer ID?"
+    domain: data_quality
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(*) AS missing_cust_count FROM online_retail WHERE customerid IS NULL;"
+
+  # 17. Unanswerable Question 1: Profit Margin
+  - id: R_Q17_UNANSWERABLE_PROFIT_MARGIN
+    question: "What was the net profit margin for DOTCOM POSTAGE after deducting supplier costs?"
+    domain: unanswerable
+    category: unanswerable
+    required_tools: []
+    ground_truth_sql: null
+
+  # 18. Unanswerable Question 2: Shipping Addresses
+  - id: R_Q18_UNANSWERABLE_SHIPPING_ADDRESS
+    question: "What street address did customer 17850 request shipment to?"
+    domain: unanswerable
+    category: unanswerable
+    required_tools: []
+    ground_truth_sql: null
+
+  # 19. Unanswerable Question 3: Payment Methods
+  - id: R_Q19_UNANSWERABLE_PAYMENT_METHOD
+    question: "What percentage of transactions were paid via PayPal versus credit card?"
+    domain: unanswerable
+    category: unanswerable
+    required_tools: []
+    ground_truth_sql: null
+
+  # 20. Ambiguous Question 1: "Show Sales"
+  - id: R_Q20_AMBIGUOUS_SHOW_SALES
+    question: "Show sales."
+    domain: ambiguous
+    category: ambiguous_question
+    required_tools: []
+    ground_truth_sql: null
+
+  # 21. Ambiguous Question 2: "Best Item"
+  - id: R_Q21_AMBIGUOUS_BEST_ITEM
+    question: "Which product is the best?"
+    domain: ambiguous
+    category: ambiguous_question
+    required_tools: []
+    ground_truth_sql: null

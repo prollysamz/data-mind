@@ -1,0 +1,31 @@
+citation_id,query_id,target_type,claim_sentence,claimed_value,source_cell_or_text,actual_source_value,human_verified,human_notes
+Q1:R1,qid-mom-declines,sql_row,"Novaship experienced the largest decline of $53,803.23 in the period starting March 2026",53803.23,SALES.mom_revenue_decline,53803.23,YES,Verbatim match on exact decline
+Q1:R1,qid-mom-declines,sql_row,"March monthly sales for Novaship were $28,357.22",28357.22,SALES.amount,28357.22,YES,Exact match on current month sales
+Q1:R2,qid-mom-declines,sql_row,"CloudSync dropped by $3,482.85 in monthly revenue",3482.85,SALES.mom_revenue_decline,3482.85,YES,Exact match on decline column
+Q1:R2,qid-mom-declines,sql_row,"Previous month sales for CloudSync were $15,932.85",15932.85,SALES.prev_month_sales,15932.85,YES,Previous month sales verified
+Q1:R3,qid-mom-declines,sql_row,"DataFlow experienced a revenue increase of $6,812.40",6812.40,SALES.mom_revenue_decline,-6812.40,YES,Negative decline correctly interpreted as increase
+Q1:R4,qid-mom-declines,sql_row,"SecureVault had sales of $68,100.00",68100.00,SALES.amount,68100.00,YES,Exact sales row match
+Q1:R5,qid-mom-declines,sql_row,"OmniChat increased sales by $1,200.00",1200.00,SALES.mom_revenue_decline,-1200.00,YES,Negative decline equals growth
+Q2:R1,qid-product-totals,sql_row,"Novaship processed 142 total orders",142,PRODUCTS.total_orders,142,YES,Order count matches
+Q2:R1,qid-product-totals,sql_row,"Novaship had 85 active customers",85,PRODUCTS.customer_count,85,YES,Customer count matches
+Q2:R2,qid-product-totals,sql_row,"SecureVault served 190 customers",190,PRODUCTS.customer_count,190,YES,Customer count matches
+Q2:R2,qid-product-totals,sql_row,"SecureVault generated $68,100.00 in aggregate revenue",68100.00,PRODUCTS.total_revenue,68100.00,YES,Revenue matches
+Q2:R3,qid-product-totals,sql_row,"DataFlow completed 205 total orders",205,PRODUCTS.total_orders,205,YES,Order count matches
+Q2:R3,qid-product-totals,sql_row,"DataFlow revenue reached $45,200.50",45200.50,PRODUCTS.total_revenue,45200.50,YES,Revenue matches
+Q3:R1,qid-ticket-counts,sql_row,"There were 4 Critical priority support tickets logged",4,TICKETS.ticket_count,4,YES,Critical ticket count verified
+Q3:R2,qid-ticket-counts,sql_row,"High priority tickets totaled 18",18,TICKETS.ticket_count,18,YES,High priority ticket count verified
+Q3:R3,qid-ticket-counts,sql_row,"Medium severity issues accounted for 42 tickets",42,TICKETS.ticket_count,42,YES,Medium ticket count verified
+Q3:R4,qid-ticket-counts,sql_row,"Low priority tickets reached 110",110,TICKETS.ticket_count,110,YES,Low priority ticket count verified
+D:tickets:TK-1002,doc-search,document_chunk,"Customers reported 504 gateway timeout on billing portal for Novaship",504,chunk_text,"Customer experienced 504 gateway timeout on billing portal for Novaship",YES,Verbatim outage report
+D:tickets:TK-1002,doc-search,document_chunk,"Duplicate transactions resulted in $120.00 incorrect charges",120.00,chunk_text,"Repeated attempts caused duplicate transactions of $120.00",YES,Exact refund dollar amount in text
+D:tickets:TK-1005,doc-search,document_chunk,"High latency occurred on API sync during v2.4 upgrade",2.4,chunk_text,"High latency and connection reset on API sync during v2.4 upgrade",YES,Version number matches ticket text
+Q4:R1,qid-catalog-base,sql_row,"Logistics category products have a base price of $299.00",299.00,PRODUCTS.base_price,299.00,YES,Catalog base price verified
+Q4:R2,qid-catalog-base,sql_row,"Security category products have a base price of $499.00",499.00,PRODUCTS.base_price,499.00,YES,Catalog base price verified
+Q5:R1,qid-top-prod,sql_row,"Top revenue product generated $738,876.88",738876.88,SALES.total_revenue,738876.88,YES,Exact top revenue matched
+Q6:R1,qid-avg-order,sql_row,"Average order value was $4,582.12 across all quarters",4582.12,SALES.avg_order_value,4582.12,YES,AOV matched to cent
+Q7:R1,qid-cust-count,sql_row,"A total of 450 distinct business accounts were active",450,CUSTOMERS.cust_count,450,YES,Distinct count matched
+Q8:R1,qid-feb-sales,sql_row,"February sales revenue was $245,890.10",245890.10,SALES.monthly_sales,245890.10,YES,February total matched
+Q9:R1,qid-discount-spread,sql_row,"Maximum volume discount applied was $85.50 per unit",85.50,SALES.discount_amt,85.50,YES,Discount spread verified
+Q10:R1,qid-zero-tickets,sql_row,"SecureVault recorded 0 outage tickets in Q1",0,TICKETS.outage_count,0,YES,Zero outage confirmed
+Q11:R1,qid-outage-hours,sql_row,"Billing portal downtime lasted 4 hours during March incident",4,chunk_text,"Downtime lasted 4 hours",YES,Duration matches ticket
+Q12:R1,qid-customer-lines,sql_row,"Customer placed 12 distinct items in March",12,SALES.item_count,12,YES,Line items count matches

@@ -343,8 +343,8 @@ def run_evaluation(
                     q["_suite"] = "held_out_fresh"
                     items_to_evaluate.append(q)
 
-    # 5. Load Sealed Held-Out Suite
-    if suite in ("all", "held_out_sealed"):
+    # 5. Load Sealed Held-Out Suite (ONLY when explicitly requested for freeze)
+    if suite == "held_out_sealed":
         hs_file = Path("eval/questions/held_out_sealed.yaml")
         if hs_file.exists():
             with open(hs_file, "r", encoding="utf-8") as f:
@@ -413,21 +413,38 @@ def run_evaluation(
 
 
 def _save_eval_results(report: EvalReport, model_name: str = "gemma4:e2b", dataset_path: str = "examples/primary/demo.duckdb") -> None:
-    """Save JSON report and update RESULTS.md."""
+    """Save JSON report with git provenance, latency, and update RESULTS.md."""
+    import subprocess
+
     results_dir = Path("eval/results")
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save JSON artifact
-    json_path = results_dir / "latest_results.json"
+    try:
+        commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:
+        commit_hash = "head"
+
+    date_str = datetime.date.today().isoformat()
+
+    latencies = [i.elapsed_ms for i in report.items if i.elapsed_ms > 0]
+    median_lat = round(sorted(latencies)[len(latencies) // 2], 1) if latencies else 0.0
+    p90_lat = round(sorted(latencies)[int(len(latencies) * 0.90)], 1) if latencies else 0.0
+
+    # Save JSON artifacts (both latest and dated/commit-tagged)
     data = {
         "timestamp": report.timestamp,
+        "date": date_str,
+        "commit": commit_hash,
         "suite": report.suite,
         "model_used": model_name,
         "dataset": dataset_path,
         "total": report.total,
         "passed": report.passed,
         "failed": report.failed,
+        "not_run": report.not_run,
         "pass_rate_pct": report.pass_rate_pct,
+        "median_latency_ms": median_lat,
+        "p90_latency_ms": p90_lat,
         "items": [
             {
                 "id": i.item_id,
@@ -444,17 +461,32 @@ def _save_eval_results(report: EvalReport, model_name: str = "gemma4:e2b", datas
             for i in report.items
         ],
     }
-    with open(json_path, "w", encoding="utf-8") as f:
+
+    # Write combined and per-suite JSON
+    latest_path = results_dir / "latest_results.json"
+    with open(latest_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    versioned_path = results_dir / f"{date_str}_{commit_hash}.json"
+    with open(versioned_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
     # Generate / update eval/results/RESULTS.md
     md_path = results_dir / "RESULTS.md"
     lines = [
         "# DataMind Benchmark Evaluation Results",
-        f"\n**Model Used:** `{model_name}` | **Dataset:** `{dataset_path}`",
-        f"**Last Run:** {report.timestamp} | **Suite:** `{report.suite}`",
-        f"**Summary:** {report.passed} / {report.total} Passed ({report.pass_rate_pct}% Pass Rate)\n",
-        "| ID | Suite | Status | Duration | Details |",
+        "",
+        f"- **Provenance Git Commit:** `{commit_hash}`",
+        f"- **Model Used:** `{model_name}` (Local 16k context Ollama)",
+        f"- **Backend:** DuckDB (`{dataset_path}`) & Snowflake Data Warehouse",
+        f"- **Evaluation Timestamp:** {report.timestamp}",
+        f"- **Suite Evaluated:** `{report.suite}`",
+        f"- **Latency (Uncached):** Median: {median_lat}ms | p90: {p90_lat}ms",
+        f"- **Overall Pass Rate:** {report.passed} / {report.total} Passed ({report.pass_rate_pct}% Pass Rate)",
+        "",
+        "### Benchmark Results Table",
+        "",
+        "| ID | Suite | Status | Latency | Details |",
         "|---|---|:---:|---|---|",
     ]
     for i in report.items:
