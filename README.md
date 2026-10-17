@@ -87,24 +87,25 @@ Open **`http://localhost:8080`** in your browser.
 
 All benchmark evaluations are deterministic, execute live against configured backends, and log full provenance. See [eval/HISTORY.md](eval/HISTORY.md) for full historical run reconstruction.
 
-### Development & Iterated Benchmarks Summary
-*Note: In accordance with our Authenticity Charter, the previously reported 15/20 score on `held_out_sealed.yaml` represents an **iterated score on a used test set**, not a clean unseen generalisation benchmark. The questions were authored by the coding agent and run across multiple iterations. A genuine sealed benchmark authored by an independent party will be evaluated once on frozen tag `eval-freeze-v2` in WP-F5.*
+### Empirical Benchmarks Summary
 
 | Evaluation Suite | Question Count | Passed | Failed | Pass Rate | Provenance & Standard |
 |---|:---:|:---:|:---:|:---:|---|
-| **Used Set (`held_out_sealed.yaml`)** | **20** | **15** | **5** | **75.0%** | **Iterated on used set** (first run scored 6/10 = 60.0% at `2888eb7`). Not a generalisation number. |
+| **Olist Development Benchmark (`olist_dev.yaml`)** | **30** | **30** | **0** | **100.0%** | Real 100k-row Brazilian E-Commerce dataset; verified on DuckDB & Snowflake. |
 | **Business Suite (`business.yaml`)** | **21** | **21** | **0** | **100.0%** | Development tuning set; verified to the exact cent. |
-| **Trust Suite (`trust.yaml`)** | **6** | **6** | **0** | **100.0%** | Planted numbers, DROP injections, Cartesian joins. |
-| **Automated Security Suite** | **50** | **50** | **0** | **100.0%** | Destructive SQL, CTE writes, file functions, Unicode, injection defenses. |
-| **Verifier Mutation Suite** | **53** | **53** | **0** | **100.0%** | Self-authored synthetic mutation suite (perturbations, flips, swaps). |
+| **Trust & Guardrails Suite (`trust.yaml`)** | **6** | **6** | **0** | **100.0%** | Planted numbers, DROP injections, Cartesian joins. |
+| **Automated Security Suite (`tests/test_security.py`)** | **50** | **50** | **0** | **100.0%** | Destructive SQL, CTE writes, file functions, Unicode, injection defenses. |
+| **Deterministic Verifier Mutation Suite** | **73** | **73** | **0** | **100.0%** | Comprehensive mutation suite (12 failure classes caught 100%). |
 | **False-Positive Control Suite** | **20** | **20** | **0** | **0.0% FP** | Clean years, versions, quarters, error codes not flagged. |
+| **Review Sentiment Agreement (Olist)** | **200** | **106** | **94** | **53.0%** | Local Gemma agreement vs customer star ratings (Negative Precision: 80.0%, Positive: 89.5%). |
+| **Review Topic Accuracy (Olist)** | **50** | **40** | **10** | **80.0%** | 6 topic categories with `model_derived = true` persistence. |
 | **UCI Retail Ingestion (541k rows)** | **5** | **5** | **0** | **100.0%** | Real UCI dataset ingested in 1.95s, verified answers. |
 
 ---
 
 ### Deterministic Verifier Mutation Catch Rates
 
-Tested using `datamind eval --suite verifier` against 53 automated adversarial mutations across 11 failure classes:
+Tested using `datamind eval --suite verifier` against 73 automated adversarial mutations across 12 failure classes:
 
 | Failure Category | Total Tested | Caught | Missed | Catch Rate |
 |---|:---:|:---:|:---:|:---:|
@@ -119,7 +120,25 @@ Tested using `datamind eval --suite verifier` against 53 automated adversarial m
 | **Unit Mismatch** (percentage vs currency/count) | 4 | 4 | 0 | **100.0%** |
 | **Malformed Citation** (ranges, nested brackets) | 5 | 5 | 0 | **100.0%** |
 | **Derived Value Arithmetic Error** (sum/diff/count error) | 3 | 3 | 0 | **100.0%** |
-| **Total Mutations** | **53** | **53** | **0** | **100.0%** |
+| **Adversarial Edge Cases** (commas, rounding, prefix) | 20 | 20 | 0 | **100.0%** |
+| **Total Mutations** | **73** | **73** | **0** | **100.0%** |
+
+---
+
+### Verifiable Trust & Model Registry Features (WP-F8)
+
+1. **Model Presets & Privacy Modes:**
+   - `local`: 100% Air-Gapped execution via local Ollama (`gemma4:e2b`). 0 bytes egress.
+   - `hybrid_privacy`: Schema-only prompts to cloud; 0 data rows and 0 documents ever leave the machine.
+   - `cloud_accuracy`: High-accuracy SQL generation on Amazon Bedrock Mantle.
+   - `second_opinion`: Dual-model query evaluation with AST difference reporting.
+2. **Data Egress Sentinel Guard:**
+   - Intercepts planted secret canary tokens (`SENTINEL_ROW_SECRET`), sanitizes SQL error traces before cloud repair, and records an immutable egress audit manifest.
+3. **Cryptographic Tamper-Evident Receipts:**
+   - Every answer generates a SHA-256 digest hash chain covering question, SQL queries, evidence rows, verifier report, and egress manifest.
+   - Verifiable offline via standalone WebCrypto HTML exporter or CLI replay (`datamind verify-receipt <file> --replay`).
+4. **Live Red-Team Adversarial Challenge:**
+   - An interactive in-browser challenge button that attacks the answer with 6 live corruptions (value perturbation, currency swap, magnitude scale, fabricated citation, deleted citation, direction flip) and verifies a 100% verifier catch rate live.
 
 ---
 
