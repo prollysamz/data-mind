@@ -366,6 +366,55 @@ def handle_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_demo(args: argparse.Namespace) -> int:
+    """Run diagnostics, display demo overview and suggested questions, and launch interactive web server."""
+    from datamind.doctor import run_diagnostics, print_doctor_report
+    config_path = getattr(args, "config", "datamind_olist.yaml")
+    if not Path(config_path).exists():
+        config_path = "datamind.yaml"
+
+    print("Checking system prerequisites...")
+    checks = run_diagnostics(config_path=config_path)
+    failed = [c for c in checks if not c.passed]
+    if failed:
+        print("\nDiagnostic check failed. Please resolve the following before running demo:")
+        print_doctor_report(checks)
+        return 1
+
+    config = load_config(config_path)
+    semantic_model = load_semantic_model(config.semantic_model)
+
+    host = getattr(args, "host", "127.0.0.1")
+    port = getattr(args, "port", 8080)
+
+    print("\n" + "=" * 70)
+    print("DATAMIND ONE-COMMAND DEMO RUNNER")
+    print("=" * 70)
+    print(f"Active Semantic Model: {semantic_model.name} ({len(semantic_model.tables)} tables)")
+    print(f"Active Backend:        {config.backend.type.upper()}")
+    print(f"Server URL:            http://{host}:{port}")
+    print("\nSuggested Questions for This Dataset:")
+    if "olist" in semantic_model.name.lower():
+        print("  1. Which product categories generated the highest net sales revenue?")
+        print("  2. What is the late delivery rate and what were customer reviews about delayed orders?")
+        print("  3. What was the month-over-month revenue trend for delivered orders?")
+    else:
+        print("  1. Which products experienced the largest month-over-month revenue decline?")
+        print("  2. What were customer complaints about Novaship?")
+        print("  3. What is the average order value across all quarters?")
+    print("=" * 70)
+    print(f"\nStarting interactive web server at http://{host}:{port}...\n")
+
+    from datamind.server.server import start_server
+    start_server(
+        config_path=config_path,
+        host=host,
+        port=port,
+        enable_uploads=True,
+    )
+    return 0
+
+
 def handle_init(args: argparse.Namespace) -> int:
     """Introspect schema and auto-generate semantic_model.yaml and datamind configuration."""
     db_path = getattr(args, "db", None) or "examples/primary/demo.duckdb"
@@ -617,6 +666,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to configuration YAML (default: datamind.yaml)",
     )
 
+    # demo
+    demo_parser = subparsers.add_parser(
+        "demo",
+        help="One-command demo runner: check diagnostics and start interactive web UI",
+    )
+    demo_parser.add_argument(
+        "--config",
+        default="datamind_olist.yaml",
+        help="Path to configuration YAML (default: datamind_olist.yaml)",
+    )
+    demo_parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to bind server (default: 8080)",
+    )
+    demo_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address to bind server (default: 127.0.0.1)",
+    )
+
     args = parser.parse_args(argv)
 
     if not args.subcommand:
@@ -643,6 +714,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.subcommand == "init":
         return handle_init(args)
+
+    if args.subcommand == "demo":
+        return handle_demo(args)
 
     if args.subcommand == "doctor":
         from datamind.doctor import print_doctor_report, run_diagnostics

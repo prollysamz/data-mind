@@ -32,6 +32,8 @@ class SQLiteFTSRetriever(Retriever):
     def _init_schema(self) -> None:
         """Initialize SQLite FTS5 tables and metadata store."""
         cur = self.conn.cursor()
+        cur.execute("PRAGMA journal_mode = WAL;")
+        cur.execute("PRAGMA synchronous = NORMAL;")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS documents_meta (
                 chunk_id TEXT PRIMARY KEY,
@@ -56,6 +58,7 @@ class SQLiteFTSRetriever(Retriever):
         source_pk: str,
         content: str,
         metadata: dict[str, Any] | None = None,
+        commit: bool = True,
     ) -> str:
         """Index a single document and return its stable chunk ID (D:<doc_name>:<source_pk>)."""
         chunk_id = f"D:{doc_name}:{source_pk}"
@@ -83,7 +86,8 @@ class SQLiteFTSRetriever(Retriever):
             """,
             (chunk_id, doc_name, content),
         )
-        self.conn.commit()
+        if commit:
+            self.conn.commit()
         return chunk_id
 
     def build_index(self) -> None:
@@ -94,35 +98,64 @@ class SQLiteFTSRetriever(Retriever):
         duck_conn = duckdb.connect(self.source_db_path, read_only=True)
         try:
             existing_tables = [r[0].upper() for r in duck_conn.execute("SHOW TABLES").fetchall()]
-            if "SUPPORT_TICKETS" not in existing_tables:
-                return
+            if "SUPPORT_TICKETS" in existing_tables:
+                tickets = duck_conn.execute("""
+                    SELECT ticket_id, created_at, product_name, category, priority, body
+                    FROM SUPPORT_TICKETS
+                    ORDER BY ticket_id
+                """).fetchall()
 
-            tickets = duck_conn.execute("""
-                SELECT ticket_id, created_at, product_name, category, priority, body
-                FROM SUPPORT_TICKETS
-                ORDER BY ticket_id
-            """).fetchall()
+                for tid, created, prod, cat, prio, body in tickets:
+                    content = (
+                        f"Ticket {tid} (Date: {created})\n"
+                        f"Product: {prod}\n"
+                        f"Category: {cat} | Priority: {prio}\n"
+                        f"Details: {body}"
+                    )
+                    meta = {
+                        "ticket_id": str(tid),
+                        "created_at": str(created),
+                        "product_name": str(prod),
+                        "category": str(cat),
+                        "priority": str(prio),
+                    }
+                    self.index_document(
+                        doc_name="SUPPORT_TICKETS",
+                        source_pk=str(tid),
+                        content=content,
+                        metadata=meta,
+                        commit=False,
+                    )
+                self.conn.commit()
 
-            for tid, created, prod, cat, prio, body in tickets:
-                content = (
-                    f"Ticket {tid} (Date: {created})\n"
-                    f"Product: {prod}\n"
-                    f"Category: {cat} | Priority: {prio}\n"
-                    f"Details: {body}"
-                )
-                meta = {
-                    "ticket_id": str(tid),
-                    "created_at": str(created),
-                    "product_name": str(prod),
-                    "category": str(cat),
-                    "priority": str(prio),
-                }
-                self.index_document(
-                    doc_name="SUPPORT_TICKETS",
-                    source_pk=str(tid),
-                    content=content,
-                    metadata=meta,
-                )
+            if "OLIST_ORDER_REVIEWS" in existing_tables:
+                reviews = duck_conn.execute("""
+                    SELECT review_id, order_id, review_score, review_comment_title, review_comment_message, review_creation_date
+                    FROM olist_order_reviews
+                    WHERE review_comment_message IS NOT NULL AND length(trim(review_comment_message)) > 0
+                """).fetchall()
+
+                for rid, oid, score, title, msg, dt in reviews:
+                    content_parts = []
+                    if title and title.strip():
+                        content_parts.append(title.strip())
+                    if msg and msg.strip():
+                        content_parts.append(msg.strip())
+                    full_content = "\n".join(content_parts)
+                    meta = {
+                        "review_id": str(rid),
+                        "order_id": str(oid),
+                        "review_score": int(score) if score is not None else None,
+                        "review_creation_date": str(dt),
+                    }
+                    self.index_document(
+                        doc_name="order_reviews",
+                        source_pk=str(rid),
+                        content=full_content,
+                        metadata=meta,
+                        commit=False,
+                    )
+                self.conn.commit()
         finally:
             duck_conn.close()
 

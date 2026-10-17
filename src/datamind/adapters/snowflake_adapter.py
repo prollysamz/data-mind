@@ -68,6 +68,12 @@ class SnowflakeAdapter(DBAdapter):
                 schema=sch or None,
                 network_timeout=int(timeout_seconds),
             )
+            # Enforce strict role isolation: disable secondary roles to prevent write privilege inheritance
+            cur = self._conn.cursor()
+            try:
+                cur.execute("USE SECONDARY ROLES NONE")
+            finally:
+                cur.close()
 
     def execute(self, sql: str) -> QueryResult:
         """Execute read-only SQL on Snowflake and return normalized QueryResult with real sfqid."""

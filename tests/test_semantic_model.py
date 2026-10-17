@@ -49,3 +49,29 @@ def test_load_semantic_model():
 def test_load_nonexistent_file_raises():
     with pytest.raises(FileNotFoundError):
         load_semantic_model("nonexistent_model.yaml")
+
+
+def test_load_olist_semantic_model():
+    model_path = Path("examples/olist/semantic_model.yaml")
+    assert model_path.exists(), "olist semantic_model.yaml should exist"
+
+    model = load_semantic_model(model_path)
+    assert isinstance(model, SemanticModel)
+    assert model.name == "olist_ecommerce"
+    assert model.default_currency == "BRL"
+    assert model.currency_symbol == "R$"
+
+    table_names = model.get_approved_table_names()
+    assert "olist_orders" in table_names
+    assert "olist_order_items" in table_names
+    assert "olist_order_reviews" in table_names
+    assert len(model.tables) == 8
+
+    # Metrics
+    rev_metric = model.get_metric("net_sales_revenue")
+    assert rev_metric is not None
+    assert rev_metric.unit == "BRL"
+
+    # Joins
+    assert len(model.joins) == 7
+

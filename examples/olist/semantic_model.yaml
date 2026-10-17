@@ -1,0 +1,319 @@
+name: olist_ecommerce
+description: >
+  Official Brazilian E-Commerce public dataset by Olist covering 99,441 commercial orders from 2016 to 2018.
+  Includes customers, order life cycle timestamps, line items, payments, customer reviews, product catalog,
+  and seller geographies.
+default_currency: BRL
+currency_symbol: "R$"
+
+tables:
+  - name: olist_orders
+    description: >
+      Master orders table containing order status and fulfillment lifecycle timestamps.
+      One row per order (99,441 orders).
+    columns:
+      - name: order_id
+        type: VARCHAR
+        description: Unique identifier of each order (Primary Key).
+      - name: customer_id
+        type: VARCHAR
+        description: Foreign key referencing olist_customers.customer_id.
+      - name: order_status
+        type: VARCHAR
+        description: >
+          Current status of the order ('delivered', 'shipped', 'canceled', 'invoiced', 'processing', 'created', 'approved', 'unavailable').
+          DEFAULT FILTER: Analytics questions regarding sales revenue, delivery performance, or customer totals
+          must filter for order_status = 'delivered' unless the question explicitly asks about cancellations or other statuses.
+      - name: order_purchase_timestamp
+        type: TIMESTAMP_NTZ
+        description: Timestamp when the purchase was placed by the customer.
+      - name: order_approved_at
+        type: TIMESTAMP_NTZ
+        description: Timestamp when payment approval was registered.
+      - name: order_delivered_carrier_date
+        type: TIMESTAMP_NTZ
+        description: Timestamp when order was handed over to the postal/carrier partner.
+      - name: order_delivered_customer_date
+        type: TIMESTAMP_NTZ
+        description: Actual timestamp when the parcel was delivered to the customer.
+      - name: order_estimated_delivery_date
+        type: TIMESTAMP_NTZ
+        description: Estimated delivery date communicated to customer at purchase time.
+
+  - name: olist_order_items
+    description: >
+      Line-item detail for items included in each order (112,650 items).
+      Orders may contain multiple items. Many-to-one relationship with olist_orders.
+    columns:
+      - name: order_id
+        type: VARCHAR
+        description: Foreign key to olist_orders.order_id.
+      - name: order_item_id
+        type: INTEGER
+        description: Sequential number identifying the item number within the same order (1, 2, 3...).
+      - name: product_id
+        type: VARCHAR
+        description: Foreign key referencing olist_products.product_id.
+      - name: seller_id
+        type: VARCHAR
+        description: Foreign key referencing olist_sellers.seller_id.
+      - name: shipping_limit_date
+        type: TIMESTAMP_NTZ
+        description: Seller shipping limit date for handling order fulfillment to carrier.
+      - name: price
+        type: FLOAT
+        description: Item unit price in Brazilian Real (R$). Revenue = SUM(price). Excludes freight.
+      - name: freight_value
+        type: FLOAT
+        description: Freight/shipping item charge in Brazilian Real (R$).
+
+  - name: olist_order_payments
+    description: >
+      Payment transaction details for orders (103,886 payment records).
+      Customers may pay across multiple sequential payment methods (credit_card, boleto, voucher, debit_card).
+    columns:
+      - name: order_id
+        type: VARCHAR
+        description: Foreign key to olist_orders.order_id.
+      - name: payment_sequential
+        type: INTEGER
+        description: Sequential number of payment transactions for this order.
+      - name: payment_type
+        type: VARCHAR
+        description: Payment instrument used ('credit_card', 'boleto', 'voucher', 'debit_card').
+      - name: payment_installments
+        type: INTEGER
+        description: Number of installments chosen by customer for credit card charges.
+      - name: payment_value
+        type: FLOAT
+        description: Transaction payment amount in Brazilian Real (R$) including freight and discounts.
+
+  - name: olist_order_reviews
+    description: >
+      Customer satisfaction reviews and free-text comments (99,224 reviews).
+      Reviews contain 1-to-5 star ratings and customer feedback text in Portuguese.
+    columns:
+      - name: review_id
+        type: VARCHAR
+        description: Unique identifier of the review (Primary Key).
+      - name: order_id
+        type: VARCHAR
+        description: Foreign key to olist_orders.order_id.
+      - name: review_score
+        type: INTEGER
+        description: Customer satisfaction rating from 1 (lowest / dissatisfied) to 5 (highest / very satisfied).
+      - name: review_comment_title
+        type: VARCHAR
+        description: Optional title of the review written by customer in Portuguese.
+      - name: review_comment_message
+        type: VARCHAR
+        description: Verbatim free-text comment written by customer in Portuguese (indexed in SQLite FTS5).
+      - name: review_creation_date
+        type: TIMESTAMP_NTZ
+        description: Date review survey was sent to customer.
+      - name: review_answer_timestamp
+        type: TIMESTAMP_NTZ
+        description: Timestamp when customer answered the satisfaction review.
+
+  - name: olist_customers
+    description: >
+      Customer information and location (99,441 records).
+      Maps customer_id (per order) to customer_unique_id (person).
+    columns:
+      - name: customer_id
+        type: VARCHAR
+        description: Unique key for each customer order interaction (Foreign key in olist_orders).
+      - name: customer_unique_id
+        type: VARCHAR
+        description: Unique identifier of the actual individual person (use for distinct customer counts).
+      - name: customer_zip_code_prefix
+        type: VARCHAR
+        description: First 5 digits of customer zip code.
+      - name: customer_city
+        type: VARCHAR
+        description: City name where customer resides.
+      - name: customer_state
+        type: VARCHAR
+        description: State abbreviation (e.g. SP, RJ, MG) where customer resides.
+
+  - name: olist_products
+    description: >
+      Product catalog details (32,951 products).
+      Contains product category, dimensions, photo counts, and weight.
+    columns:
+      - name: product_id
+        type: VARCHAR
+        description: Unique identifier of the product (Primary Key).
+      - name: product_category_name
+        type: VARCHAR
+        description: Category name in Portuguese. Join with product_category_name_translation for English.
+      - name: product_name_lenght
+        type: INTEGER
+        description: Number of characters extracted from product name.
+      - name: product_description_lenght
+        type: INTEGER
+        description: Number of characters in product description.
+      - name: product_photos_qty
+        type: INTEGER
+        description: Number of product photos published in the listing.
+      - name: product_weight_g
+        type: INTEGER
+        description: Product weight in grams.
+      - name: product_length_cm
+        type: INTEGER
+        description: Product package length in centimeters.
+      - name: product_height_cm
+        type: INTEGER
+        description: Product package height in centimeters.
+      - name: product_width_cm
+        type: INTEGER
+        description: Product package width in centimeters.
+
+  - name: olist_sellers
+    description: >
+      Merchant sellers fulfilling orders on the Olist marketplace (3,095 sellers).
+    columns:
+      - name: seller_id
+        type: VARCHAR
+        description: Unique identifier of the merchant seller (Primary Key).
+      - name: seller_zip_code_prefix
+        type: VARCHAR
+        description: First 5 digits of seller zip code.
+      - name: seller_city
+        type: VARCHAR
+        description: City where seller is headquartered.
+      - name: seller_state
+        type: VARCHAR
+        description: State abbreviation where seller operates.
+
+  - name: product_category_name_translation
+    description: >
+      Translation dictionary mapping Portuguese product categories to English (71 categories).
+    columns:
+      - name: product_category_name
+        type: VARCHAR
+        description: Product category name in Portuguese (matches olist_products.product_category_name).
+      - name: product_category_name_english
+        type: VARCHAR
+        description: Translated category name in English (e.g. 'health_beauty', 'watches_gifts', 'bed_bath_table').
+
+joins:
+  - from_table: olist_orders
+    to_table: olist_customers
+    on_condition: olist_orders.customer_id = olist_customers.customer_id
+    join_type: LEFT
+
+  - from_table: olist_order_items
+    to_table: olist_orders
+    on_condition: olist_order_items.order_id = olist_orders.order_id
+    join_type: LEFT
+
+  - from_table: olist_order_items
+    to_table: olist_products
+    on_condition: olist_order_items.product_id = olist_products.product_id
+    join_type: LEFT
+
+  - from_table: olist_order_items
+    to_table: olist_sellers
+    on_condition: olist_order_items.seller_id = olist_sellers.seller_id
+    join_type: LEFT
+
+  - from_table: olist_order_payments
+    to_table: olist_orders
+    on_condition: olist_order_payments.order_id = olist_orders.order_id
+    join_type: LEFT
+
+  - from_table: olist_order_reviews
+    to_table: olist_orders
+    on_condition: olist_order_reviews.order_id = olist_orders.order_id
+    join_type: LEFT
+
+  - from_table: olist_products
+    to_table: product_category_name_translation
+    on_condition: olist_products.product_category_name = product_category_name_translation.product_category_name
+    join_type: LEFT
+
+metrics:
+  - name: net_sales_revenue
+    description: >
+      Total item merchandise revenue in Brazilian Real (R$).
+      Calculated as SUM(price) for orders where order_status = 'delivered'.
+      Excludes freight fees.
+    table: olist_order_items
+    expression: SUM(price)
+    unit: BRL
+    dimensions: [seller_id, product_id]
+    sql_template: |
+      SELECT ROUND(SUM(i.price), 2) AS net_sales_revenue
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+
+  - name: total_orders
+    description: Count of distinct delivered customer orders.
+    table: olist_orders
+    expression: COUNT(DISTINCT order_id)
+    unit: orders
+    dimensions: [order_status, customer_id]
+    sql_template: |
+      SELECT COUNT(DISTINCT order_id) AS total_orders
+      FROM olist_orders
+      WHERE order_status = 'delivered';
+
+  - name: average_order_value
+    description: Average merchandise revenue spent per delivered order.
+    table: olist_order_items
+    expression: SUM(price) / COUNT(DISTINCT order_id)
+    unit: BRL
+    dimensions: [seller_id]
+    sql_template: |
+      SELECT ROUND(SUM(i.price) / COUNT(DISTINCT o.order_id), 2) AS average_order_value
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+
+  - name: average_review_score
+    description: Mean customer satisfaction review score across rated orders (scale 1.0 to 5.0).
+    table: olist_order_reviews
+    expression: AVG(review_score)
+    unit: score
+    dimensions: [review_score]
+    sql_template: |
+      SELECT ROUND(AVG(review_score), 2) AS average_review_score
+      FROM olist_order_reviews;
+
+  - name: total_freight_charges
+    description: Total shipping and delivery fees paid across delivered orders.
+    table: olist_order_items
+    expression: SUM(freight_value)
+    unit: BRL
+    dimensions: [seller_id]
+    sql_template: |
+      SELECT ROUND(SUM(i.freight_value), 2) AS total_freight_charges
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+
+verified_queries:
+  - name: top_product_categories_by_revenue
+    question: "What are the top 5 product categories by net delivered revenue?"
+    sql: |
+      SELECT
+          COALESCE(t.product_category_name_english, p.product_category_name, 'Unknown') AS category,
+          ROUND(SUM(i.price), 2) AS total_revenue
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      JOIN olist_products p ON i.product_id = p.product_id
+      LEFT JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name
+      WHERE o.order_status = 'delivered'
+      GROUP BY category
+      ORDER BY total_revenue DESC
+      LIMIT 5;
+    explanation: "Joins items to delivered orders, products, and English translations, aggregating revenue descending."
+
+  - name: average_review_score_by_status
+    question: "What is the overall average customer review score?"
+    sql: |
+      SELECT ROUND(AVG(review_score), 2) AS avg_review_score
+      FROM olist_order_reviews;
+    explanation: "Averages the numeric review scores across all customer reviews."
