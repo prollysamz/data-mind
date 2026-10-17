@@ -8,7 +8,7 @@ import json
 import logging
 from dataclasses import dataclass, field, asdict
 from typing import Any, Literal
-from datamind.config import AppConfig
+from datamind.config import AppConfig, load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +175,8 @@ class ModelRegistry:
         allow_cloud = os.getenv("DATAMIND_ALLOW_CLOUD", "0") == "1"
         has_bedrock_key = bool(
             os.getenv("AWS_ACCESS_KEY_ID")
+            or os.getenv("BEDROCK_API_KEY")
+            or os.getenv("AWS_BEARER_TOKEN_BEDROCK")
             or os.getenv("LLM_API_KEY", "").startswith("bedrock")
             or "bedrock" in os.getenv("LLM_BASE_URL", "").lower()
         )

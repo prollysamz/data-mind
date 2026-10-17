@@ -12,7 +12,7 @@ import yaml
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
 from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 from datamind.agent.orchestrator import AgentOrchestrator
-from datamind.config import load_config
+from datamind.config import load_config, load_dotenv
 from datamind.eval.runner import run_evaluation
 from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
@@ -611,6 +611,7 @@ def handle_verify_receipt(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Main CLI entrypoint for DataMind."""
+    load_dotenv()
     parser = argparse.ArgumentParser(
         prog="datamind",
         description="DataMind: Talk to Your Data with verifiable SQL and citations",
