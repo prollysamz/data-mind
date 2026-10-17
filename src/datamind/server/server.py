@@ -416,6 +416,13 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                         valid, msg, _ = reg.validate_model_selection(target_m)
                         if valid:
                             self.orchestrator.llm_client.config.orchestrator_model = target_m
+                        elif preset.get("requires_cloud", False):
+                            self._send_json(400, {
+                                "error": f"Preset '{preset.get('label')}' requires AWS Bedrock access, but cloud is not enabled: {msg}",
+                                "error_type": "cloud_disabled",
+                                "details": "To enable Bedrock cloud models, set DATAMIND_ALLOW_CLOUD=1 and BEDROCK_API_KEY in .env.",
+                            })
+                            return
 
             is_permissive = bool(payload.get("permissive", False))
             max_turns = int(payload.get("max_turns", self.config.agent.max_steps))

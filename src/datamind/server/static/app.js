@@ -43,9 +43,14 @@ async function loadConfig() {
   try {
     const res = await fetch('/api/config');
     if (!res.ok) return;
-    const data = await res.json();
-    document.getElementById('backendName').textContent = data.backend.toUpperCase();
-    document.getElementById('modelName').textContent = data.model_name;
+    const backendEl = document.getElementById('backendName');
+    if (backendEl && data.backend) {
+      backendEl.textContent = data.backend.toUpperCase();
+    }
+    const modelEl = document.getElementById('modelName');
+    if (modelEl && data.model_name) {
+      modelEl.textContent = data.model_name;
+    }
 
     const privacyEl = document.getElementById('privacyStatus');
     if (privacyEl && data.privacy_indicator) {
@@ -705,7 +710,10 @@ function initActions() {
   const secondOpinionBtn = document.getElementById('secondOpinionBtn');
   if (secondOpinionBtn) {
     secondOpinionBtn.addEventListener('click', async () => {
-      if (!currentResult) return;
+      if (!currentResult) {
+        alert('Please run a query first before requesting a second opinion.');
+        return;
+      }
       const queries = (currentResult.evidence && currentResult.evidence.queries) || [];
       const primarySql = queries.length ? queries[0].sql : '';
       if (!primarySql) {
@@ -719,7 +727,7 @@ function initActions() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             primary_sql: primarySql,
-            primary_model: currentResult.under_the_hood?.model || 'gemma4:e2b',
+            primary_model: (currentResult.under_the_hood && currentResult.under_the_hood.model) || 'gemma4:e2b',
             secondary_model: 'gemma4:e4b',
           }),
         });
@@ -737,7 +745,11 @@ function initActions() {
   const receiptBtn = document.getElementById('receiptBtn');
   if (receiptBtn) {
     receiptBtn.addEventListener('click', () => {
-      if (!currentResult || !currentResult.receipt) {
+      if (!currentResult) {
+        alert('Please run a query first before viewing the cryptographic receipt.');
+        return;
+      }
+      if (!currentResult.receipt) {
         alert('No cryptographic receipt available for this result.');
         return;
       }
@@ -749,18 +761,14 @@ function initActions() {
   const redTeamBtn = document.getElementById('redTeamBtn');
   if (redTeamBtn) {
     redTeamBtn.addEventListener('click', async () => {
-      if (!currentResult || !currentResult.answer) {
-        alert('Run a query first to generate an answer for red-team testing.');
-        return;
-      }
       redTeamBtn.textContent = '⚔️ Attacking...';
       try {
         const resp = await fetch('/api/red_team', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            answer: currentResult.answer,
-            evidence: currentResult.evidence,
+            answer: currentResult ? currentResult.answer : '',
+            evidence: currentResult ? currentResult.evidence : {},
           }),
         });
         const rtData = await resp.json();
@@ -866,8 +874,8 @@ function openSecondOpinionModal(data) {
 
   const badge = document.getElementById('soVerdictBadge');
   if (badge) {
-    badge.textContent = data.verdict_label || data.verdict;
-    badge.className = data.verdict.startsWith('AGREE') ? 'badge-pill badge-emerald' : 'badge-pill badge-amber';
+    badge.textContent = data.verdict_label || data.verdict || 'Opinion';
+    badge.className = (data.verdict && data.verdict.startsWith('AGREE')) ? 'badge-pill badge-emerald' : 'badge-pill badge-amber';
   }
 
   const exp = document.getElementById('soExplanation');

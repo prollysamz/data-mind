@@ -67,6 +67,7 @@ class LLMClient:
         self.cost_guard = cost_guard or CostGuard()
         self.use_cache = use_cache
         self.purpose = purpose
+        self._custom_client_provided = (client is not None)
         if client is not None:
             self._client = client
         else:
@@ -150,10 +151,43 @@ class LLMClient:
             if response_format is not None:
                 kwargs["response_format"] = response_format
 
-            # Enforce dynamic prediction limit in Ollama options
-            kwargs["extra_body"] = {"options": {"num_ctx": 16384, "num_predict": current_tokens}}
+            if self._custom_client_provided:
+                return self._client.chat.completions.create(**kwargs)
 
-            return self._client.chat.completions.create(**kwargs)
+            is_cloud = (
+                target_model.startswith("google.")
+                or target_model.startswith("anthropic.")
+                or "bedrock" in target_model
+            )
+            if is_cloud:
+                import os
+                from openai import AuthenticationError, PermissionDeniedError
+                bedrock_url = (
+                    os.getenv("BEDROCK_BASE_URL")
+                    or os.getenv("LLM_BEDROCK_BASE_URL")
+                    or "https://bedrock-mantle.us-east-1.api.aws/openai/v1"
+                )
+                bedrock_key = (
+                    os.getenv("BEDROCK_API_KEY")
+                    or os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+                    or os.getenv("LLM_API_KEY")
+                    or ""
+                )
+                cloud_client = OpenAI(
+                    base_url=bedrock_url,
+                    api_key=bedrock_key or "dummy-key",
+                    timeout=self.config.timeout_seconds,
+                )
+                try:
+                    return cloud_client.chat.completions.create(**kwargs)
+                except (AuthenticationError, PermissionDeniedError) as auth_err:
+                    raise Exception(
+                        "Cloud Bedrock credentials expired or invalid (HTTP 401/403). Please refresh your BEDROCK_API_KEY and restart."
+                    ) from auth_err
+            else:
+                # Enforce dynamic prediction limit in Ollama options
+                kwargs["extra_body"] = {"options": {"num_ctx": 16384, "num_predict": current_tokens}}
+                return self._client.chat.completions.create(**kwargs)
 
         response = _make_call(token_limit)
         choice = response.choices[0]

@@ -411,6 +411,9 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
   <!-- Second Opinion Modal -->
   <div class="modal-backdrop" id="secondOpinionModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="secondOpinionTitle">
     <div class="modal-card modal-lg">
@@ -494,6 +497,7 @@
         <ul style="margin: 0.5rem 0 1rem 1.25rem; font-size: 0.88rem; line-height: 1.6;">
           <li><strong>Transmitted:</strong> Question text and sanitized schema summaries.</li>
           <li><strong>Never Transmitted:</strong> Zero database rows, zero document passages, zero credentials.</li>
+          <li><strong>Requirements:</strong> Set <code>DATAMIND_ALLOW_CLOUD=1</code> and <code>BEDROCK_API_KEY=&lt;key&gt;</code> in <code>.env</code>.</li>
         </ul>
         <div class="review-actions-row">
           <button type="button" class="btn-secondary" id="cancelConsentBtn">Stay Local (Air-Gapped)</button>
