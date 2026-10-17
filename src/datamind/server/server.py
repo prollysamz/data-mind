@@ -13,6 +13,7 @@ from datamind.adapters.duckdb_adapter import DuckDBAdapter
 from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.config import AppConfig, load_config
+from datamind.llm.budget import BudgetConfigError, BudgetExceeded
 from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
@@ -143,6 +144,22 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
 
         try:
             result = self.orchestrator.run(question, max_turns=max_turns)
+        except BudgetExceeded as e:
+            logger.warning("Budget limit reached: %s", e)
+            self._send_json(429, {
+                "error_type": "budget_exceeded",
+                "error": str(e),
+                "message": f"Query halted by budget guard: {e}",
+            })
+            return
+        except BudgetConfigError as e:
+            logger.warning("Budget configuration error: %s", e)
+            self._send_json(400, {
+                "error_type": "budget_config_error",
+                "error": str(e),
+                "message": f"Configuration error: {e}",
+            })
+            return
         except Exception as e:
             logger.exception("Agent execution error")
             self._send_json(500, {"error": f"Execution error: {e}"})

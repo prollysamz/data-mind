@@ -15,6 +15,8 @@ guardrails:
 
 agent:
   max_steps: 6
+  max_sql_repairs: 2
+  max_tokens_per_question: 32768
 
 llm:
   base_url: ${LLM_BASE_URL:-http://localhost:11434/v1}
@@ -23,3 +25,11 @@ llm:
   token_param: max_tokens
   max_tokens: 8192
   temperature: 0.0
+  budget:
+    max_usd_total: ${DATAMIND_BUDGET_MAX_USD:-10.0}
+    max_usd_per_run: ${DATAMIND_BUDGET_MAX_USD_PER_RUN:-2.0}
+    max_calls_per_run: 50
+    max_tokens_per_call: 16384
+    max_calls_per_minute: 60
+    price_per_million_input_usd: ${DATAMIND_PRICE_INPUT_M:-}
+    price_per_million_output_usd: ${DATAMIND_PRICE_OUTPUT_M:-}

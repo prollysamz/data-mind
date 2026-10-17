@@ -10,7 +10,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 import yaml
 
 
@@ -49,6 +49,33 @@ def _interpolate_env(value: Any) -> Any:
     return value
 
 
+class BudgetConfig(BaseModel):
+    """Budget and cost guard configuration."""
+    max_usd_total: float | None = None
+    max_usd_per_run: float | None = None
+    max_calls_per_run: int | None = None
+    max_tokens_per_call: int | None = 16384
+    max_calls_per_minute: int | None = 60
+    price_per_million_input_usd: float | None = None
+    price_per_million_output_usd: float | None = None
+
+    @field_validator(
+        "max_usd_total",
+        "max_usd_per_run",
+        "max_calls_per_run",
+        "max_tokens_per_call",
+        "max_calls_per_minute",
+        "price_per_million_input_usd",
+        "price_per_million_output_usd",
+        mode="before",
+    )
+    @classmethod
+    def empty_str_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
 class LLMConfig(BaseModel):
     """LLM client configuration."""
     base_url: str = Field(default="http://localhost:11434/v1")
@@ -61,6 +88,7 @@ class LLMConfig(BaseModel):
     max_tokens: int = Field(default=8192)
     temperature: float = Field(default=0.0)
     timeout_seconds: float = Field(default=60.0)
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
 
     def get_api_key(self) -> str:
         """Resolve API key from direct field or environment variable."""
@@ -113,6 +141,7 @@ class AgentConfig(BaseModel):
     """Agent loop settings."""
     max_steps: int = 6
     max_sql_repairs: int = 2
+    max_tokens_per_question: int = Field(default=32768)
 
 
 class RetrievalConfig(BaseModel):

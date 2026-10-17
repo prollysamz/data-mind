@@ -129,9 +129,32 @@ class AgentOrchestrator:
         messages.append({"role": "user", "content": question})
 
         turns_taken = 0
+        total_tokens_consumed = 0
+        sql_repairs_count = 0
+        max_sql_repairs = getattr(self, "max_sql_repairs", 2)
+        max_question_tokens = 32768
+
         for turn_idx in range(max_turns):
             turns_taken = turn_idx + 1
             reply = self.llm_client.chat(messages=messages, tools=TOOL_DEFINITIONS)
+
+            # Track accumulated tokens
+            usage_info = reply.get("usage", {})
+            turn_tokens = usage_info.get("total_tokens", 0)
+            total_tokens_consumed += turn_tokens
+
+            if total_tokens_consumed > max_question_tokens:
+                logger.warning("Question token cap exceeded (%d > %d)", total_tokens_consumed, max_question_tokens)
+                return AgentResult(
+                    question=question,
+                    answer=f"Error: Question token cap exceeded ({total_tokens_consumed} tokens consumed, max allowed: {max_question_tokens}).",
+                    evidence_store=self.evidence_store,
+                    citation_report=CitationReport(is_clean=False),
+                    turns=turns_taken,
+                    success=False,
+                    error="question_token_cap_exceeded",
+                    messages=messages,
+                )
 
             tool_calls = reply.get("tool_calls")
             if not tool_calls:
@@ -182,16 +205,24 @@ class AgentOrchestrator:
                     continue
 
                 if fn_name == "run_sql":
-                    sql_query = args.get("sql", "")
-                    purpose = args.get("purpose", "Analysis query")
-                    out = execute_sql_tool(
-                        sql=sql_query,
-                        purpose=purpose,
-                        guard=self.sql_guard,
-                        adapter=self.db_adapter,
-                        evidence_store=self.evidence_store,
-                    )
-                    tool_results[call_id] = out
+                    if sql_repairs_count >= max_sql_repairs:
+                        tool_results[call_id] = json.dumps({
+                            "error": f"SQL repair limit ({max_sql_repairs}) reached. "
+                            "Do not attempt further SQL queries. Synthesize your final answer from existing evidence."
+                        })
+                    else:
+                        sql_query = args.get("sql", "")
+                        purpose = args.get("purpose", "Analysis query")
+                        out = execute_sql_tool(
+                            sql=sql_query,
+                            purpose=purpose,
+                            guard=self.sql_guard,
+                            adapter=self.db_adapter,
+                            evidence_store=self.evidence_store,
+                        )
+                        if "error" in out:
+                            sql_repairs_count += 1
+                        tool_results[call_id] = out
 
                 elif fn_name == "search_documents":
                     query_terms = args.get("query", "")

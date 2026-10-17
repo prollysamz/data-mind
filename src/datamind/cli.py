@@ -164,25 +164,153 @@ def handle_ask(args: argparse.Namespace) -> int:
     return 0 if is_success else 1
 
 
+def handle_usage(args: argparse.Namespace) -> int:
+    """Print or reset LLM API and token usage tracking."""
+    from datamind.llm.budget import CostGuard
+    config = load_config(getattr(args, "config", "datamind.yaml"))
+    guard = CostGuard()
+
+    if getattr(args, "reset", False):
+        confirm = input("Are you sure you want to reset all persistent usage history? [y/N]: ").strip().lower()
+        if confirm in ("y", "yes"):
+            guard.reset_usage()
+            print("Usage history reset successfully.")
+            return 0
+        else:
+            print("Usage reset cancelled.")
+            return 0
+
+    max_usd = config.llm.budget.max_usd_total
+    summary = guard.get_usage_summary(max_usd_total=max_usd)
+
+    print("=" * 70)
+    print("DATAMIND METERED USAGE AND BUDGET REPORT")
+    print("=" * 70)
+    print(f"Total API Calls:            {summary.total_calls}")
+    print(f"Total Prompt Tokens:        {summary.total_prompt_tokens:,}")
+    print(f"Total Completion Tokens:    {summary.total_completion_tokens:,}")
+    print(f"Total Combined Tokens:      {(summary.total_prompt_tokens + summary.total_completion_tokens):,}")
+    print(f"Total Estimated Spend:      ${summary.total_usd:.4f} USD")
+    if summary.remaining_budget_usd is not None:
+        print(f"Configured Budget Ceiling:  ${max_usd:.2f} USD")
+        print(f"Remaining Budget:           ${summary.remaining_budget_usd:.4f} USD")
+    else:
+        print("Configured Budget Ceiling:  None (Unlimited or Local Only)")
+    print("-" * 70)
+
+    # By Day
+    if summary.by_day:
+        print("\nUsage By Day:")
+        print(f"  {'Date':<12} {'Calls':<8} {'Tokens':<14} {'Estimated USD':<14}")
+        print("  " + "-" * 50)
+        for day, stats in sorted(summary.by_day.items()):
+            tok_str = f"{stats['tokens']:,}"
+            print(f"  {day:<12} {stats['calls']:<8} {tok_str:<14} ${stats['usd']:<13.4f}")
+
+    # By Model
+    if summary.by_model:
+        print("\nUsage By Model:")
+        print(f"  {'Model':<24} {'Calls':<8} {'Tokens':<14} {'Estimated USD':<14}")
+        print("  " + "-" * 62)
+        for model, stats in sorted(summary.by_model.items()):
+            tok_str = f"{stats['tokens']:,}"
+            print(f"  {model:<24} {stats['calls']:<8} {tok_str:<14} ${stats['usd']:<13.4f}")
+
+    # By Purpose
+    if summary.by_purpose:
+        print("\nUsage By Purpose:")
+        print(f"  {'Purpose':<14} {'Calls':<8} {'Tokens':<14} {'Estimated USD':<14}")
+        print("  " + "-" * 50)
+        for purpose, stats in sorted(summary.by_purpose.items()):
+            tok_str = f"{stats['tokens']:,}"
+            print(f"  {purpose:<14} {stats['calls']:<8} {tok_str:<14} ${stats['usd']:<13.4f}")
+
+    print("=" * 70)
+    return 0
+
+
+def handle_warehouse_suspend(args: argparse.Namespace) -> int:
+    """Suspend Snowflake warehouse immediately to prevent idle cloud compute spend."""
+    config = load_config(getattr(args, "config", "datamind.yaml"))
+    wh = config.backend.snowflake.warehouse if config.backend.snowflake else "DATAMIND_XS"
+    print(f"Suspending Snowflake warehouse '{wh}'...")
+    try:
+        from datamind.adapters.snowflake_adapter import SnowflakeAdapter
+        adapter = SnowflakeAdapter(config=config.backend.snowflake)
+        adapter.execute(f"ALTER WAREHOUSE {wh} SUSPEND;")
+        adapter.close()
+        print(f"Successfully suspended warehouse '{wh}'. Idle spend prevented.")
+        return 0
+    except Exception as e:
+        print(f"Notice / Error suspending warehouse: {e}", file=sys.stderr)
+        print(f"SQL for manual suspension in worksheet: ALTER WAREHOUSE {wh} SUSPEND;")
+        return 1
+
+
 def handle_eval(args: argparse.Namespace) -> int:
     """Run benchmark evaluation suites."""
-    print("=" * 70)
-    print(f"DATAMIND EVALUATION RUNNER — Suite: {args.suite.upper()}")
-    print("=" * 70)
-    print("Executing benchmark questions against configured model and database...")
+    config = load_config(args.config)
+    provider = getattr(args, "provider", "local")
+    use_cache = getattr(args, "cache", None)
+    if use_cache is None:
+        # Default on for cloud eval, off otherwise
+        use_cache = (provider == "cloud")
 
-    report = run_evaluation(suite=args.suite, config_path=args.config)
+    print("=" * 70)
+    print(f"DATAMIND EVALUATION RUNNER — Suite: {args.suite.upper()} | Provider: {provider.upper()}")
+    print("=" * 70)
+
+    # Cloud evaluation safety checks
+    if provider == "cloud":
+        from datamind.llm.budget import CostGuard
+        guard = CostGuard()
+        max_usd = config.llm.budget.max_usd_total or 10.0
+        summary = guard.get_usage_summary(max_usd_total=max_usd)
+
+        # Estimate cost: approx questions x 3 turns x 2000 tokens
+        est_questions = 21 if args.suite in ("all", "business") else 10
+        est_tokens = est_questions * 3 * 2000
+        p_in = (config.llm.budget.price_per_million_input_usd or 0.0) / 1_000_000.0
+        p_out = (config.llm.budget.price_per_million_output_usd or 0.0) / 1_000_000.0
+        est_cost = (est_tokens * 0.7 * p_in) + (est_tokens * 0.3 * p_out)
+
+        print("Cloud Evaluation Cost Estimate:")
+        print(f"  Estimated Questions:     {est_questions}")
+        print(f"  Projected Tokens:        ~{est_tokens:,} tokens")
+        print(f"  Projected Cost:          ~${est_cost:.4f} USD")
+        print(f"  Configured Budget Cap:   ${max_usd:.2f} USD")
+        print(f"  Current Spend:           ${summary.total_usd:.4f} USD")
+        print(f"  Remaining Budget:        ${(summary.remaining_budget_usd or 0.0):.4f} USD")
+        print(f"  Response Cache:          {'ENABLED' if use_cache else 'DISABLED'}")
+        print("-" * 70)
+
+        if not getattr(args, "yes", False):
+            confirm = input("Proceed with cloud evaluation run? [y/N]: ").strip().lower()
+            if confirm not in ("y", "yes"):
+                print("Evaluation aborted by user.")
+                return 0
+
+    print("Executing benchmark questions against configured model and database...")
+    report = run_evaluation(
+        suite=args.suite,
+        config_path=args.config,
+        provider=provider,
+        use_cache=use_cache,
+    )
 
     print("\n" + "-" * 70)
-    print(f"EVALUATION SUMMARY: {report.passed} / {report.total} Passed ({report.pass_rate_pct}% Pass Rate)")
+    summary_str = f"EVALUATION SUMMARY: {report.passed} / {report.total} Passed ({report.pass_rate_pct}% Pass Rate)"
+    if report.not_run > 0:
+        summary_str += f" [{report.not_run} Not Run]"
+    print(summary_str)
     print("-" * 70)
     for item in report.items:
-        badge = "[PASS]" if item.passed else "[FAIL]"
-        print(f"  {badge} {item.item_id:<22} ({item.suite:<8}) {item.reason}")
+        badge = f"[{item.status}]" if hasattr(item, "status") else ("[PASS]" if item.passed else "[FAIL]")
+        print(f"  {badge:<10} {item.item_id:<22} ({item.suite:<8}) {item.reason}")
 
     print("\nResults report generated at: eval/results/RESULTS.md")
     print("=" * 70)
-    return 0 if report.failed == 0 else 1
+    return 0 if report.failed == 0 and report.not_run == 0 else 1
 
 
 def handle_index(args: argparse.Namespace) -> int:
@@ -363,6 +491,56 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="datamind.yaml",
         help="Path to configuration YAML (default: datamind.yaml)",
     )
+    eval_parser.add_argument(
+        "--provider",
+        choices=["local", "cloud"],
+        default="local",
+        help="LLM provider: local (Ollama/vLLM) or cloud (fail-closed, metered)",
+    )
+    eval_parser.add_argument(
+        "--cache",
+        action="store_true",
+        default=None,
+        help="Enable persistent SQLite response cache (default on for cloud, off for local)",
+    )
+    eval_parser.add_argument(
+        "--no-cache",
+        dest="cache",
+        action="store_false",
+        help="Disable response cache",
+    )
+    eval_parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Skip interactive confirmation prompt for cloud evaluation",
+    )
+
+    # usage
+    usage_parser = subparsers.add_parser(
+        "usage",
+        help="View metered token and dollar spend report",
+    )
+    usage_parser.add_argument(
+        "--config",
+        default="datamind.yaml",
+        help="Path to configuration YAML (default: datamind.yaml)",
+    )
+    usage_parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Reset persistent usage data (requires confirmation)",
+    )
+
+    # warehouse-suspend
+    suspend_parser = subparsers.add_parser(
+        "warehouse-suspend",
+        help="Suspend Snowflake warehouse to eliminate idle cloud compute spend",
+    )
+    suspend_parser.add_argument(
+        "--config",
+        default="datamind.yaml",
+        help="Path to configuration YAML (default: datamind.yaml)",
+    )
 
     # index
     index_parser = subparsers.add_parser(
@@ -386,6 +564,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.subcommand == "eval":
         return handle_eval(args)
+
+    if args.subcommand == "usage":
+        return handle_usage(args)
+
+    if args.subcommand == "warehouse-suspend":
+        return handle_warehouse_suspend(args)
 
     if args.subcommand == "index":
         return handle_index(args)

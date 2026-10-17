@@ -74,6 +74,11 @@ async function executeQuery(question) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+      if (data.error_type === 'budget_exceeded') {
+        const err = new Error(data.message || data.error || 'Cloud or session budget ceiling reached.');
+        err.isBudget = true;
+        throw err;
+      }
       throw new Error(data.error || `Server returned HTTP ${res.status}`);
     }
 
@@ -85,7 +90,7 @@ async function executeQuery(question) {
   } catch (err) {
     if (loadingState) loadingState.style.display = 'none';
     if (errorState) {
-      document.getElementById('errorTitle').textContent = 'Query Execution Failed';
+      document.getElementById('errorTitle').textContent = err.isBudget ? 'Budget Limit Reached' : 'Query Execution Failed';
       document.getElementById('errorMessage').textContent = err.message || 'An unexpected error occurred during execution.';
       errorState.style.display = 'flex';
     }
