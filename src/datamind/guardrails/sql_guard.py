@@ -241,9 +241,14 @@ class SQLGuard:
                 if isinstance(tbl.catalog, str)
                 else (tbl.catalog.name.strip().lower() if hasattr(tbl.catalog, "name") else "")
             )
-            if db_name or catalog_name:
-                qualified_str = f"{db_name}.{tbl_name}" if db_name else tbl_name
-                if qualified_str not in self.approved_tables and (not db_name or db_name not in {"public", "main"}):
+            if catalog_name:
+                raise SQLSecurityError(
+                    f"Cross-database reference '{tbl.sql(dialect=self.dialect)}' with database '{catalog_name}' is unauthorized.",
+                    "unauthorized_table",
+                )
+            if db_name and db_name not in {"public", "main"}:
+                qualified_str = f"{db_name}.{tbl_name}"
+                if qualified_str not in self.approved_tables:
                     raise SQLSecurityError(
                         f"Cross-database reference '{tbl.sql(dialect=self.dialect)}' is unauthorized.",
                         "unauthorized_table",

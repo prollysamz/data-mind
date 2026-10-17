@@ -299,3 +299,67 @@ def test_adversarial_wrong_plain_counts_flagged():
     assert bad_order_rep.is_clean is False
     assert bad_order_rep.discrepancy_count == 1
     assert "claimed 10 does not match data in cited sources ['Q2:R1']" in bad_order_rep.get_discrepancies()[0]
+
+
+def test_derived_values_sum_diff_pct_count(evidence_store):
+    """Test derived metrics: sums, differences, percent change, and row count accepted when derivable."""
+    # evidence_store has:
+    # Q1:R1: ("Novaship", "2026-03-01", 28000.0, 53803.23)
+    # Q1:R2: ("SecureVault", "2026-04-01", 68000.0, 5686.56)
+
+    # 1. Derived sum: 28000 + 68000 = 96000
+    text_sum = "Total amount for both products is $96,000 [[Q1:R1]] [[Q1:R2]]."
+    rep_sum = verify_citations(text_sum, evidence_store)
+    assert rep_sum.is_clean is True
+    assert rep_sum.verified_numbers_count == 1
+
+    # 2. Derived diff: 68000 - 28000 = 40000
+    text_diff = "SecureVault outsold Novaship by $40,000 [[Q1:R1]] [[Q1:R2]]."
+    rep_diff = verify_citations(text_diff, evidence_store)
+    assert rep_diff.is_clean is True
+    assert rep_diff.verified_numbers_count == 1
+
+    # 3. Derived row count: 2 products
+    text_count = "Across 2 products analyzed [[Q1:R1]] [[Q1:R2]]."
+    rep_count = verify_citations(text_count, evidence_store)
+    assert rep_count.is_clean is True
+    assert rep_count.verified_numbers_count == 1
+
+    # 4. Hallucinated derived sum: claims $120,000 when sum is $96,000
+    bad_sum_text = "Combined revenue was $120,000 [[Q1:R1]] [[Q1:R2]]."
+    bad_sum_rep = verify_citations(bad_sum_text, evidence_store)
+    assert bad_sum_rep.is_clean is False
+    assert bad_sum_rep.discrepancy_count == 1
+
+
+def test_causal_wording_lint():
+    """Test causal wording lint on document claims."""
+    from datamind.retrieval.base import Chunk
+    store = EvidenceStore()
+    chunk = Chunk(chunk_id="D:tickets:TK-101", doc_name="tickets", text="Login timeout error on dashboard", metadata={})
+    store.add_chunks("login timeout", [chunk])
+
+    text_causal = "The 504 timeouts caused the decline in Q1 revenue [[D:tickets:TK-101]]."
+    rep = verify_citations(text_causal, store)
+    assert len(rep.causal_warnings) >= 1
+    assert any("caused the" in w for w in rep.causal_warnings)
+
+
+def test_malformed_citations_detected():
+    """Test that ranges, nested brackets, and malformed tags are detected and flagged."""
+    store = EvidenceStore()
+    # 1. Range syntax [[Q1:R1 through Q1:R9]]
+    rep1 = verify_citations("Values for [[Q1:R1 through Q1:R9]] were observed.", store)
+    assert rep1.is_clean is False
+    assert rep1.invalid_count >= 1
+
+    # 2. Nested brackets [[[Q1:R1]]]
+    rep2 = verify_citations("Result is [[[Q1:R1]]].", store)
+    assert rep2.is_clean is False
+    assert rep2.invalid_count >= 1
+
+    # 3. Fabricated ID
+    rep3 = verify_citations("Revenue was $500 [[Q99:R99]].", store)
+    assert rep3.is_clean is False
+    assert any("Fabricated citation" in c.error for c in rep3.citations if c.error)
+

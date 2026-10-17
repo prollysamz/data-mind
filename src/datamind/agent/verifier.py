@@ -36,6 +36,7 @@ class NumericCheck:
 class CitationReport:
     citations: list[Citation] = field(default_factory=list)
     numeric_checks: list[NumericCheck] = field(default_factory=list)
+    causal_warnings: list[str] = field(default_factory=list)
     valid_count: int = 0
     invalid_count: int = 0
     verified_numbers_count: int = 0
@@ -56,6 +57,14 @@ class CitationReport:
 
 CITATION_PATTERN = re.compile(r"\[\[(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\]\]")
 LOOSE_CITATION_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
+
+CAUSAL_PHRASES = (
+    "caused the", "caused a", "caused our", "causing the",
+    "directly caused", "led directly to", "responsible for the decline",
+    "responsible for the drop", "responsible for the loss",
+    "was the cause of", "were the cause of", "the root cause of the decline",
+    "the reason for the drop in revenue",
+)
 
 # Direction words for reconciling variance and trends
 DECLINE_WORDS = (
@@ -147,8 +156,9 @@ def _is_calendar_or_bullet(raw_num_str: str, sentence: str, match_start: int) ->
     if re.search(r"\b(?:for|in|within|every)\s+" + re.escape(raw_num_str) + r"\s*(?:hours?|hrs?|minutes?|mins?|seconds?|secs?|days?|weeks?|months?)\b", sentence, re.I):
         return True
 
-    # Check if number is a ticket ID or query/row label: 'TK-1002', 'ID-12'
-    if match_start >= 3 and sentence[match_start - 3:match_start].upper() in ("TK-", "ID-", "BUG"):
+    # Check if number is a ticket ID or query/row label: 'TK-1002', 'ID-12', 'BUG-404'
+    prefix_chars = sentence[max(0, match_start - 4):match_start].upper()
+    if any(prefix_chars.endswith(p) for p in ("TK-", "ID-", "BUG-", "TK", "ID", "BUG")):
         return True
 
     # Check if number is a list bullet: '1. ', '2. ', '3) ' at line or segment start
@@ -217,10 +227,6 @@ def verify_citations(
     semantic_model: Any = None,
 ) -> CitationReport:
     """Extract and verify all citations and perform deterministic numeric, currency, and date reconciliation."""
-    # Auto-repair unclosed trailing or mid-sentence citation tags: [[D:... or [[Q... missing closing ]]
-    text = re.sub(r"\[\[([A-Za-z0-9_:\-]+)(?:\s*\])?$", r"[[\1]]", text.strip())
-    text = re.sub(r"\[\[(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)(?=[,\.\n\r\s]|$)(?!\]\])", r"[[\1]]", text)
-
     report = CitationReport()
     seen_citation_ids: set[str] = set()
 
@@ -228,12 +234,26 @@ def verify_citations(
     expected_symbol = getattr(semantic_model, "currency_symbol", "$") if semantic_model else "$"
 
     # 1. Provenance Verification
+    # Detect malformed nested triple brackets like [[[Q1:R1]]]
+    if "[[[" in text or "]]]" in text:
+        report.citations.append(
+            Citation(
+                raw="[[[...]]]",
+                target_id="nested_brackets",
+                is_valid=False,
+                evidence_type="unknown",
+                error="Malformed nested citation syntax: redundant triple brackets [[[...]]].",
+            )
+        )
+        report.invalid_count += 1
+        report.is_clean = False
+
     # Detect malformed grouped brackets like [[Q1:R1], [Q1:R2]] or [[Q1:R1, Q1:R2]] or [[... through ...]]
     grouped_bracket_matches = re.finditer(r"\[\[(.*?)\]\]", text)
     for g_match in grouped_bracket_matches:
         inner = g_match.group(1).strip()
         # If inner contains commas, brackets, or range keywords, it is malformed
-        if any(bad in inner for bad in (",", "]", "[", " through ", " to ")):
+        if any(bad in inner for bad in (",", "]", "[", " through ", " to ", "..", " - ")):
             report.citations.append(
                 Citation(
                     raw=g_match.group(0),
@@ -369,6 +389,18 @@ def verify_citations(
         row_citations = [c for c in all_segment_citations if c.startswith("Q")]
         doc_citations = [c for c in all_segment_citations if c.startswith("D")]
 
+        # Check causal wording lint for document / ticket claims (spec section 8.7)
+        if doc_citations or any(kw in segment.lower() for kw in ("ticket", "complaint", "feedback", "customer report")):
+            seg_lower = segment.lower()
+            for phrase in CAUSAL_PHRASES:
+                if phrase in seg_lower:
+                    warning = (
+                        f"Causal lint: '{phrase}' in document claim. Customer feedback and tickets "
+                        f"describe reported user sentiment, not mathematically proven direct revenue causation."
+                    )
+                    if warning not in report.causal_warnings:
+                        report.causal_warnings.append(warning)
+
         # Strip citations and full dates (YYYY-MM-DD) before looking for claimed numbers
         cleaned_segment = LOOSE_CITATION_PATTERN.sub("", segment)
         cleaned_segment = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", cleaned_segment)
@@ -394,7 +426,7 @@ def verify_citations(
             elif raw_full.startswith("€") or "euro" in segment.lower() or "eur" in segment.lower():
                 claimed_symbol = "€"
 
-            if claimed_symbol and semantic_model:
+            if claimed_symbol:
                 if claimed_symbol != expected_symbol:
                     msg = (
                         f"Currency unit mismatch: claimed '{claimed_symbol}' ({raw_full}) "
@@ -445,11 +477,15 @@ def verify_citations(
                         rel_diff_signed = diff_signed / max(abs(cell_float), 1.0)
                         rel_diff_abs = diff_abs / max(abs(cell_float), 1.0)
 
-                        # Match criteria: exact match, within 2% rounding, or absolute variance match (e.g. decline/increase)
-                        is_exact_or_round = (
-                            diff_signed <= 0.05 or rel_diff_signed <= 0.02
-                            or diff_abs <= 0.05 or rel_diff_abs <= 0.02
-                        )
+                        has_approx = bool(re.search(r"\b(?:approximately|approx|about|around|~)\b", segment, re.I))
+                        if has_approx:
+                            is_exact_or_round = (
+                                diff_signed <= 0.05 or rel_diff_signed <= 0.02
+                                or diff_abs <= 0.05 or rel_diff_abs <= 0.02
+                            )
+                        else:
+                            is_exact_or_round = (diff_signed <= 0.05 or diff_abs <= 0.05)
+
                         is_bound_match = (has_lower_bound and cell_float >= claimed_float and (cell_float - claimed_float) / max(cell_float, 1.0) < 0.20)
 
                         if is_exact_or_round or is_bound_match:
@@ -476,10 +512,127 @@ def verify_citations(
                         matched_val = raw_matched_num
                         break
 
+            # Check C: Match derived metrics (sum, difference, percent change, share, count) from cited SQL rows
+            if not matched and candidate_rows:
+                col_sums: dict[str, float] = {}
+                col_counts: dict[str, int] = {}
+                numeric_cells_list: list[tuple[str, str, float]] = []
+
+                for r_id in candidate_rows:
+                    try:
+                        r_cells = evidence_store.get_row(r_id)
+                    except KeyError:
+                        continue
+                    for c_name, c_val in r_cells.items():
+                        c_num = _parse_float(c_val)
+                        if c_num is not None:
+                            col_sums[c_name] = col_sums.get(c_name, 0.0) + c_num
+                            col_counts[c_name] = col_counts.get(c_name, 0) + 1
+                            numeric_cells_list.append((r_id, c_name, c_num))
+
+                # Check column sums across cited rows
+                for c_name, total_sum in col_sums.items():
+                    if col_counts[c_name] >= 2:
+                        diff = abs(claimed_float - total_sum)
+                        rel_diff = diff / max(abs(total_sum), 1.0)
+                        if diff <= 0.05 or rel_diff <= 0.02:
+                            matched = True
+                            matched_id = candidate_rows[0]
+                            matched_col_or_field = f"derived_sum({c_name})"
+                            matched_val = round(total_sum, 2)
+                            break
+
+                # Check pairwise differences and percent changes across cited values
+                if not matched and len(numeric_cells_list) >= 2:
+                    for i in range(len(numeric_cells_list)):
+                        for j in range(len(numeric_cells_list)):
+                            if i == j:
+                                continue
+                            r1, c1, v1 = numeric_cells_list[i]
+                            r2, c2, v2 = numeric_cells_list[j]
+
+                            # Difference
+                            diff_val = v1 - v2
+                            abs_diff = abs(diff_val)
+                            if abs(claimed_float - diff_val) <= 0.05 or abs(claimed_float - abs_diff) <= 0.05:
+                                matched = True
+                                matched_id = r1
+                                matched_col_or_field = f"derived_diff({c1}, {c2})"
+                                matched_val = round(diff_val, 2)
+                                break
+
+                            # Percent change: ((v1 - v2) / abs(v2)) * 100
+                            if abs(v2) > 0.001:
+                                pct_change = ((v1 - v2) / abs(v2)) * 100.0
+                                abs_pct = abs(pct_change)
+                                pct_share = (v1 / v2) * 100.0
+                                if (
+                                    abs(claimed_float - pct_change) <= 0.1
+                                    or abs(claimed_float - abs_pct) <= 0.1
+                                    or abs(claimed_float - pct_share) <= 0.1
+                                ):
+                                    matched = True
+                                    matched_id = r1
+                                    matched_col_or_field = f"derived_pct({c1}, {c2})"
+                                    matched_val = round(pct_change if abs(claimed_float - pct_change) <= 0.1 else pct_share, 2)
+                                    break
+                        if matched:
+                            break
+
+                # Check row count
+                if not matched and len(candidate_rows) >= 2:
+                    if abs(claimed_float - len(candidate_rows)) < 0.01:
+                        matched = True
+                        matched_id = candidate_rows[0]
+                        matched_col_or_field = "derived_count(rows)"
+                        matched_val = len(candidate_rows)
+
             if matched:
                 direction_discrepancy = None
                 if matched_id and matched_id.startswith("Q") and matched_col_or_field:
                     col_lower = matched_col_or_field.lower()
+
+                    # Check unit mismatch: percentage claimed on currency/count, or currency claimed on count/rate
+                    is_pct_claimed = "%" in raw_full or "percent" in segment.lower()
+                    is_currency_claimed = any(s in raw_full for s in ("$", "£", "€"))
+                    is_currency_col = any(k in col_lower for k in ("amount", "revenue", "sales", "price", "decline", "spend", "cost", "total_revenue"))
+                    is_pct_col = any(k in col_lower for k in ("pct", "percent", "percentage", "rate", "share", "ratio"))
+                    is_count_col = any(k in col_lower for k in ("count", "orders", "tickets", "units", "quantity", "qty", "total_orders", "customer_count"))
+
+                    if is_pct_claimed and (is_currency_col or is_count_col) and not is_pct_col:
+                        report.numeric_checks.append(
+                            NumericCheck(
+                                raw_text=raw_full,
+                                claimed_value=claimed_float,
+                                sentence=segment,
+                                status="DISCREPANCY",
+                                row_id=matched_id,
+                                matched_column=matched_col_or_field,
+                                cell_value=matched_val,
+                                message=f"Unit mismatch: Claimed '{raw_full}' as percentage, but {matched_col_or_field} is a non-percentage column.",
+                            )
+                        )
+                        report.discrepancy_count += 1
+                        report.is_clean = False
+                        continue
+
+                    if is_currency_claimed and (is_count_col or is_pct_col) and not is_currency_col:
+                        report.numeric_checks.append(
+                            NumericCheck(
+                                raw_text=raw_full,
+                                claimed_value=claimed_float,
+                                sentence=segment,
+                                status="DISCREPANCY",
+                                row_id=matched_id,
+                                matched_column=matched_col_or_field,
+                                cell_value=matched_val,
+                                message=f"Unit mismatch: Claimed '{raw_full}' with currency symbol, but {matched_col_or_field} is a count/ratio column.",
+                            )
+                        )
+                        report.discrepancy_count += 1
+                        report.is_clean = False
+                        continue
+
                     row_cells = evidence_store.get_row(matched_id)
                     cell_float = _parse_float(matched_val)
 

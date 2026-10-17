@@ -260,6 +260,23 @@ def handle_eval(args: argparse.Namespace) -> int:
     print(f"DATAMIND EVALUATION RUNNER — Suite: {args.suite.upper()} | Provider: {provider.upper()}")
     print("=" * 70)
 
+    if args.suite == "verifier":
+        if str(Path.cwd()) not in sys.path:
+            sys.path.insert(0, str(Path.cwd()))
+        from eval.mutation import run_mutation_suite, run_false_positive_suite, print_mutation_report
+        print("Running Deterministic Verifier Mutation and False-Positive Suite...")
+        m_res = run_mutation_suite()
+        fp_res = run_false_positive_suite()
+        report_md = print_mutation_report(m_res, fp_res)
+        print("\n" + report_md + "\n")
+        return 0 if (m_res.missed_count == 0 and fp_res["false_positives"] == 0) else 1
+
+    if args.suite == "security":
+        print("Running Comprehensive Security Test Suite...")
+        import pytest
+        ret = pytest.main(["-q", "tests/test_security.py"])
+        return int(ret)
+
     # Cloud evaluation safety checks
     if provider == "cloud":
         from datamind.llm.budget import CostGuard
@@ -507,7 +524,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     eval_parser.add_argument(
         "--suite",
-        choices=["all", "business", "trust", "held_out", "held_out_fresh", "held_out_sealed"],
+        choices=["all", "business", "trust", "held_out", "held_out_fresh", "held_out_sealed", "verifier", "security", "real_data"],
         default="all",
         help="Evaluation suite to run",
     )
@@ -578,6 +595,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to configuration YAML (default: datamind.yaml)",
     )
 
+    # doctor
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Run system diagnostics and verify dependencies, models, and adapters",
+    )
+    doctor_parser.add_argument(
+        "--config",
+        default="datamind.yaml",
+        help="Path to configuration YAML (default: datamind.yaml)",
+    )
+
     args = parser.parse_args(argv)
 
     if not args.subcommand:
@@ -604,6 +632,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.subcommand == "init":
         return handle_init(args)
+
+    if args.subcommand == "doctor":
+        from datamind.doctor import print_doctor_report, run_diagnostics
+        checks = run_diagnostics(config_path=getattr(args, "config", "datamind.yaml"))
+        return print_doctor_report(checks)
 
     parser.print_help()
     return 1
