@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,10 +18,182 @@ from datamind.llm.budget import BudgetConfigError, BudgetExceeded
 from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
+from datamind.trust.chart_planner import plan_chart
+from datamind.uploads.manager import UploadError, UploadManager, UploadSession
 
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+def format_orchestrator_result(
+    result: Any,
+    orchestrator: AgentOrchestrator,
+    backend_name: str,
+    is_permissive: bool = False,
+) -> dict[str, Any]:
+    """Deterministically format agent result into frontend response payload with charts and badges."""
+    is_strict = not is_permissive
+    is_clean = result.citation_report.is_clean
+    overall_success = result.success and (is_clean if is_strict else True)
+
+    queries_data = [
+        {
+            "query_label": q.query_label,
+            "query_id": q.result.query_id,
+            "elapsed_ms": q.result.elapsed_ms,
+            "sql": q.sql,
+            "purpose": q.purpose,
+            "columns": q.result.columns,
+            "rows": q.result.rows,
+            "truncated": q.result.truncated,
+        }
+        for q in result.evidence_store.queries
+    ]
+
+    chunks_data = [
+        {
+            "chunk_id": c.chunk_id,
+            "doc_name": c.doc_name,
+            "text": c.text,
+            "score": round(c.score, 4),
+            "metadata": c.metadata,
+        }
+        for c in result.evidence_store.chunks
+    ]
+
+    citations_data = [
+        {
+            "raw": c.raw,
+            "target_id": c.target_id,
+            "is_valid": c.is_valid,
+            "evidence_type": c.evidence_type,
+            "error": c.error,
+        }
+        for c in result.citation_report.citations
+    ]
+
+    numeric_checks_data = [
+        {
+            "raw_text": nc.raw_text,
+            "claimed_value": nc.claimed_value,
+            "sentence": nc.sentence,
+            "status": nc.status,
+            "row_id": nc.row_id,
+            "matched_column": nc.matched_column,
+            "cell_value": nc.cell_value,
+            "message": nc.message,
+        }
+        for nc in result.citation_report.numeric_checks
+    ]
+
+    is_truncated = getattr(result, "is_truncated", False) or getattr(result.citation_report, "is_truncated", False)
+    finish_reason = getattr(result, "finish_reason", None)
+
+    # 1. Deterministic Chart Planning
+    chart_data = None
+    if result.evidence_store.queries:
+        primary_query = result.evidence_store.queries[0]
+        chart_spec = plan_chart(primary_query, semantic_model=orchestrator.semantic_model)
+        chart_data = chart_spec.model_dump()
+
+    # 2. Three-State Trust Badge Computation
+    discrepancies = result.citation_report.discrepancy_count
+    invalids = result.citation_report.invalid_count
+    unsupported = result.citation_report.unsupported_claims_count
+    ans_lower = (result.answer or "").lower()
+
+    is_refusal = any(k in ans_lower for k in ["does not contain", "not available", "do not have", "cannot answer", "no table"])
+    is_clarification = ("?" in (result.answer or "")) and any(k in ans_lower for k in ["clarify", "specify", "which", "what specific", "mean by"])
+    is_partial = any(k in ans_lower for k in ["sub-question is unanswered", "partially answered", "search failed", "unable to retrieve"]) or is_truncated
+
+    response_type = "answer"
+    if is_refusal:
+        response_type = "refusal"
+        badge_state = "REFUSAL"
+        badge_label = "Schema Boundary (Refusal)"
+        badge_reason = "The requested metrics or entities do not exist in the configured schema."
+        badge_color = "#f59e0b"
+    elif is_clarification:
+        response_type = "clarification"
+        badge_state = "CLARIFICATION"
+        badge_label = "Clarification Requested"
+        badge_reason = "The query is ambiguous or underspecified."
+        badge_color = "#a855f7"
+    elif discrepancies > 0 or invalids > 0 or unsupported > 0:
+        badge_state = "NOT_VERIFIED"
+        badge_label = "Not Verified"
+        failing_items = []
+        if discrepancies > 0:
+            failing_items.append(f"{discrepancies} number discrepancy")
+        if invalids > 0:
+            failing_items.append(f"{invalids} invalid citation")
+        if unsupported > 0:
+            failing_items.append(f"{unsupported} unsupported claim")
+        badge_reason = f"Verification failed: {', '.join(failing_items)}."
+        badge_color = "#ef4444"
+    elif is_partial or is_truncated:
+        badge_state = "PARTIALLY_VERIFIED"
+        badge_label = "Partially Verified"
+        badge_reason = "Answer contains truncated output or partial tool coverage."
+        badge_color = "#eab308"
+    elif is_clean and overall_success:
+        badge_state = "VERIFIED"
+        badge_label = "Verified"
+        badge_reason = "Every number and citation was verified against database evidence."
+        badge_color = "#10b981"
+    else:
+        badge_state = "PARTIALLY_VERIFIED"
+        badge_label = "Partially Verified"
+        badge_reason = "Completed with partial verification."
+        badge_color = "#eab308"
+
+    under_the_hood = {
+        "model": orchestrator.llm_client.config.orchestrator_model,
+        "backend": backend_name,
+        "dialect": "duckdb" if "duckdb" in backend_name.lower() else "snowflake",
+        "turns": result.turns,
+        "queries_executed": len(result.evidence_store.queries),
+        "documents_retrieved": len(result.evidence_store.chunks),
+        "is_truncated": is_truncated,
+        "finish_reason": finish_reason,
+        "verification_status": badge_state,
+    }
+
+    return {
+        "question": result.question,
+        "answer": result.answer,
+        "response_type": response_type,
+        "success": overall_success and not is_truncated,
+        "turns": result.turns,
+        "error": result.error,
+        "backend": backend_name,
+        "is_truncated": is_truncated,
+        "finish_reason": finish_reason,
+        "trust_badge": {
+            "state": badge_state,
+            "label": badge_label,
+            "reason": badge_reason,
+            "color": badge_color,
+        },
+        "chart": chart_data,
+        "under_the_hood": under_the_hood,
+        "citation_report": {
+            "is_clean": is_clean and not is_truncated,
+            "is_truncated": is_truncated,
+            "valid_count": result.citation_report.valid_count,
+            "invalid_count": result.citation_report.invalid_count,
+            "verified_numbers_count": result.citation_report.verified_numbers_count,
+            "discrepancy_count": result.citation_report.discrepancy_count,
+            "unsupported_claims_count": result.citation_report.unsupported_claims_count,
+            "citations": citations_data,
+            "numeric_checks": numeric_checks_data,
+        },
+        "evidence": {
+            "queries": queries_data,
+            "chunks": chunks_data,
+        },
+    }
 
 
 class DataMindRequestHandler(BaseHTTPRequestHandler):
@@ -29,6 +202,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
     orchestrator: AgentOrchestrator
     config: AppConfig
     backend_name: str
+    upload_manager: UploadManager
 
     def _set_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -59,6 +233,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 "service": "datamind",
                 "version": "0.1.0",
                 "backend": self.backend_name,
+                "uploads_enabled": getattr(self, "upload_manager", None) is not None and self.upload_manager.enabled,
             })
             return
 
@@ -72,7 +247,6 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 }
                 for t in semantic_model.tables
             ]
-            # Generate sample questions directly from semantic model verified queries
             if getattr(semantic_model, "verified_queries", None):
                 sample_questions = [vq.question for vq in semantic_model.verified_queries if vq.question]
             else:
@@ -94,8 +268,39 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 "sample_questions": sample_questions,
                 "is_local": is_local,
                 "privacy_indicator": privacy_indicator,
+                "uploads_enabled": getattr(self, "upload_manager", None) is not None and self.upload_manager.enabled,
             })
             return
+
+        if path == "/api/uploads/status":
+            mgr = getattr(self, "upload_manager", None)
+            enabled = mgr.enabled if mgr else False
+            self._send_json(200, {
+                "enabled": enabled,
+                "max_file_size_bytes": mgr.max_file_size_bytes if mgr else 50 * 1024 * 1024,
+                "max_rows": mgr.max_rows if mgr else 2_000_000,
+                "max_columns": mgr.max_columns if mgr else 200,
+                "max_files_per_session": mgr.max_files_per_session if mgr else 5,
+            })
+            return
+
+        if path.startswith("/api/uploads/") and path.endswith("/status"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 4:
+                session_id = parts[2]
+                session = self.upload_manager.get_session(session_id)
+                if not session:
+                    self._send_json(404, {"error": "Session not found or expired"})
+                    return
+                self._send_json(200, {
+                    "session_id": session.session_id,
+                    "status": session.status,
+                    "created_at": session.created_at,
+                    "tables": list(session.tables_meta.keys()),
+                    "tables_meta": session.tables_meta,
+                    "encoding_notices": session.encoding_notices,
+                })
+                return
 
         # Serve static assets
         filename = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
@@ -125,228 +330,222 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path != "/api/ask":
-            self.send_error(404, "Endpoint not found")
-            return
+        path = parsed.path
 
         content_length = int(self.headers.get("Content-Length", 0))
-        if content_length <= 0:
+        if content_length <= 0 and path != "/api/uploads/session/create":
             self._send_json(400, {"error": "Missing request body"})
             return
 
-        body_bytes = self.rfile.read(content_length)
+        body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
         try:
-            payload = json.loads(body_bytes.decode("utf-8"))
+            payload = json.loads(body_bytes.decode("utf-8")) if body_bytes else {}
         except Exception as e:
             self._send_json(400, {"error": f"Invalid JSON body: {e}"})
             return
 
-        question = payload.get("question", "").strip()
-        if not question:
-            self._send_json(400, {"error": "Question field is required"})
+        # 1. Primary Ask Endpoint
+        if path == "/api/ask":
+            question = payload.get("question", "").strip()
+            if not question:
+                self._send_json(400, {"error": "Question field is required"})
+                return
+
+            is_permissive = bool(payload.get("permissive", False))
+            max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
+
+            try:
+                result = self.orchestrator.run(question, max_turns=max_turns)
+            except BudgetExceeded as e:
+                logger.warning("Budget limit reached: %s", e)
+                self._send_json(429, {
+                    "error_type": "budget_exceeded",
+                    "error": str(e),
+                    "message": f"Query halted by budget guard: {e}",
+                })
+                return
+            except BudgetConfigError as e:
+                logger.warning("Budget configuration error: %s", e)
+                self._send_json(400, {
+                    "error_type": "budget_config_error",
+                    "error": str(e),
+                    "message": f"Configuration error: {e}",
+                })
+                return
+            except Exception as e:
+                logger.exception("Agent execution error")
+                self._send_json(500, {"error": f"Execution error: {e}"})
+                return
+
+            response_data = format_orchestrator_result(
+                result=result,
+                orchestrator=self.orchestrator,
+                backend_name=self.backend_name,
+                is_permissive=is_permissive,
+            )
+            self._send_json(200, response_data)
             return
 
-        is_permissive = bool(payload.get("permissive", False))
-        max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
-
-        try:
-            result = self.orchestrator.run(question, max_turns=max_turns)
-        except BudgetExceeded as e:
-            logger.warning("Budget limit reached: %s", e)
-            self._send_json(429, {
-                "error_type": "budget_exceeded",
-                "error": str(e),
-                "message": f"Query halted by budget guard: {e}",
-            })
-            return
-        except BudgetConfigError as e:
-            logger.warning("Budget configuration error: %s", e)
-            self._send_json(400, {
-                "error_type": "budget_config_error",
-                "error": str(e),
-                "message": f"Configuration error: {e}",
-            })
-            return
-        except Exception as e:
-            logger.exception("Agent execution error")
-            self._send_json(500, {"error": f"Execution error: {e}"})
+        # 2. Upload Session Create
+        if path == "/api/uploads/session/create":
+            try:
+                session = self.upload_manager.create_session()
+                self._send_json(200, {
+                    "session_id": session.session_id,
+                    "created_at": session.created_at,
+                    "ttl_seconds": session.ttl_seconds,
+                    "status": session.status,
+                })
+            except UploadError as ue:
+                self._send_json(ue.status_code, {"error": ue.message})
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
             return
 
-        is_strict = not is_permissive
-        is_clean = result.citation_report.is_clean
-        overall_success = result.success and (is_clean if is_strict else True)
+        # 3. Upload File Ingest: /api/uploads/<session_id>/upload
+        if path.startswith("/api/uploads/") and path.endswith("/upload"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 4:
+                session_id = parts[2]
+                session = self.upload_manager.get_session(session_id)
+                if not session:
+                    self._send_json(404, {"error": "Session not found or expired"})
+                    return
 
-        queries_data = [
-            {
-                "query_label": q.query_label,
-                "query_id": q.result.query_id,
-                "elapsed_ms": q.result.elapsed_ms,
-                "sql": q.sql,
-                "purpose": q.purpose,
-                "columns": q.result.columns,
-                "rows": q.result.rows,
-                "truncated": q.result.truncated,
-            }
-            for q in result.evidence_store.queries
-        ]
+                filename = payload.get("filename", "uploaded_file.csv")
+                content_b64 = payload.get("content_base64")
+                content_text = payload.get("content_text")
 
-        chunks_data = [
-            {
-                "chunk_id": c.chunk_id,
-                "doc_name": c.doc_name,
-                "text": c.text,
-                "score": round(c.score, 4),
-                "metadata": c.metadata,
-            }
-            for c in result.evidence_store.chunks
-        ]
+                if content_b64:
+                    try:
+                        file_bytes = base64.b64decode(content_b64)
+                    except Exception as e:
+                        self._send_json(400, {"error": f"Malformed base64 content: {e}"})
+                        return
+                elif content_text is not None:
+                    file_bytes = content_text.encode("utf-8")
+                else:
+                    self._send_json(400, {"error": "Provide either content_base64 or content_text"})
+                    return
 
-        citations_data = [
-            {
-                "raw": c.raw,
-                "target_id": c.target_id,
-                "is_valid": c.is_valid,
-                "evidence_type": c.evidence_type,
-                "error": c.error,
-            }
-            for c in result.citation_report.citations
-        ]
+                try:
+                    table_meta = self.upload_manager.ingest_file(session, filename, file_bytes)
+                    self._send_json(200, {
+                        "session_id": session_id,
+                        "table": table_meta,
+                        "tables_meta": session.tables_meta,
+                        "encoding_notices": session.encoding_notices,
+                    })
+                except UploadError as ue:
+                    self._send_json(ue.status_code, {"error": ue.message})
+                except Exception as e:
+                    logger.exception("Upload ingestion error")
+                    self._send_json(500, {"error": f"Ingestion error: {e}"})
+                return
 
-        numeric_checks_data = [
-            {
-                "raw_text": nc.raw_text,
-                "claimed_value": nc.claimed_value,
-                "sentence": nc.sentence,
-                "status": nc.status,
-                "row_id": nc.row_id,
-                "matched_column": nc.matched_column,
-                "cell_value": nc.cell_value,
-                "message": nc.message,
-            }
-            for nc in result.citation_report.numeric_checks
-        ]
+        # 4. Upload Model Confirm: /api/uploads/<session_id>/confirm
+        if path.startswith("/api/uploads/") and path.endswith("/confirm"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 4:
+                session_id = parts[2]
+                session = self.upload_manager.get_session(session_id)
+                if not session:
+                    self._send_json(404, {"error": "Session not found or expired"})
+                    return
 
-        is_truncated = getattr(result, "is_truncated", False) or getattr(result.citation_report, "is_truncated", False)
-        finish_reason = getattr(result, "finish_reason", None)
+                review_config = payload.get("review_config", {})
+                try:
+                    confirmed_model = self.upload_manager.confirm_model(session, review_config)
+                    sample_questions = [
+                        vq.question for vq in confirmed_model.verified_queries if vq.question
+                    ] if getattr(confirmed_model, "verified_queries", None) else [
+                        f"What is the total record count in {t.name}?" for t in confirmed_model.tables
+                    ]
 
-        # 1. Deterministic Chart Planning
-        chart_data = None
-        if result.evidence_store.queries:
-            from datamind.trust.chart_planner import plan_chart
-            # Plan chart using primary analytical query
-            primary_query = result.evidence_store.queries[0]
-            chart_spec = plan_chart(primary_query, semantic_model=self.orchestrator.semantic_model)
-            chart_data = chart_spec.model_dump()
+                    self._send_json(200, {
+                        "session_id": session_id,
+                        "status": "active",
+                        "model_name": confirmed_model.name,
+                        "tables": [t.name for t in confirmed_model.tables],
+                        "sample_questions": sample_questions,
+                    })
+                except UploadError as ue:
+                    self._send_json(ue.status_code, {"error": ue.message})
+                except Exception as e:
+                    logger.exception("Model confirmation error")
+                    self._send_json(500, {"error": f"Confirmation error: {e}"})
+                return
 
-        # 2. Three-State Trust Badge Computation
-        discrepancies = result.citation_report.discrepancy_count
-        invalids = result.citation_report.invalid_count
-        unsupported = result.citation_report.unsupported_claims_count
-        ans_lower = (result.answer or "").lower()
+        # 5. Upload Ask: /api/uploads/<session_id>/ask
+        if path.startswith("/api/uploads/") and path.endswith("/ask"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 4:
+                session_id = parts[2]
+                question = payload.get("question", "").strip()
+                if not question:
+                    self._send_json(400, {"error": "Question field is required"})
+                    return
 
-        is_refusal = any(k in ans_lower for k in ["does not contain", "not available", "do not have", "cannot answer", "no table"])
-        is_clarification = ("?" in (result.answer or "")) and any(k in ans_lower for k in ["clarify", "specify", "which", "what specific", "mean by"])
-        is_partial = any(k in ans_lower for k in ["sub-question is unanswered", "partially answered", "search failed", "unable to retrieve"]) or is_truncated
+                is_permissive = bool(payload.get("permissive", False))
+                max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
 
-        response_type = "answer"
-        if is_refusal:
-            response_type = "refusal"
-            badge_state = "REFUSAL"
-            badge_label = "Schema Boundary (Refusal)"
-            badge_reason = "The requested metrics or entities do not exist in the configured schema."
-            badge_color = "#f59e0b"
-        elif is_clarification:
-            response_type = "clarification"
-            badge_state = "CLARIFICATION"
-            badge_label = "Clarification Requested"
-            badge_reason = "The query is ambiguous or underspecified."
-            badge_color = "#a855f7"
-        elif discrepancies > 0 or invalids > 0 or unsupported > 0:
-            badge_state = "NOT_VERIFIED"
-            badge_label = "Not Verified"
-            failing_items = []
-            if discrepancies > 0:
-                failing_items.append(f"{discrepancies} number discrepancy")
-            if invalids > 0:
-                failing_items.append(f"{invalids} invalid citation")
-            if unsupported > 0:
-                failing_items.append(f"{unsupported} unsupported claim")
-            badge_reason = f"Verification failed: {', '.join(failing_items)}."
-            badge_color = "#ef4444"
-        elif is_partial or is_truncated:
-            badge_state = "PARTIALLY_VERIFIED"
-            badge_label = "Partially Verified"
-            badge_reason = "Answer contains truncated output or partial tool coverage."
-            badge_color = "#eab308"
-        elif is_clean and overall_success:
-            badge_state = "VERIFIED"
-            badge_label = "Verified"
-            badge_reason = "Every number and citation was verified against database evidence."
-            badge_color = "#10b981"
-        else:
-            badge_state = "PARTIALLY_VERIFIED"
-            badge_label = "Partially Verified"
-            badge_reason = "Completed with partial verification."
-            badge_color = "#eab308"
+                try:
+                    orchestrator, adapter, retriever = self.upload_manager.create_session_orchestrator(
+                        session_id=session_id,
+                        config=self.config,
+                    )
+                except UploadError as ue:
+                    self._send_json(ue.status_code, {"error": ue.message})
+                    return
+                except Exception as e:
+                    self._send_json(500, {"error": f"Failed to initialize uploaded session: {e}"})
+                    return
 
-        # 3. Under the Hood Metadata
-        under_the_hood = {
-            "model": self.orchestrator.llm_client.config.orchestrator_model,
-            "backend": self.backend_name,
-            "dialect": "duckdb" if self.backend_name == "duckdb" else "snowflake",
-            "turns": result.turns,
-            "queries_executed": len(result.evidence_store.queries),
-            "documents_retrieved": len(result.evidence_store.chunks),
-            "is_truncated": is_truncated,
-            "finish_reason": finish_reason,
-            "verification_status": badge_state,
-        }
+                try:
+                    result = orchestrator.run(question, max_turns=max_turns)
+                    response_data = format_orchestrator_result(
+                        result=result,
+                        orchestrator=orchestrator,
+                        backend_name="DuckDB (User Upload)",
+                        is_permissive=is_permissive,
+                    )
+                    self._send_json(200, response_data)
+                except BudgetExceeded as e:
+                    self._send_json(429, {"error_type": "budget_exceeded", "error": str(e)})
+                except Exception as e:
+                    logger.exception("Session ask error")
+                    self._send_json(500, {"error": f"Execution error: {e}"})
+                finally:
+                    adapter.close()
+                    if retriever:
+                        retriever.close()
+                return
 
-        response_data = {
-            "question": result.question,
-            "answer": result.answer,
-            "response_type": response_type,
-            "success": overall_success and not is_truncated,
-            "turns": result.turns,
-            "error": result.error,
-            "backend": self.backend_name,
-            "is_truncated": is_truncated,
-            "finish_reason": finish_reason,
-            "trust_badge": {
-                "state": badge_state,
-                "label": badge_label,
-                "reason": badge_reason,
-                "color": badge_color,
-            },
-            "chart": chart_data,
-            "under_the_hood": under_the_hood,
-            "citation_report": {
-                "is_clean": is_clean and not is_truncated,
-                "is_truncated": is_truncated,
-                "valid_count": result.citation_report.valid_count,
-                "invalid_count": result.citation_report.invalid_count,
-                "verified_numbers_count": result.citation_report.verified_numbers_count,
-                "discrepancy_count": result.citation_report.discrepancy_count,
-                "unsupported_claims_count": result.citation_report.unsupported_claims_count,
-                "citations": citations_data,
-                "numeric_checks": numeric_checks_data,
-            },
-            "evidence": {
-                "queries": queries_data,
-                "chunks": chunks_data,
-            },
-        }
+        # 6. Upload Delete: /api/uploads/<session_id>/delete
+        if path.startswith("/api/uploads/") and path.endswith("/delete"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 4:
+                session_id = parts[2]
+                self.upload_manager.delete_session(session_id)
+                self._send_json(200, {
+                    "session_id": session_id,
+                    "deleted": True,
+                    "message": "Session and isolated database files successfully purged.",
+                })
+                return
 
-        self._send_json(200, response_data)
+        self.send_error(404, "Endpoint not found")
 
 
 def create_server(
     config: AppConfig,
     backend: str | None = None,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
-) -> tuple[ThreadingHTTPServer, Any, Any]:
-    """Instantiate and configure ThreadingHTTPServer with initialized Agent."""
+    enable_uploads: bool = False,
+    keep_uploads: bool = False,
+) -> tuple[ThreadingHTTPServer, Any, Any, UploadManager]:
+    """Instantiate and configure ThreadingHTTPServer with initialized Agent and UploadManager."""
     semantic_model = load_semantic_model(config.semantic_model)
     backend_type = backend or config.backend.type
 
@@ -379,33 +578,46 @@ def create_server(
         semantic_model=semantic_model,
     )
 
+    upload_manager = UploadManager(enabled=enable_uploads)
+
     class CustomHandler(DataMindRequestHandler):
         pass
 
     CustomHandler.orchestrator = orchestrator
     CustomHandler.config = config
     CustomHandler.backend_name = backend_type
+    CustomHandler.upload_manager = upload_manager
 
     server = ThreadingHTTPServer((host, port), CustomHandler)
-    return server, adapter, retriever
+    return server, adapter, retriever, upload_manager
 
 
 def start_server(
     config_path: str = "datamind.yaml",
     backend: str | None = None,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
+    enable_uploads: bool = False,
+    keep_uploads: bool = False,
 ) -> None:
     """Run DataMind HTTP server mainloop."""
     config = load_config(config_path)
-    server, adapter, retriever = create_server(config=config, backend=backend, host=host, port=port)
+    server, adapter, retriever, upload_manager = create_server(
+        config=config,
+        backend=backend,
+        host=host,
+        port=port,
+        enable_uploads=enable_uploads,
+        keep_uploads=keep_uploads,
+    )
     print("=" * 65)
     print("DATAMIND AGENT & INTERACTIVE WEB UI SERVER")
     print("=" * 65)
-    print(f"Server URL:     http://localhost:{port}")
-    print(f"Active Backend: {adapter.__class__.__name__} ({getattr(adapter, 'dialect', 'duckdb')})")
-    print(f"Target Model:   {config.llm.orchestrator_model}")
-    print(f"Semantic Model: {config.semantic_model}")
+    print(f"Server URL:        http://{host}:{port}")
+    print(f"Active Backend:    {adapter.__class__.__name__} ({getattr(adapter, 'dialect', 'duckdb')})")
+    print(f"Target Model:      {config.llm.orchestrator_model}")
+    print(f"Semantic Model:    {config.semantic_model}")
+    print(f"Uploads Enabled:   {enable_uploads}")
     print("Press Ctrl+C to stop server.\n")
 
     try:
@@ -416,3 +628,5 @@ def start_server(
         server.server_close()
         adapter.close()
         retriever.close()
+        if not keep_uploads:
+            upload_manager.cleanup_all()

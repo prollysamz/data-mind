@@ -33,17 +33,28 @@ PROHIBITED_NODE_TYPES = (
     exp.Grant,
     exp.Revoke,
     exp.Kill,
+    exp.Pragma,
+    exp.Set,
+    exp.SetItem,
 )
 
 # Functions that attempt disk I/O, process execution, or external loading
 DANGEROUS_FUNCTIONS = {
+    # DuckDB file & extension functions
     "read_csv",
     "read_csv_auto",
     "read_parquet",
     "read_json",
     "read_json_auto",
+    "read_json_objects",
+    "read_ndjson",
+    "read_text",
+    "read_blob",
     "scan_csv",
     "scan_parquet",
+    "query_parquet",
+    "sniff_csv",
+    "glob",
     "copy",
     "system",
     "shell",
@@ -52,6 +63,20 @@ DANGEROUS_FUNCTIONS = {
     "eval",
     "import",
     "exec",
+    "attach",
+    "detach",
+    "pragma",
+    "export",
+    "export_database",
+    "import_database",
+    "set",
+    "call",
+    "getenv",
+    # Snowflake staging and admin functions
+    "put",
+    "get",
+    "remove",
+    "list",
 }
 
 
@@ -78,9 +103,10 @@ class SQLGuard:
         2. Exactly one SQL statement.
         3. Root statement is a SELECT or UNION of SELECTs.
         4. No prohibited DDL/DML nodes in the AST.
-        5. No dangerous external I/O functions.
+        5. No dangerous external I/O functions or Snowflake system functions.
         6. Join safety (no CROSS JOIN or joins without ON/USING condition).
-        7. Table whitelist (all referenced tables are approved, correctly accounting for CTE aliases).
+        7. Table whitelist (all referenced tables are approved, correctly accounting for CTE aliases and schemas).
+        8. No Snowflake stage references (@stage).
         """
         trimmed = sql.strip()
         if not trimmed:
@@ -121,23 +147,32 @@ class SQLGuard:
                     "prohibited_node",
                 )
 
-        # 5. Check dangerous functions
+        # 5. Check dangerous functions and system calls
         for func in ast.find_all(exp.Func):
             fn_key = (func.key or "").strip().lower()
             cls_name = type(func).__name__.lower()
             fn_name = ""
-            if hasattr(func, "this") and isinstance(func.this, (exp.Var, exp.Identifier)):
-                fn_name = func.this.name.strip().lower()
+            if hasattr(func, "this"):
+                if isinstance(func.this, (exp.Var, exp.Identifier)):
+                    fn_name = func.this.name.strip().lower()
+                elif isinstance(func.this, str):
+                    fn_name = func.this.strip().lower()
+                elif hasattr(func.this, "name"):
+                    fn_name = str(func.this.name).strip().lower()
 
             is_dangerous = (
                 fn_key in DANGEROUS_FUNCTIONS
                 or fn_name in DANGEROUS_FUNCTIONS
                 or cls_name in DANGEROUS_FUNCTIONS
-                or any(d in fn_key or d in cls_name for d in ("readcsv", "readparquet", "readjson"))
+                or fn_key.startswith("system$")
+                or fn_name.startswith("system$")
+                or any(d in fn_key or d in cls_name for d in (
+                    "readcsv", "readparquet", "readjson", "readblob", "readtext", "glob"
+                ))
             )
             if is_dangerous:
                 raise SQLSecurityError(
-                    f"Function '{fn_key or cls_name}' is prohibited for security reasons.",
+                    f"Function '{fn_key or fn_name or cls_name}' is prohibited for security reasons.",
                     "dangerous_function",
                 )
 
@@ -167,8 +202,19 @@ class SQLGuard:
                 elif isinstance(cte.this, exp.Table):
                     cte_aliases.add(cte.this.name.strip().lower())
 
-        # 8. Check all referenced physical tables against whitelist
+        # 8. Check all referenced physical tables against whitelist & check stage references
         for tbl in ast.find_all(exp.Table):
+            tbl_raw = tbl.sql(dialect=self.dialect).strip()
+            if (
+                tbl_raw.startswith("@")
+                or (tbl.name and tbl.name.startswith("@"))
+                or isinstance(tbl.this, exp.Placeholder)
+            ):
+                raise SQLSecurityError(
+                    f"Stage reference '{tbl_raw}' is prohibited for security reasons.",
+                    "stage_reference",
+                )
+
             # If table target is not an identifier (e.g. table-valued function), reject if not approved
             if not isinstance(tbl.this, (exp.Identifier, exp.Var)):
                 raise SQLSecurityError(
@@ -183,6 +229,25 @@ class SQLGuard:
             # If table is a declared CTE alias, it's valid
             if tbl_name in cte_aliases:
                 continue
+
+            # Check schema/database qualifier bypass (e.g., other_db.sales or schema.sales)
+            db_name = (
+                tbl.db.strip().lower()
+                if isinstance(tbl.db, str)
+                else (tbl.db.name.strip().lower() if hasattr(tbl.db, "name") else "")
+            )
+            catalog_name = (
+                tbl.catalog.strip().lower()
+                if isinstance(tbl.catalog, str)
+                else (tbl.catalog.name.strip().lower() if hasattr(tbl.catalog, "name") else "")
+            )
+            if db_name or catalog_name:
+                qualified_str = f"{db_name}.{tbl_name}" if db_name else tbl_name
+                if qualified_str not in self.approved_tables and (not db_name or db_name not in {"public", "main"}):
+                    raise SQLSecurityError(
+                        f"Cross-database reference '{tbl.sql(dialect=self.dialect)}' is unauthorized.",
+                        "unauthorized_table",
+                    )
 
             # Verify against approved tables
             if tbl_name not in self.approved_tables:

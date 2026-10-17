@@ -14,7 +14,7 @@ from datamind.server.server import create_server
 def server_url():
     """Start test server on an ephemeral port and tear down after tests."""
     config = load_config("datamind.yaml")
-    server, adapter, retriever = create_server(config, backend="duckdb", host="127.0.0.1", port=0)
+    server, adapter, retriever, upload_mgr = create_server(config, backend="duckdb", host="127.0.0.1", port=0, enable_uploads=True)
     assigned_port = server.server_address[1]
 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -28,6 +28,7 @@ def server_url():
     server.server_close()
     adapter.close()
     retriever.close()
+    upload_mgr.cleanup_all()
 
 
 def test_server_health_endpoint(server_url):

@@ -48,6 +48,12 @@
         </svg>
         <span id="privacyStatus">Local Only (Private)</span>
       </div>
+      <button type="button" id="uploadModalBtn" class="btn-secondary-sm" title="Upload custom CSV or Parquet dataset">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+        </svg>
+        Upload Dataset
+      </button>
       <button type="button" id="newChatBtn" class="btn-secondary-sm" title="Start a fresh conversation thread">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
           <path d="M12 5v14M5 12h14"></path>
@@ -66,6 +72,21 @@
   <main class="app-main">
     <!-- Prompt & Input Section -->
     <section class="search-section">
+      <!-- Active Upload Dataset Banner -->
+      <div id="activeDatasetBanner" class="active-dataset-banner" style="display:none;">
+        <div class="active-dataset-left">
+          <span class="active-dataset-tag">Active Uploaded Dataset: <strong id="activeDatasetName">Custom Upload</strong></span>
+          <span class="badge-pill badge-emerald">Isolated DuckDB</span>
+        </div>
+        <button type="button" class="btn-danger-xs" id="deleteDatasetBtn" title="Purge session files and return to default database">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          Delete My Data
+        </button>
+      </div>
+
       <form id="askForm" class="ask-box">
         <div class="input-wrapper">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon" aria-hidden="true">
@@ -283,6 +304,84 @@
         <button class="modal-close" id="modalClose" aria-label="Close modal">&times;</button>
       </div>
       <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Upload Dataset Modal -->
+  <div class="modal-overlay" id="uploadModal" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <h3 id="uploadModalTitle">Upload Your Dataset</h3>
+        <button class="modal-close" id="uploadModalClose" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" id="uploadModalBody">
+        <!-- Step 1: File dropzone -->
+        <div id="uploadDropzoneSection">
+          <div class="dropzone" id="fileDropzone">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropzone-icon">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+            </svg>
+            <h4>Drag & drop your CSV, TSV, or Parquet file here</h4>
+            <p class="dropzone-sub">Files up to 50 MB, 2,000,000 rows. Queried locally in an isolated DuckDB instance.</p>
+            <input type="file" id="filePickerInput" accept=".csv,.tsv,.parquet" style="display:none;">
+            <button type="button" class="btn-primary-sm" id="browseFilesBtn">Browse Files</button>
+          </div>
+          <div id="uploadProgress" class="upload-progress-container" style="display:none;">
+            <div class="spinner"></div>
+            <span id="uploadProgressText">Ingesting and profiling dataset in DuckDB...</span>
+          </div>
+          <div id="uploadError" class="alert-banner alert-crimson" style="display:none;"></div>
+        </div>
+
+        <!-- Step 2: Human Review & Profiling Screen -->
+        <div id="uploadReviewSection" style="display:none;">
+          <div class="review-header-row">
+            <div>
+              <h4 id="reviewTableName">Table Review</h4>
+              <p class="meta-sub" id="reviewTableStats">0 rows &bull; 0 columns</p>
+            </div>
+            <div class="review-currency-select">
+              <label for="reviewCurrency">Currency:</label>
+              <select id="reviewCurrency" class="input-select">
+                <option value="USD">$ USD</option>
+                <option value="GBP">£ GBP</option>
+                <option value="EUR">€ EUR</option>
+                <option value="INR">₹ INR</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Preview Table -->
+          <h5 class="section-subheading">Data Preview (First 10 Rows)</h5>
+          <div class="table-scroll-container mb-4" id="uploadPreviewTableContainer"></div>
+
+          <!-- Column Profiling & Configuration -->
+          <h5 class="section-subheading">Column Profiling & Model Configuration</h5>
+          <div class="table-scroll-container mb-4">
+            <table class="data-table" id="uploadColumnsTable">
+              <thead>
+                <tr>
+                  <th style="width:40px;">Use</th>
+                  <th>Column</th>
+                  <th>Inferred Type</th>
+                  <th>Null %</th>
+                  <th>Distinct</th>
+                  <th>Sample Values</th>
+                  <th>Description</th>
+                  <th>ID</th>
+                  <th>Doc</th>
+                </tr>
+              </thead>
+              <tbody id="uploadColumnsTbody"></tbody>
+            </table>
+          </div>
+
+          <div class="review-actions-row">
+            <button type="button" class="btn-secondary" id="cancelUploadBtn">Cancel</button>
+            <button type="button" class="btn-primary" id="confirmUploadBtn">Confirm & Activate Dataset</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

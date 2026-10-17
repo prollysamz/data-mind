@@ -1,14 +1,15 @@
-// DataMind Frontend Application Logic & Dependency-Free SVG Chart Renderer (WP2)
-
 let currentResult = null;
 let currentAbortController = null;
 let queryTimerInterval = null;
 let queryStartTime = null;
+let activeUploadSession = null;
+let currentUploadTableMeta = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
   initModal();
   initActions();
+  initUploads();
   await loadConfig();
 
   const form = document.getElementById('askForm');
@@ -153,7 +154,8 @@ async function executeQuery(question) {
   startTimer();
 
   try {
-    const res = await fetch('/api/ask', {
+    const targetUrl = activeUploadSession ? `/api/uploads/${activeUploadSession}/ask` : '/api/ask';
+    const res = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -993,3 +995,304 @@ function initModal() {
     });
   }
 }
+
+function initUploads() {
+  const modalBtn = document.getElementById('uploadModalBtn');
+  const modal = document.getElementById('uploadModal');
+  const closeBtn = document.getElementById('uploadModalClose');
+  const cancelBtn = document.getElementById('cancelUploadBtn');
+  const confirmBtn = document.getElementById('confirmUploadBtn');
+  const browseBtn = document.getElementById('browseFilesBtn');
+  const fileInput = document.getElementById('filePickerInput');
+  const dropzone = document.getElementById('fileDropzone');
+  const deleteBtn = document.getElementById('deleteDatasetBtn');
+
+  let currentSessionId = null;
+
+  if (modalBtn) {
+    modalBtn.addEventListener('click', async () => {
+      try {
+        const statusRes = await fetch('/api/uploads/status').then(r => r.json()).catch(() => ({ enabled: false }));
+        if (!statusRes.enabled) {
+          alert('User uploads are currently disabled.\nStart the server with --enable-uploads to enable dataset uploads.');
+          return;
+        }
+        document.getElementById('uploadDropzoneSection').style.display = 'block';
+        document.getElementById('uploadReviewSection').style.display = 'none';
+        document.getElementById('uploadProgress').style.display = 'none';
+        document.getElementById('uploadError').style.display = 'none';
+        modal.classList.add('open');
+      } catch (err) {
+        alert('Could not connect to uploads service: ' + err.message);
+      }
+    });
+  }
+
+  const closeModal = () => {
+    if (modal) modal.classList.remove('open');
+  };
+
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+  }
+
+  if (browseBtn && fileInput) {
+    browseBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        processSelectedFile(e.target.files[0]);
+      }
+    });
+  }
+
+  if (dropzone) {
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        processSelectedFile(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
+  async function processSelectedFile(file) {
+    const errorEl = document.getElementById('uploadError');
+    const progressEl = document.getElementById('uploadProgress');
+    const dropzoneSection = document.getElementById('uploadDropzoneSection');
+
+    errorEl.style.display = 'none';
+    progressEl.style.display = 'flex';
+    dropzone.style.display = 'none';
+
+    try {
+      // 1. Create session
+      const sessRes = await fetch('/api/uploads/session/create', { method: 'POST' });
+      const sessData = await sessRes.json();
+      if (!sessRes.ok) {
+        throw new Error(sessData.error || 'Failed to initialize session');
+      }
+      currentSessionId = sessData.session_id;
+
+      // 2. Read file to Base64
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const res = reader.result;
+          const commaIdx = res.indexOf(',');
+          resolve(commaIdx >= 0 ? res.substring(commaIdx + 1) : res);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // 3. Upload and profile
+      const upRes = await fetch(`/api/uploads/${currentSessionId}/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          content_base64: b64,
+        }),
+      });
+
+      const upData = await upRes.json();
+      if (!upRes.ok) {
+        throw new Error(upData.error || 'Upload ingestion failed');
+      }
+
+      currentUploadTableMeta = upData.table;
+
+      // Render review screen
+      renderUploadReviewScreen(upData.table);
+      progressEl.style.display = 'none';
+      dropzoneSection.style.display = 'none';
+      document.getElementById('uploadReviewSection').style.display = 'block';
+
+    } catch (err) {
+      console.error('Upload error:', err);
+      progressEl.style.display = 'none';
+      dropzone.style.display = 'flex';
+      errorEl.textContent = 'Upload failed: ' + (err.message || 'Unknown error');
+      errorEl.style.display = 'block';
+    }
+  }
+
+  function renderUploadReviewScreen(tableMeta) {
+    document.getElementById('reviewTableName').textContent = `Table: ${tableMeta.table_name}`;
+    document.getElementById('reviewTableStats').textContent =
+      `${tableMeta.total_rows.toLocaleString()} rows • ${tableMeta.total_columns} columns (${tableMeta.original_filename})`;
+
+    // Preview table
+    const previewContainer = document.getElementById('uploadPreviewTableContainer');
+    if (tableMeta.preview && tableMeta.preview.columns) {
+      let pHtml = '<table class="data-table"><thead><tr>';
+      tableMeta.preview.columns.forEach(col => {
+        pHtml += `<th>${col}</th>`;
+      });
+      pHtml += '</tr></thead><tbody>';
+      (tableMeta.preview.rows || []).forEach(row => {
+        pHtml += '<tr>';
+        row.forEach(val => {
+          pHtml += `<td>${val !== null && val !== undefined ? String(val) : '<em class="text-dim">null</em>'}</td>`;
+        });
+        pHtml += '</tr>';
+      });
+      pHtml += '</tbody></table>';
+      previewContainer.innerHTML = pHtml;
+    }
+
+    // Columns profiling table
+    const tbody = document.getElementById('uploadColumnsTbody');
+    tbody.innerHTML = '';
+    (tableMeta.columns || []).forEach(col => {
+      const tr = document.createElement('tr');
+      const sampleText = (col.sample_values || []).join(', ') || '-';
+      const piiHtml = col.pii_warning ? `<div class="pii-tag" title="${col.pii_warning}">⚠ PII: ${col.pii_warning}</div>` : '';
+
+      tr.innerHTML = `
+        <td style="text-align:center;">
+          <input type="checkbox" id="col_${col.name}_enabled" checked>
+        </td>
+        <td>
+          <strong>${col.name}</strong>
+          ${col.original_name !== col.name ? `<div class="meta-sub">Original: ${col.original_name}</div>` : ''}
+          ${piiHtml}
+        </td>
+        <td><code>${col.inferred_type}</code></td>
+        <td>${(col.null_rate * 100).toFixed(1)}%</td>
+        <td>${col.distinct_count.toLocaleString()}</td>
+        <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${sampleText}">
+          ${sampleText}
+        </td>
+        <td>
+          <input type="text" class="input-cell" id="col_${col.name}_desc" value="${col.original_name} column">
+        </td>
+        <td style="text-align:center;">
+          <input type="checkbox" id="col_${col.name}_pk" ${col.is_id ? 'checked' : ''}>
+        </td>
+        <td style="text-align:center;">
+          <input type="checkbox" id="col_${col.name}_doc" ${col.is_document ? 'checked' : ''}>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', async () => {
+      if (!currentSessionId || !currentUploadTableMeta) return;
+
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Activating...';
+
+      try {
+        const colsConfig = {};
+        (currentUploadTableMeta.columns || []).forEach(col => {
+          const enCb = document.getElementById(`col_${col.name}_enabled`);
+          const descInp = document.getElementById(`col_${col.name}_desc`);
+          const pkCb = document.getElementById(`col_${col.name}_pk`);
+          const docCb = document.getElementById(`col_${col.name}_doc`);
+
+          colsConfig[col.name] = {
+            enabled: enCb ? enCb.checked : true,
+            description: descInp ? descInp.value.trim() : col.name,
+            is_primary_key: pkCb ? pkCb.checked : false,
+            is_document: docCb ? docCb.checked : false,
+          };
+        });
+
+        const reviewConfig = {
+          default_currency: document.getElementById('reviewCurrency').value,
+          tables: {
+            [currentUploadTableMeta.table_name]: {
+              description: `Uploaded dataset: ${currentUploadTableMeta.original_filename}`,
+              columns: colsConfig,
+            },
+          },
+        };
+
+        const confRes = await fetch(`/api/uploads/${currentSessionId}/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ review_config: reviewConfig }),
+        });
+
+        const confData = await confRes.json();
+        if (!confRes.ok) {
+          throw new Error(confData.error || 'Activation failed');
+        }
+
+        activeUploadSession = currentSessionId;
+        closeModal();
+
+        // Show active dataset banner
+        const banner = document.getElementById('activeDatasetBanner');
+        const nameEl = document.getElementById('activeDatasetName');
+        if (banner && nameEl) {
+          nameEl.textContent = `${currentUploadTableMeta.original_filename} (${currentUploadTableMeta.table_name})`;
+          banner.style.display = 'flex';
+        }
+
+        // Update backend badge
+        document.getElementById('backendName').textContent = 'DUCKDB (UPLOAD)';
+
+        // Populate sample questions from confirmed model
+        const chipsList = document.getElementById('chipsList');
+        if (chipsList && confData.sample_questions && confData.sample_questions.length) {
+          chipsList.innerHTML = '';
+          confData.sample_questions.forEach(q => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'chip';
+            btn.textContent = q.length > 55 ? q.substring(0, 52) + '...' : q;
+            btn.title = q;
+            btn.addEventListener('click', () => {
+              document.getElementById('questionInput').value = q;
+              document.getElementById('askForm').dispatchEvent(new Event('submit'));
+            });
+            chipsList.appendChild(btn);
+          });
+        }
+
+        resetConversation();
+
+      } catch (err) {
+        alert('Failed to activate dataset: ' + err.message);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm & Activate Dataset';
+      }
+    });
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      if (!activeUploadSession) return;
+      const ok = confirm('Are you sure you want to purge this uploaded dataset session and all its isolated database files?');
+      if (!ok) return;
+
+      try {
+        await fetch(`/api/uploads/${activeUploadSession}/delete`, { method: 'POST' });
+        activeUploadSession = null;
+        currentUploadTableMeta = null;
+        const banner = document.getElementById('activeDatasetBanner');
+        if (banner) banner.style.display = 'none';
+
+        await loadConfig();
+        resetConversation();
+      } catch (err) {
+        alert('Failed to delete dataset: ' + err.message);
+      }
+    });
+  }
+}
+

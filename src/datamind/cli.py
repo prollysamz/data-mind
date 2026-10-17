@@ -333,9 +333,19 @@ def handle_serve(args: argparse.Namespace) -> int:
 
     backend = getattr(args, "backend", None)
     port = getattr(args, "port", 8000)
+    host = getattr(args, "host", "127.0.0.1")
     config_path = getattr(args, "config", "datamind.yaml")
+    enable_uploads = getattr(args, "enable_uploads", False)
+    keep_uploads = getattr(args, "keep_uploads", False)
 
-    start_server(config_path=config_path, backend=backend, port=port)
+    start_server(
+        config_path=config_path,
+        backend=backend,
+        host=host,
+        port=port,
+        enable_uploads=enable_uploads,
+        keep_uploads=keep_uploads,
+    )
     return 0
 
 
@@ -435,10 +445,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Port to bind server (default: 8000)",
     )
     serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address to bind server (default: 127.0.0.1)",
+    )
+    serve_parser.add_argument(
         "--backend",
         choices=["duckdb", "snowflake"],
         default=None,
         help="Database backend to query (default: from config)",
+    )
+    serve_parser.add_argument(
+        "--enable-uploads",
+        action="store_true",
+        help="Enable user-uploaded datasets endpoint and UI",
+    )
+    serve_parser.add_argument(
+        "--keep-uploads",
+        action="store_true",
+        help="Keep uploaded datasets on server shutdown instead of deleting",
     )
 
     # ask / run

@@ -38,7 +38,14 @@ def test_cli_serve_command(capsys: pytest.CaptureFixture):
     with patch("datamind.server.start_server") as mock_start:
         exit_code = main(["serve", "--port", "8088"])
         assert exit_code == 0
-        mock_start.assert_called_once_with(config_path="datamind.yaml", backend=None, port=8088)
+        mock_start.assert_called_once_with(
+            config_path="datamind.yaml",
+            backend=None,
+            host="127.0.0.1",
+            port=8088,
+            enable_uploads=False,
+            keep_uploads=False,
+        )
 
 
 def test_cli_ask_empty_question(capsys: pytest.CaptureFixture):

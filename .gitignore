@@ -45,6 +45,7 @@ htmlcov/
 .datamind/
 fts.sqlite
 scratch/
+examples/secondary/online_retail/*.csv
 
 # IDE & OS
 .idea/
