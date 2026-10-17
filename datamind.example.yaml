@@ -5,9 +5,16 @@ llm:
   reasoning_model: google.gemma-4-31b
   fast_model: google.gemma-4-e2b
   token_param: max_tokens            # max_tokens | max_completion_tokens
-  max_tokens: 4096                   # raise if replies come back empty/truncated (reasoning can consume output tokens)
   temperature: 0.0
   timeout_seconds: 60
+  budget:
+    max_usd_total: null                # Human-configured hard dollar cap (e.g. 5.00); fail-closed if unset
+    max_usd_per_run: null              # Cap per evaluation/session run (e.g. 2.00)
+    max_calls_per_run: 300             # Max calls per run
+    max_tokens_per_call: 16384
+    max_calls_per_minute: 60
+    price_per_million_input_usd: null  # Provider pricing required to enable cloud calls
+    price_per_million_output_usd: null
 backend:
   type: duckdb                       # duckdb | snowflake
   duckdb_path: examples/primary/demo.duckdb

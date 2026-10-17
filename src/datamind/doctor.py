@@ -137,8 +137,11 @@ def run_diagnostics(config_path: str = "datamind.yaml") -> list[DoctorCheck]:
         b = cfg.llm.budget
         guard = CostGuard()
         allow_cloud = os.environ.get("DATAMIND_ALLOW_CLOUD", "0") == "1"
+        cap_str = f"${b.max_usd_total:.2f} USD" if b.max_usd_total is not None else "Unset (fail-closed)"
+        cloud_active = (allow_cloud and b.max_usd_total is not None and b.price_per_million_input_usd is not None)
+        cloud_status = "cloud allowed" if cloud_active else "cloud disabled"
         c6.passed = True
-        c6.details = f"Fail-closed guard active. Budget cap: ${b.max_usd_total:.2f} USD. Cloud allowed: {allow_cloud}."
+        c6.details = f"Fail-closed guard active. Budget cap: {cap_str}. Cloud status: {cloud_status}."
     except Exception as e:
         c6.passed = False
         c6.details = f"Budget guard error: {e}"

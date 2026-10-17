@@ -292,3 +292,29 @@ def test_partial_eval_output_on_budget_exceeded(tmp_path: Path):
         not_run_items = [i for i in report.items if i.status == "NOT_RUN"]
         assert len(not_run_items) == report.total
         assert "NOT_RUN" in not_run_items[0].reason
+
+
+def test_real_usage_ledger_not_modified_by_tests():
+    """Verify that running CostGuard and LLMClient operations in test mode does not modify .datamind/usage.json."""
+    real_usage_file = Path(".datamind/usage.json")
+    if not real_usage_file.exists():
+        pytest.skip(".datamind/usage.json does not exist")
+
+    initial_content = real_usage_file.read_bytes()
+
+    # Create CostGuard with default arguments (which should resolve to isolated test path)
+    guard = CostGuard()
+    assert guard.usage_file != real_usage_file, f"Guard must use isolated test path, got {guard.usage_file}"
+
+    # Record test calls
+    guard.record_call(
+        base_url="http://localhost:11434/v1",
+        model="gemma4:e2b",
+        prompt_tokens=500,
+        completion_tokens=200,
+        purpose="eval",
+    )
+
+    # Confirm real usage.json content has not changed at all
+    after_content = real_usage_file.read_bytes()
+    assert initial_content == after_content, "Regression: Test operation modified real .datamind/usage.json!"

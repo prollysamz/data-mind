@@ -128,12 +128,14 @@ class CostGuard:
 
     def __init__(
         self,
-        usage_file: str | Path = ".datamind/usage.json",
-        cache_db: str | Path = ".datamind/llm_cache.sqlite",
+        usage_file: str | Path | None = None,
+        cache_db: str | Path | None = None,
     ) -> None:
-        self.usage_file = Path(usage_file)
+        target_usage = usage_file or os.environ.get("DATAMIND_USAGE_PATH") or ".datamind/usage.json"
+        target_cache = cache_db or os.environ.get("DATAMIND_CACHE_PATH") or ".datamind/llm_cache.sqlite"
+        self.usage_file = Path(target_usage)
         self.usage_file.parent.mkdir(parents=True, exist_ok=True)
-        self.cache = LLMResponseCache(cache_db)
+        self.cache = LLMResponseCache(target_cache)
 
         # In-memory session tracking for run-level limits
         self.session_calls: int = 0
