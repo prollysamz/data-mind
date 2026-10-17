@@ -218,16 +218,28 @@ datamind mcp
 
 ---
 
-## Documentation
+## Documentation & Work Package Reports
 
-- [Evaluation History & Integrity Log](eval/HISTORY.md)
+### Core Documentation:
 - [Quickstart Guide](docs/quickstart.md)
 - [Local-Only Air-Gapped Mode](docs/local-only.md)
 - [Configuration Reference](docs/configuration.md)
 - [Dataset Documentation & Licences](docs/datasets.md)
 - [Adding an Adapter Guide](docs/adding-an-adapter.md)
 - [3-Minute Video Demo Script](docs/demo-script.md)
+- [Evaluation History & Integrity Log](eval/HISTORY.md)
 - [Third-Party Notices](THIRD_PARTY_NOTICES.md)
+
+### Work Package (WP) Technical Reports:
+- [**Master Work Package Index**](docs/WP-SUMMARY-INDEX.md)
+- [WP-F0: Integrity Reset & Authenticity Charter](docs/WP-F0-Integrity-Charter.md)
+- [WP-F1: Authentic Data Ingestion (Olist Brazilian E-Commerce)](docs/WP-F1-Authentic-Data-Ingestion.md)
+- [WP-F2: Small Model Tuning & Reasoning Scaffolding](docs/WP-F2-Small-Model-Tuning.md)
+- [WP-F3: Trust & Groundedness Upgrades (AST Linter & 73/73 Mutations)](docs/WP-F3-Trust-Groundedness-Upgrades.md)
+- [WP-F4: Review Classification & Sentiment Agreement](docs/WP-F4-Review-Classification-Sentiment.md)
+- [WP-F5: Sealed Evaluation & 40-Item Human Citation Audit](docs/WP-F5-Sealed-Evaluation-Human-Audit.md)
+- [WP-F7: Packaging, System Diagnostics & Version Freeze](docs/WP-F7-Packaging-And-Artifact-Freeze.md)
+- [WP-F8: Model Registry, Trust Layer & Live Red-Team Challenge](docs/WP-F8-Trust-Model-Registry-Red-Team.md)
 
 ---
 
