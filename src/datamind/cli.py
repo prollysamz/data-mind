@@ -512,8 +512,101 @@ def handle_init(args: argparse.Namespace) -> int:
         yaml.dump(model_data, f, sort_keys=False)
 
     print(f"Successfully introspected {len(tables)} tables ({', '.join(tables)}) from '{db_path}'.")
-    print(f"Generated semantic model at: {out_path}")
     return 0
+
+
+def handle_models(args: argparse.Namespace) -> int:
+    """List or probe models registered in DataMind."""
+    from datamind.llm.models import ModelRegistry
+    registry = ModelRegistry()
+    action = getattr(args, "action", "list") or "list"
+
+    if action == "list":
+        models = registry.list_models()
+        print("\n========================= DATAMIND MODEL REGISTRY =========================")
+        print(f"{'ID':<26} {'LABEL':<28} {'PRIVACY':<15} {'STATUS':<15} {'CAPABILITIES'}")
+        print("-" * 105)
+        for m in models:
+            caps = ", ".join(f"{k}" for k, v in m.capabilities.items() if v)
+            print(f"{m.id:<26} {m.label:<28} {m.privacy_class:<15} {m.status:<15} {caps}")
+        print("-" * 105)
+        print("Available Presets: local, hybrid_privacy, cloud_accuracy, second_opinion\n")
+        return 0
+
+    if action == "test":
+        target = getattr(args, "model_id", None)
+        if not target:
+            print("Error: Specify model ID to test. Usage: datamind models test <model_id>", file=sys.stderr)
+            return 1
+        model_info = registry.get_model(target)
+        if not model_info:
+            print(f"Error: Unknown model ID '{target}'.", file=sys.stderr)
+            return 1
+        print(f"Testing model '{target}' ({model_info.label})...")
+        if model_info.status != "ready":
+            print(f"[FAIL] Model status is '{model_info.status}': {model_info.status_reason}")
+            return 1
+        from datamind.llm.client import LLMClient
+        from datamind.config import load_config
+        config = load_config()
+        client = LLMClient(config.llm, purpose="test")
+        try:
+            resp = client.chat(
+                [{"role": "user", "content": "Return 'OK' if operational."}],
+                model=target,
+                max_tokens=50,
+            )
+            ans = resp.get("content", "")
+            print(f"[PASS] Model test successful! Response: {ans.strip()[:60]}")
+            return 0
+        except Exception as exc:
+            print(f"[FAIL] Model test failed: {exc}")
+            return 1
+
+    return 0
+
+
+def handle_verify_receipt(args: argparse.Namespace) -> int:
+    """Verify cryptographic receipt hash chain and replay SQL against database."""
+    from datamind.trust.receipts import ReceiptVerifier
+    path = Path(args.receipt_file)
+    if not path.exists():
+        print(f"Error: Receipt file '{path}' not found.", file=sys.stderr)
+        return 1
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    print(f"\n================ VERIFYING CRYPTOGRAPHIC RECEIPT: {path.name} ================")
+    res = ReceiptVerifier.verify(data)
+    print(f"Root Hash: {res.get('root_hash')}")
+    print("Component Integrity Checks:")
+    for check_name, passed in res.get("checks", {}).items():
+        sym = "[PASS]" if passed else "[FAIL]"
+        print(f"  {sym} {check_name}")
+    print(f"Overall Result: {res.get('status')}")
+
+    if getattr(args, "replay", False):
+        print("\nReplaying SQL queries against active database backend to detect data drift...")
+        from datamind.config import load_config
+        from datamind.guardrails.sql_guard import SQLGuard
+        config = load_config()
+        if config.backend.type == "duckdb":
+            from datamind.adapters.duckdb_adapter import DuckDBAdapter
+            adapter = DuckDBAdapter(config.backend.duckdb_path, read_only=True)
+        else:
+            from datamind.adapters.snowflake_adapter import SnowflakeAdapter
+            adapter = SnowflakeAdapter(config.backend.snowflake)
+        guard = SQLGuard(approved_tables=set(adapter.list_tables()))
+        try:
+            replay_res = ReceiptVerifier.replay(data, adapter, guard)
+            print(f"Replay Result: {replay_res.get('status')}")
+            for f in replay_res.get("findings", []):
+                print(f"  - SQL: {f.get('sql')[:60]}... -> {f.get('status')}")
+        finally:
+            adapter.close()
+
+    return 0 if res.get("verified") else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -772,6 +865,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Optional path to write JSON leakage report",
     )
 
+    # models
+    models_parser = subparsers.add_parser("models", help="Model registry discovery, capabilities, and health probing")
+    models_sub = models_parser.add_subparsers(dest="action")
+    models_sub.add_parser("list", help="List all registered models and statuses")
+    models_test_sub = models_sub.add_parser("test", help="Test a model with a tiny audited probe call")
+    models_test_sub.add_argument("model_id", help="Model ID to probe (e.g. gemma4:e2b)")
+
+    # verify-receipt
+    receipt_parser = subparsers.add_parser("verify-receipt", help="Verify cryptographic SHA-256 hash chain and evidence integrity")
+    receipt_parser.add_argument("receipt_file", help="Path to receipt.json")
+    receipt_parser.add_argument("--replay", action="store_true", help="Re-execute SQL on database to detect data drift")
+
     args = parser.parse_args(argv)
 
     if not args.subcommand:
@@ -786,6 +891,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.subcommand == "check-leakage":
         return handle_check_leakage(args)
+
+    if args.subcommand == "models":
+        return handle_models(args)
+
+    if args.subcommand == "verify-receipt":
+        return handle_verify_receipt(args)
 
     if args.subcommand == "usage":
         return handle_usage(args)

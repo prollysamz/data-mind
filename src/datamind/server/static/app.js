@@ -155,12 +155,14 @@ async function executeQuery(question) {
 
   try {
     const targetUrl = activeUploadSession ? `/api/uploads/${activeUploadSession}/ask` : '/api/ask';
+    const selectedPreset = document.getElementById('modelPresetSelect')?.value || 'local';
     const res = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question: question,
         permissive: !isStrict,
+        preset: selectedPreset,
       }),
       signal: currentAbortController.signal,
     });
@@ -698,6 +700,247 @@ function initActions() {
       exportResultCsv();
     });
   }
+
+  // Second Opinion Cross-Model Consensus
+  const secondOpinionBtn = document.getElementById('secondOpinionBtn');
+  if (secondOpinionBtn) {
+    secondOpinionBtn.addEventListener('click', async () => {
+      if (!currentResult) return;
+      const queries = (currentResult.evidence && currentResult.evidence.queries) || [];
+      const primarySql = queries.length ? queries[0].sql : '';
+      if (!primarySql) {
+        alert('No executed SQL query available for second opinion.');
+        return;
+      }
+      secondOpinionBtn.textContent = '⏳ Comparing...';
+      try {
+        const resp = await fetch('/api/second_opinion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            primary_sql: primarySql,
+            primary_model: currentResult.under_the_hood?.model || 'gemma4:e2b',
+            secondary_model: 'gemma4:e4b',
+          }),
+        });
+        const soData = await resp.json();
+        openSecondOpinionModal(soData);
+      } catch (err) {
+        alert('Second opinion error: ' + err);
+      } finally {
+        secondOpinionBtn.textContent = '👥 Second Opinion';
+      }
+    });
+  }
+
+  // Verifiable Cryptographic Receipt
+  const receiptBtn = document.getElementById('receiptBtn');
+  if (receiptBtn) {
+    receiptBtn.addEventListener('click', () => {
+      if (!currentResult || !currentResult.receipt) {
+        alert('No cryptographic receipt available for this result.');
+        return;
+      }
+      openReceiptModal(currentResult.receipt);
+    });
+  }
+
+  // Red-Team Live Adversarial Challenge
+  const redTeamBtn = document.getElementById('redTeamBtn');
+  if (redTeamBtn) {
+    redTeamBtn.addEventListener('click', async () => {
+      if (!currentResult || !currentResult.answer) {
+        alert('Run a query first to generate an answer for red-team testing.');
+        return;
+      }
+      redTeamBtn.textContent = '⚔️ Attacking...';
+      try {
+        const resp = await fetch('/api/red_team', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            answer: currentResult.answer,
+            evidence: currentResult.evidence,
+          }),
+        });
+        const rtData = await resp.json();
+        openRedTeamModal(rtData);
+      } catch (err) {
+        alert('Red-team error: ' + err);
+      } finally {
+        redTeamBtn.textContent = '🛡️ Red-Team Attack';
+      }
+    });
+  }
+
+  // Model & Preset Selector + Cloud Consent
+  const modelSelect = document.getElementById('modelPresetSelect');
+  if (modelSelect) {
+    modelSelect.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val === 'cloud_accuracy' || val === 'hybrid_privacy') {
+        const consentModal = document.getElementById('cloudConsentModal');
+        if (consentModal) consentModal.style.display = 'flex';
+      } else {
+        const privacyStatus = document.getElementById('privacyStatus');
+        if (privacyStatus) privacyStatus.textContent = 'Air-Gapped: 0 Egress';
+      }
+    });
+  }
+
+  // Modal Close Handlers
+  const closeSoBtn = document.getElementById('closeSecondOpinionBtn');
+  if (closeSoBtn) closeSoBtn.addEventListener('click', () => {
+    document.getElementById('secondOpinionModal').style.display = 'none';
+  });
+  const closeRcBtn = document.getElementById('closeReceiptBtn');
+  if (closeRcBtn) closeRcBtn.addEventListener('click', () => {
+    document.getElementById('receiptModal').style.display = 'none';
+  });
+  const closeRtBtn = document.getElementById('closeRedTeamBtn');
+  if (closeRtBtn) closeRtBtn.addEventListener('click', () => {
+    document.getElementById('redTeamModal').style.display = 'none';
+  });
+  const closeConsentBtn = document.getElementById('closeConsentBtn');
+  if (closeConsentBtn) closeConsentBtn.addEventListener('click', () => {
+    document.getElementById('cloudConsentModal').style.display = 'none';
+  });
+  const cancelConsentBtn = document.getElementById('cancelConsentBtn');
+  if (cancelConsentBtn) cancelConsentBtn.addEventListener('click', () => {
+    document.getElementById('cloudConsentModal').style.display = 'none';
+    if (modelSelect) modelSelect.value = 'local';
+    const privacyStatus = document.getElementById('privacyStatus');
+    if (privacyStatus) privacyStatus.textContent = 'Air-Gapped: 0 Egress';
+  });
+  const confirmConsentBtn = document.getElementById('confirmConsentBtn');
+  if (confirmConsentBtn) confirmConsentBtn.addEventListener('click', () => {
+    document.getElementById('cloudConsentModal').style.display = 'none';
+    const privacyStatus = document.getElementById('privacyStatus');
+    if (privacyStatus) privacyStatus.textContent = 'Schema-Only Cloud';
+  });
+
+  // Receipt Download Buttons
+  const dlJsonBtn = document.getElementById('downloadReceiptJsonBtn');
+  if (dlJsonBtn) {
+    dlJsonBtn.addEventListener('click', () => {
+      if (!currentResult || !currentResult.receipt) return;
+      const jsonStr = JSON.stringify(currentResult.receipt, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `datamind_receipt_${currentResult.receipt.root_hash.slice(0, 8)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  }
+
+  const openHtmlBtn = document.getElementById('openReceiptHtmlBtn');
+  if (openHtmlBtn) {
+    openHtmlBtn.addEventListener('click', async () => {
+      if (!currentResult || !currentResult.receipt) return;
+      try {
+        const resp = await fetch('/api/receipt/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ receipt: currentResult.receipt }),
+        });
+        const resJson = await resp.json();
+        if (resJson.html) {
+          const blob = new Blob([resJson.html], { type: 'text/html' });
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+        }
+      } catch (err) {
+        alert('Failed to open HTML receipt: ' + err);
+      }
+    });
+  }
+}
+
+function openSecondOpinionModal(data) {
+  const modal = document.getElementById('secondOpinionModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  const badge = document.getElementById('soVerdictBadge');
+  if (badge) {
+    badge.textContent = data.verdict_label || data.verdict;
+    badge.className = data.verdict.startsWith('AGREE') ? 'badge-pill badge-emerald' : 'badge-pill badge-amber';
+  }
+
+  const exp = document.getElementById('soExplanation');
+  if (exp) exp.textContent = data.explanation || '';
+
+  const pTag = document.getElementById('soPrimaryModelTag');
+  if (pTag) pTag.textContent = `Primary: ${data.primary_model || 'Local'}`;
+  const sTag = document.getElementById('soSecondaryModelTag');
+  if (sTag) sTag.textContent = `Secondary: ${data.secondary_model || 'Verifier'}`;
+
+  const pSql = document.getElementById('soPrimarySql');
+  if (pSql) pSql.textContent = data.primary_sql || '';
+  const sSql = document.getElementById('soSecondarySql');
+  if (sSql) sSql.textContent = data.secondary_sql || '';
+
+  const pRows = document.getElementById('soPrimaryRows');
+  if (pRows) pRows.textContent = `Returned ${data.primary_row_count} rows`;
+  const sRows = document.getElementById('soSecondaryRows');
+  if (sRows) sRows.textContent = `Returned ${data.secondary_row_count} rows`;
+
+  const diffContent = document.getElementById('soDiffContent');
+  if (diffContent && data.assumptions_diff) {
+    const diff = data.assumptions_diff;
+    let html = '';
+    if (diff.filters_diff && diff.filters_diff.length) {
+      html += `<div style="margin-bottom:0.4rem;"><strong>Filter Differences:</strong> ${escapeHtml(diff.filters_diff.join('; '))}</div>`;
+    }
+    if (diff.tables_diff && diff.tables_diff.length) {
+      html += `<div style="margin-bottom:0.4rem;"><strong>Table Differences:</strong> ${escapeHtml(diff.tables_diff.join('; '))}</div>`;
+    }
+    if (diff.metrics_diff && diff.metrics_diff.length) {
+      html += `<div style="margin-bottom:0.4rem;"><strong>Metric Expression Differences:</strong> ${escapeHtml(diff.metrics_diff.join('; '))}</div>`;
+    }
+    if (!html) {
+      html = '<div>All query structures, tables, and filters align across both models.</div>';
+    }
+    diffContent.innerHTML = html;
+  }
+}
+
+function openReceiptModal(receipt) {
+  const modal = document.getElementById('receiptModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  const rootBox = document.getElementById('modalRootHash');
+  if (rootBox) rootBox.textContent = receipt.root_hash || 'SHA-256 Digest';
+}
+
+function openRedTeamModal(data) {
+  const modal = document.getElementById('redTeamModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  const rateTag = document.getElementById('redTeamCatchRate');
+  if (rateTag) rateTag.textContent = `${data.caught_count} / ${data.total_mutations} Caught (${data.catch_rate_pct}%)`;
+
+  const list = document.getElementById('redTeamList');
+  if (!list) return;
+  list.innerHTML = '';
+
+  (data.mutations || []).forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'redteam-card';
+    card.innerHTML = `
+      <div class="redteam-card-header">
+        <span class="redteam-mutation-title">${escapeHtml(m.name)}</span>
+        <span class="badge-pill ${m.caught ? 'badge-emerald' : 'badge-amber'}">${m.caught ? '✓ CAUGHT BY VERIFIER' : 'MISSED'}</span>
+      </div>
+      <div class="redteam-mutation-body">${escapeHtml(m.mutated_text)}</div>
+      <div class="redteam-diag">&#9888; <strong>Verifier Catch Diagnostic:</strong> ${escapeHtml(m.diagnostic)}</div>
+    `;
+    list.appendChild(card);
+  });
 }
 
 function exportResultCsv() {

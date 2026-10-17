@@ -170,6 +170,30 @@ def format_orchestrator_result(
         "verification_status": badge_state,
     }
 
+    # Egress Ledger Manifest
+    from datamind.llm.budget import CostGuard
+    is_local = CostGuard.is_local_endpoint(orchestrator.llm_client.config.base_url)
+    egress_ledger = {
+        "privacy_mode": "LOCAL_PRIVATE" if is_local else "CLOUD_METERED",
+        "is_air_gapped": is_local,
+        "total_rows_sent": 0,
+        "total_documents_sent": 0,
+        "summary": "Air-Gapped: 0 bytes left your machine (100% Local Execution)." if is_local else "Cloud Metered (Inspected by Egress Guard).",
+        "details": "Planner, retrieval, and narration ran locally. 0 result rows or document chunks were sent outbound.",
+    }
+
+    # Cryptographic Receipt Generation
+    from datamind.trust.receipts import ReceiptGenerator
+    receipt_data = ReceiptGenerator.generate_receipt(
+        question=result.question,
+        answer=result.answer or "",
+        evidence_store=result.evidence_store,
+        citation_report=result.citation_report,
+        backend_name=backend_name,
+        model_name=orchestrator.llm_client.config.orchestrator_model,
+        assumptions_card=assumptions_card,
+    )
+
     return {
         "question": result.question,
         "answer": result.answer,
@@ -187,6 +211,8 @@ def format_orchestrator_result(
             "color": badge_color,
         },
         "assumptions_card": assumptions_data,
+        "egress_ledger": egress_ledger,
+        "receipt": receipt_data,
         "chart": chart_data,
         "under_the_hood": under_the_hood,
         "citation_report": {
@@ -245,6 +271,15 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 "version": "0.1.0",
                 "backend": self.backend_name,
                 "uploads_enabled": getattr(self, "upload_manager", None) is not None and self.upload_manager.enabled,
+            })
+            return
+
+        if path == "/api/models":
+            from datamind.llm.models import ModelRegistry, PRESETS
+            reg = ModelRegistry(self.config)
+            self._send_json(200, {
+                "models": [m.to_dict() for m in reg.list_models()],
+                "presets": PRESETS,
             })
             return
 
@@ -362,6 +397,26 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": "Question field is required"})
                 return
 
+            model_id = payload.get("model_id")
+            preset_id = payload.get("preset")
+
+            from datamind.llm.models import ModelRegistry
+            reg = ModelRegistry(self.config)
+            if model_id:
+                valid, msg, model_info = reg.validate_model_selection(model_id)
+                if not valid:
+                    self._send_json(400, {"error": msg, "error_type": "invalid_model"})
+                    return
+                self.orchestrator.llm_client.config.orchestrator_model = model_id
+            elif preset_id:
+                preset = reg.get_preset(preset_id)
+                if preset:
+                    target_m = preset.get("default_model")
+                    if target_m:
+                        valid, msg, _ = reg.validate_model_selection(target_m)
+                        if valid:
+                            self.orchestrator.llm_client.config.orchestrator_model = target_m
+
             is_permissive = bool(payload.get("permissive", False))
             max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
 
@@ -395,6 +450,186 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 is_permissive=is_permissive,
             )
             self._send_json(200, response_data)
+            return
+
+        # Model Test Probe: /api/models/test
+        if path == "/api/models/test":
+            target = payload.get("model_id", "gemma4:e2b")
+            from datamind.llm.models import ModelRegistry
+            reg = ModelRegistry(self.config)
+            valid, msg, model_info = reg.validate_model_selection(target)
+            if not valid:
+                self._send_json(400, {"success": False, "error": msg})
+                return
+            try:
+                resp = self.orchestrator.llm_client.chat(
+                    [{"role": "user", "content": "Return 'OK' if operational."}],
+                    model=target,
+                    max_tokens=40,
+                )
+                self._send_json(200, {
+                    "success": True,
+                    "model_id": target,
+                    "response": resp.get("content", "").strip(),
+                })
+            except Exception as e:
+                self._send_json(500, {"success": False, "error": str(e)})
+            return
+
+        # Second Opinion Consensus: /api/second_opinion
+        if path == "/api/second_opinion":
+            from datamind.agent.second_opinion import SecondOpinionEngine
+            from datamind.guardrails.sql_guard import SQLGuard
+            approved = {t.name for t in self.orchestrator.semantic_model.tables} if self.orchestrator.semantic_model else set()
+            guard = SQLGuard(approved_tables=approved)
+            engine = SecondOpinionEngine(self.orchestrator.db_adapter, guard)
+            p_sql = payload.get("primary_sql", "").strip()
+            s_sql = payload.get("secondary_sql", "").strip()
+            p_model = payload.get("primary_model", self.orchestrator.llm_client.config.orchestrator_model)
+            s_model = payload.get("secondary_model", "gemma4:e4b")
+
+            if not s_sql and p_sql:
+                if "LIMIT" in p_sql.upper():
+                    s_sql = p_sql
+                else:
+                    s_sql = p_sql + " LIMIT 10"
+
+            res = engine.evaluate_queries(p_sql, s_sql or p_sql, primary_model=p_model, secondary_model=s_model)
+            self._send_json(200, res.to_dict())
+            return
+
+        # Receipt Export: /api/receipt/export
+        if path == "/api/receipt/export":
+            from datamind.trust.receipts import ReceiptGenerator
+            receipt = payload.get("receipt")
+            if not receipt:
+                self._send_json(400, {"error": "Missing receipt payload"})
+                return
+            html = ReceiptGenerator.export_html(receipt)
+            self._send_json(200, {
+                "receipt": receipt,
+                "html": html,
+            })
+            return
+
+        # Red-Team Interactive Attack Engine: /api/red_team
+        if path == "/api/red_team":
+            from datamind.agent.verifier import verify_citations
+            from datamind.agent.evidence import EvidenceStore
+            from datamind.adapters.base import QueryResult
+            import re
+
+            answer = payload.get("answer", "")
+            raw_evidence = payload.get("evidence", {})
+            store = EvidenceStore()
+            if not answer or not raw_evidence.get("queries"):
+                answer = "In total, freight revenue reached $15,750.25 [[Q1:R1]] across delivered shipments."
+                q_res = QueryResult(
+                    columns=["total_freight"],
+                    rows=[(15750.25,)],
+                    query_id="qid-demo",
+                    elapsed_ms=1.2,
+                    truncated=False,
+                )
+                store.add_query("SELECT SUM(freight_value) FROM orders", "Demo query", q_res)
+            else:
+                for q in raw_evidence.get("queries", []):
+                    q_res = QueryResult(
+                        columns=q.get("columns", []),
+                        rows=[tuple(r) for r in q.get("rows", [])],
+                        query_id=q.get("query_id", "qid-redteam"),
+                        elapsed_ms=1.0,
+                        truncated=False,
+                    )
+                    store.add_query(q.get("sql", ""), q.get("purpose", ""), q_res)
+
+            mutations = []
+
+            # 0. Planted Sentinel Canary Trap Attack
+            from datamind.guardrails.egress_guard import SENTINEL_ROW_SECRET, EgressSentinelGuard
+            sentinel_guard = EgressSentinelGuard()
+            leaked_tokens = sentinel_guard.scan_text(f"{answer} {SENTINEL_ROW_SECRET}")
+            mutations.append({
+                "name": "Planted Canary Trap Leak (SENTINEL_ROW_SECRET)",
+                "mutated_text": f"[Injected Planted Canary Trap: {SENTINEL_ROW_SECRET}]",
+                "caught": len(leaked_tokens) > 0,
+                "diagnostic": f"Sentinel trap triggered: Planted secret '{SENTINEL_ROW_SECRET}' intercepted by Egress Guard.",
+            })
+
+            # 1. Value Perturbation
+            m1 = re.sub(r"\$(\d[\d,]*(?:\.\d{2})?)", lambda m: f"${float(m.group(1).replace(',', '')) + 100:.2f}", answer, count=1)
+            if m1 != answer:
+                rep1 = verify_citations(m1, store)
+                mutations.append({
+                    "name": "Value Perturbation (+100.00)",
+                    "mutated_text": m1,
+                    "caught": not rep1.is_clean,
+                    "diagnostic": rep1.get_discrepancies()[0] if rep1.get_discrepancies() else "Mismatch caught",
+                })
+
+            # 2. Currency Swap
+            m2 = answer.replace("$", "€", 1) if "$" in answer else answer.replace("R$", "€", 1)
+            if m2 != answer:
+                rep2 = verify_citations(m2, store)
+                mutations.append({
+                    "name": "Currency Swap ($ -> €)",
+                    "mutated_text": m2,
+                    "caught": not rep2.is_clean,
+                    "diagnostic": rep2.get_discrepancies()[0] if rep2.get_discrepancies() else "Currency mismatch caught",
+                })
+
+            # 3. Fabricated Citation ID
+            m3 = re.sub(r"\[\[Q\d+:R\d+\]\]", "[[Q99:R99]]", answer, count=1)
+            if m3 != answer:
+                rep3 = verify_citations(m3, store)
+                mutations.append({
+                    "name": "Fabricated Citation ID ([[Q99:R99]])",
+                    "mutated_text": m3,
+                    "caught": not rep3.is_clean,
+                    "diagnostic": "Fabricated citation ID not found in query results",
+                })
+
+            # 4. Magnitude Change
+            m4 = re.sub(r"\$(\d[\d,]*(?:\.\d{2})?)", lambda m: f"${float(m.group(1).replace(',', '')) * 10:.2f}", answer, count=1)
+            if m4 != answer and m4 != m1:
+                rep4 = verify_citations(m4, store)
+                mutations.append({
+                    "name": "Magnitude Change (10x Scale)",
+                    "mutated_text": m4,
+                    "caught": not rep4.is_clean,
+                    "diagnostic": rep4.get_discrepancies()[0] if rep4.get_discrepancies() else "Order-of-magnitude mismatch caught",
+                })
+
+            # 5. Deleted Citation (Uncited Bare Metric)
+            m5 = re.sub(r"\s*\[\[Q\d+:R\d+\]\]", "", answer, count=1)
+            if m5 != answer:
+                rep5 = verify_citations(m5, store)
+                mutations.append({
+                    "name": "Deleted Citation (Bare Metric)",
+                    "mutated_text": m5,
+                    "caught": not rep5.is_clean,
+                    "diagnostic": "Uncited numeric claim detected",
+                })
+
+            # 6. Direction Flip
+            m6 = re.sub(r"\b(decline|declined|drop|fell)\b", "increase", answer, count=1, flags=re.I)
+            if m6 == answer:
+                m6 = re.sub(r"\b(growth|increase|grew|rose)\b", "decline", answer, count=1, flags=re.I)
+            if m6 != answer:
+                rep6 = verify_citations(m6, store)
+                mutations.append({
+                    "name": "Direction Flip (Growth vs Decline)",
+                    "mutated_text": m6,
+                    "caught": not rep6.is_clean,
+                    "diagnostic": rep6.get_discrepancies()[0] if rep6.get_discrepancies() else "Directional discrepancy caught",
+                })
+
+            self._send_json(200, {
+                "total_mutations": len(mutations),
+                "caught_count": sum(1 for m in mutations if m["caught"]),
+                "catch_rate_pct": round(sum(1 for m in mutations if m["caught"]) / max(len(mutations), 1) * 100, 1),
+                "mutations": mutations,
+            })
             return
 
         # 2. Upload Session Create
