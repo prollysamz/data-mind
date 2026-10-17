@@ -344,6 +344,57 @@ def handle_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_check_leakage(args: argparse.Namespace) -> int:
+    """Run leakage guard verifying semantic model verified queries are disjoint from questions."""
+    from datamind.eval.leakage_guard import check_model_leakage
+
+    model_path = getattr(args, "model", "examples/olist/semantic_model.yaml")
+    questions_path = getattr(args, "questions", "eval/questions/olist_dev.yaml")
+    threshold = getattr(args, "threshold", 0.80)
+
+    print("=" * 70)
+    print("DATAMIND ZERO-LEAKAGE GUARD REPORT")
+    print("=" * 70)
+    print(f"Semantic Model: {model_path}")
+    print(f"Question Set:   {questions_path}")
+    print(f"Threshold:      {threshold}")
+
+    rep = check_model_leakage(model_path, questions_path, threshold=threshold)
+    print(f"Pairs Evaluated: {rep.pairs_evaluated}")
+    print(f"Max Similarity:  {rep.max_similarity:.4f}")
+    print(f"Violations:      {len(rep.violations)}")
+    print(f"Status:          {'PASS (Zero Leakage Verified)' if rep.passed else 'FAIL (Leakage Detected)'}")
+    print("-" * 70)
+    print("Top Closest Pairs:")
+    for idx, p in enumerate(rep.top_matches, 1):
+        print(f"  {idx}. [{p.similarity:.4f}] Training: '{p.training_question[:40]}...' vs {p.eval_id}: '{p.eval_question[:40]}...'")
+    print("=" * 70)
+
+    if getattr(args, "output_json", None):
+        import json
+        with open(args.output_json, "w", encoding="utf-8") as f:
+            json.dump({
+                "model_path": rep.semantic_model_path,
+                "questions_path": rep.question_set_path,
+                "threshold": rep.threshold,
+                "max_similarity": rep.max_similarity,
+                "passed": rep.passed,
+                "violations_count": len(rep.violations),
+                "top_matches": [
+                    {
+                        "eval_id": p.eval_id,
+                        "similarity": p.similarity,
+                        "training_question": p.training_question,
+                        "eval_question": p.eval_question,
+                    }
+                    for p in rep.top_matches
+                ]
+            }, f, indent=2)
+        print(f"Saved JSON report to {args.output_json}")
+
+    return 0 if rep.passed else 1
+
+
 def handle_serve(args: argparse.Namespace) -> int:
     """Start DataMind UI and API HTTP server."""
     from datamind.server import start_server
@@ -573,7 +624,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     eval_parser.add_argument(
         "--suite",
-        choices=["all", "business", "trust", "held_out", "held_out_fresh", "held_out_sealed", "verifier", "security", "real_data"],
+        choices=["all", "business", "trust", "held_out", "held_out_fresh", "held_out_sealed", "verifier", "security", "real_data", "olist_dev"],
         default="all",
         help="Evaluation suite to run",
     )
@@ -581,6 +632,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--config",
         default="datamind.yaml",
         help="Path to configuration YAML (default: datamind.yaml)",
+    )
+    eval_parser.add_argument(
+        "--ablation",
+        action="store_true",
+        help="Run technique ablation suite on dev set and generate ablation table",
     )
     eval_parser.add_argument(
         "--provider",
@@ -688,6 +744,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Host address to bind server (default: 127.0.0.1)",
     )
 
+    # check-leakage
+    leakage_parser = subparsers.add_parser(
+        "check-leakage",
+        help="Verify training few-shots and eval questions are strictly disjoint (Leakage Guard)",
+    )
+    leakage_parser.add_argument(
+        "--model",
+        default="examples/olist/semantic_model.yaml",
+        help="Path to semantic model YAML (default: examples/olist/semantic_model.yaml)",
+    )
+    leakage_parser.add_argument(
+        "--questions",
+        default="eval/questions/olist_dev.yaml",
+        help="Path to question set YAML (default: eval/questions/olist_dev.yaml)",
+    )
+    leakage_parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.80,
+        help="Cosine/Jaccard similarity threshold for leakage violation (default: 0.80)",
+    )
+    leakage_parser.add_argument(
+        "--json",
+        dest="output_json",
+        default=None,
+        help="Optional path to write JSON leakage report",
+    )
+
     args = parser.parse_args(argv)
 
     if not args.subcommand:
@@ -699,6 +783,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.subcommand == "eval":
         return handle_eval(args)
+
+    if args.subcommand == "check-leakage":
+        return handle_check_leakage(args)
 
     if args.subcommand == "usage":
         return handle_usage(args)

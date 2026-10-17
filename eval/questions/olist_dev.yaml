@@ -1,0 +1,271 @@
+# ==============================================================================
+# DataMind Evaluation Suite: Olist Development Benchmark (olist_dev.yaml)
+#
+# Comprises 30 questions on the Brazilian E-Commerce (Olist) dataset:
+# - 20 Quantitative analytical questions with verified ground-truth SQL
+# - 6 Unanswerable questions (testing schema limitation & refusal quality)
+# - 4 Ambiguous questions (testing clarification without premature SQL)
+#
+# Ground-truth SQL verified across DuckDB (olist.duckdb) and Snowflake (DATAMIND.PUBLIC).
+# ==============================================================================
+
+suite: olist_dev
+dataset: olist_ecommerce
+description: "30-question development benchmark suite for small model SQL tuning and ablation"
+
+questions:
+  # ----------------------------------------------------------------------------
+  # Quantitative Analytical Questions (20 items)
+  # ----------------------------------------------------------------------------
+  - id: olist_dev_01
+    question: "What is the total number of delivered orders in the database?"
+    category: aggregation
+    ground_truth_sql: "SELECT COUNT(DISTINCT order_id) FROM olist_orders WHERE order_status = 'delivered';"
+    expected_scalar: 96478
+
+  - id: olist_dev_02
+    question: "What is the total net merchandise sales revenue for delivered orders?"
+    category: aggregation
+    ground_truth_sql: |
+      SELECT ROUND(SUM(i.price), 2)
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+    expected_scalar: 13221498.11
+
+  - id: olist_dev_03
+    question: "What was the total freight and shipping charges paid across delivered orders?"
+    category: aggregation
+    ground_truth_sql: |
+      SELECT ROUND(SUM(i.freight_value), 2)
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+    expected_scalar: 2198275.64
+
+  - id: olist_dev_04
+    question: "What is the average order value (AOV) in BRL for delivered orders?"
+    category: calculation
+    ground_truth_sql: |
+      SELECT ROUND(SUM(i.price) / COUNT(DISTINCT o.order_id), 2)
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+    expected_scalar: 137.04
+
+  - id: olist_dev_05
+    question: "What is the overall average customer satisfaction review score?"
+    category: aggregation
+    ground_truth_sql: "SELECT ROUND(AVG(review_score), 2) FROM olist_order_reviews;"
+    expected_scalar: 4.09
+
+  - id: olist_dev_06
+    question: "How many distinct individual customers placed delivered orders?"
+    category: aggregation
+    ground_truth_sql: |
+      SELECT COUNT(DISTINCT c.customer_unique_id)
+      FROM olist_orders o
+      JOIN olist_customers c ON o.customer_id = c.customer_id
+      WHERE o.order_status = 'delivered';
+    expected_scalar: 93358
+
+  - id: olist_dev_07
+    question: "What are the top 3 payment types by number of transactions?"
+    category: ranking
+    ground_truth_sql: |
+      SELECT payment_type, COUNT(*) AS transaction_count
+      FROM olist_order_payments
+      GROUP BY payment_type
+      ORDER BY transaction_count DESC
+      LIMIT 3;
+
+  - id: olist_dev_08
+    question: "What are the top 5 product categories by delivered sales revenue in English?"
+    category: ranking
+    ground_truth_sql: |
+      SELECT
+          COALESCE(t.product_category_name_english, p.product_category_name, 'Unknown') AS category,
+          ROUND(SUM(i.price), 2) AS total_revenue
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      JOIN olist_products p ON i.product_id = p.product_id
+      LEFT JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name
+      WHERE o.order_status = 'delivered'
+      GROUP BY category
+      ORDER BY total_revenue DESC
+      LIMIT 5;
+
+  - id: olist_dev_09
+    question: "How many distinct merchant sellers fulfilled at least one delivered item?"
+    category: aggregation
+    ground_truth_sql: |
+      SELECT COUNT(DISTINCT i.seller_id)
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+    expected_scalar: 2970
+
+  - id: olist_dev_10
+    question: "What was the total net sales revenue from delivered orders in the year 2017?"
+    category: time_filter
+    ground_truth_sql: |
+      SELECT ROUND(SUM(i.price), 2)
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered'
+        AND EXTRACT(YEAR FROM o.order_purchase_timestamp) = 2017;
+    expected_scalar: 5962902.01
+
+  - id: olist_dev_11
+    question: "Which top 3 customer states placed the most delivered orders?"
+    category: ranking
+    ground_truth_sql: |
+      SELECT c.customer_state, COUNT(DISTINCT o.order_id) AS orders_count
+      FROM olist_orders o
+      JOIN olist_customers c ON o.customer_id = c.customer_id
+      WHERE o.order_status = 'delivered'
+      GROUP BY c.customer_state
+      ORDER BY orders_count DESC
+      LIMIT 3;
+
+  - id: olist_dev_12
+    question: "How many delivered orders arrived after the estimated delivery date?"
+    category: condition
+    ground_truth_sql: |
+      SELECT COUNT(*)
+      FROM olist_orders
+      WHERE order_status = 'delivered'
+        AND order_delivered_customer_date > order_estimated_delivery_date;
+    expected_scalar: 7826
+
+  - id: olist_dev_13
+    question: "What percentage of delivered orders suffered from late delivery?"
+    category: calculation
+    ground_truth_sql: |
+      SELECT ROUND(COUNT(CASE WHEN order_delivered_customer_date > order_estimated_delivery_date THEN 1 END) * 100.0 / COUNT(*), 2)
+      FROM olist_orders
+      WHERE order_status = 'delivered'
+        AND order_delivered_customer_date IS NOT NULL;
+    expected_scalar: 8.11
+
+  - id: olist_dev_14
+    question: "What is the average review score for orders delivered after their estimated date?"
+    category: condition
+    ground_truth_sql: |
+      SELECT ROUND(AVG(r.review_score), 2)
+      FROM olist_order_reviews r
+      JOIN olist_orders o ON r.order_id = o.order_id
+      WHERE o.order_status = 'delivered'
+        AND o.order_delivered_customer_date > o.order_estimated_delivery_date;
+    expected_scalar: 2.57
+
+  - id: olist_dev_15
+    question: "Which seller ID generated the single highest merchandise sales revenue?"
+    category: ranking
+    ground_truth_sql: |
+      SELECT seller_id, ROUND(SUM(price), 2) AS total_revenue
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered'
+      GROUP BY seller_id
+      ORDER BY total_revenue DESC
+      LIMIT 1;
+
+  - id: olist_dev_16
+    question: "How many customer reviews gave the maximum score of 5 stars?"
+    category: aggregation
+    ground_truth_sql: "SELECT COUNT(*) FROM olist_order_reviews WHERE review_score = 5;"
+    expected_scalar: 57328
+
+  - id: olist_dev_17
+    question: "How many customer reviews gave the lowest score of 1 star?"
+    category: aggregation
+    ground_truth_sql: "SELECT COUNT(*) FROM olist_order_reviews WHERE review_score = 1;"
+    expected_scalar: 11424
+
+  - id: olist_dev_18
+    question: "What is the average number of items per delivered order?"
+    category: calculation
+    ground_truth_sql: |
+      SELECT ROUND(CAST(COUNT(*) AS FLOAT) / COUNT(DISTINCT o.order_id), 2)
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered';
+    expected_scalar: 1.14
+
+  - id: olist_dev_19
+    question: "What was the total payment value processed via credit card?"
+    category: condition
+    ground_truth_sql: "SELECT ROUND(SUM(payment_value), 2) FROM olist_order_payments WHERE payment_type = 'credit_card';"
+    expected_scalar: 12542084.19
+
+  - id: olist_dev_20
+    question: "Which month in 2017 generated the single highest delivered sales revenue?"
+    category: ranking
+    ground_truth_sql: |
+      SELECT
+          EXTRACT(MONTH FROM o.order_purchase_timestamp) AS order_month,
+          ROUND(SUM(i.price), 2) AS monthly_revenue
+      FROM olist_order_items i
+      JOIN olist_orders o ON i.order_id = o.order_id
+      WHERE o.order_status = 'delivered'
+        AND EXTRACT(YEAR FROM o.order_purchase_timestamp) = 2017
+      GROUP BY order_month
+      ORDER BY monthly_revenue DESC
+      LIMIT 1;
+
+  # ----------------------------------------------------------------------------
+  # Unanswerable Questions (6 items - Testing schema limits & refusal quality)
+  # ----------------------------------------------------------------------------
+  - id: olist_dev_21
+    question: "What is the net profit margin and wholesale product cost on health and beauty products?"
+    category: unanswerable
+    expected_refusal_reason: "Wholesale cost (COGS) and net profit margin are not present in the dataset."
+
+  - id: olist_dev_22
+    question: "What are the unmasked credit card numbers and CVV security codes for recent customer orders?"
+    category: unanswerable
+    expected_refusal_reason: "PCI card numbers and CVV security codes are not stored."
+
+  - id: olist_dev_23
+    question: "What is the average monthly salary and compensation of customer service representatives?"
+    category: unanswerable
+    expected_refusal_reason: "Employee salary and compensation data is not available."
+
+  - id: olist_dev_24
+    question: "What are the exact GPS coordinates and latitude longitude locations of our fulfillment centers?"
+    category: unanswerable
+    expected_refusal_reason: "Fulfillment center coordinates and warehouse geolocation are not stored."
+
+  - id: olist_dev_25
+    question: "What is the average age and gender demographic breakdown of buyers in Sao Paulo?"
+    category: unanswerable
+    expected_refusal_reason: "Customer demographic attributes such as age and gender are not recorded."
+
+  - id: olist_dev_26
+    question: "How do our product prices compare against Amazon Brazil competitor listings?"
+    category: unanswerable
+    expected_refusal_reason: "External competitor price data is not present."
+
+  # ----------------------------------------------------------------------------
+  # Ambiguous Questions (4 items - Testing clarification without premature SQL)
+  # ----------------------------------------------------------------------------
+  - id: olist_dev_27
+    question: "What were our top products?"
+    category: ambiguous_question
+    expected_clarification: "Should products be ranked by total sales revenue, units sold, or customer review rating?"
+
+  - id: olist_dev_28
+    question: "What was our revenue in 2017?"
+    category: ambiguous_question
+    expected_clarification: "Does revenue refer to item merchandise sales for delivered orders, or total payments including freight?"
+
+  - id: olist_dev_29
+    question: "Who are the best sellers?"
+    category: ambiguous_question
+    expected_clarification: "Should sellers be ranked by gross sales volume, total orders fulfilled, or average review rating?"
+
+  - id: olist_dev_30
+    question: "How did sales perform recently?"
+    category: ambiguous_question
+    expected_clarification: "Please specify the date range, monthly period, or metric of interest."

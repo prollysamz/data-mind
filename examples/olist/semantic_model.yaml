@@ -295,25 +295,30 @@ metrics:
       WHERE o.order_status = 'delivered';
 
 verified_queries:
-  - name: top_product_categories_by_revenue
-    question: "What are the top 5 product categories by net delivered revenue?"
+  - name: canceled_orders_volume
+    question: "How many customer orders were canceled across all records?"
     sql: |
-      SELECT
-          COALESCE(t.product_category_name_english, p.product_category_name, 'Unknown') AS category,
-          ROUND(SUM(i.price), 2) AS total_revenue
-      FROM olist_order_items i
-      JOIN olist_orders o ON i.order_id = o.order_id
-      JOIN olist_products p ON i.product_id = p.product_id
-      LEFT JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name
-      WHERE o.order_status = 'delivered'
-      GROUP BY category
-      ORDER BY total_revenue DESC
-      LIMIT 5;
-    explanation: "Joins items to delivered orders, products, and English translations, aggregating revenue descending."
+      SELECT COUNT(*) AS canceled_orders
+      FROM olist_orders
+      WHERE order_status = 'canceled';
+    explanation: "Counts orders whose fulfillment status is canceled."
 
-  - name: average_review_score_by_status
-    question: "What is the overall average customer review score?"
+  - name: watches_average_freight
+    question: "What is the average freight delivery fee for items in the watches gifts category?"
     sql: |
-      SELECT ROUND(AVG(review_score), 2) AS avg_review_score
-      FROM olist_order_reviews;
-    explanation: "Averages the numeric review scores across all customer reviews."
+      SELECT ROUND(AVG(i.freight_value), 2) AS avg_freight_watches
+      FROM olist_order_items i
+      JOIN olist_products p ON i.product_id = p.product_id
+      WHERE p.product_category_name = 'relogios_presentes';
+    explanation: "Calculates mean freight charges joining order items to products filtered by Portuguese category."
+
+  - name: rj_top_customer_cities
+    question: "Which 3 cities in Rio de Janeiro state have the highest count of registered customers?"
+    sql: |
+      SELECT customer_city, COUNT(DISTINCT customer_unique_id) AS total_customers
+      FROM olist_customers
+      WHERE customer_state = 'RJ'
+      GROUP BY customer_city
+      ORDER BY total_customers DESC
+      LIMIT 3;
+    explanation: "Aggregates unique customer individuals by city in the state of RJ, ordered descending."

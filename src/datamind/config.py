@@ -142,6 +142,11 @@ class AgentConfig(BaseModel):
     max_steps: int = 6
     max_sql_repairs: int = 2
     max_tokens_per_question: int = Field(default=32768)
+    schema_pruning: bool = False
+    dynamic_few_shot: bool = False
+    execution_guided_repair: bool = True
+    structured_query_lane: bool = False
+    self_consistency: bool = False
 
 
 class RetrievalConfig(BaseModel):

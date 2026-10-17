@@ -82,9 +82,9 @@ INCREASE_WORDS = (
     "higher", "improved", "improvement", "positive change"
 )
 
-# Matches currency numbers, decimals, integers with optional signs: e.g. -$2,611.99, $738,876.88, £22.20, 53,803.23, -54.41, 6, 42.5%
+# Matches currency numbers, decimals, integers with optional signs: e.g. -$2,611.99, R$738,876.88, £22.20, 53,803.23, -54.41, 6, 42.5%
 NUMERIC_PATTERN = re.compile(
-    r"([-–—]?)(?:[\$£€]\s*)?([-–—]?)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:%|percent)?"
+    r"([-–—]?)(?:(?:R\$|[\$£€])\s*)?([-–—]?)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:%|percent)?"
 )
 
 
@@ -96,7 +96,7 @@ def _parse_float(val: Any) -> float | None:
         return float(val)
     if isinstance(val, decimal.Decimal):
         return float(val)
-    clean_str = str(val).replace(",", "").replace("$", "").replace("£", "").replace("€", "").strip()
+    clean_str = str(val).replace(",", "").replace("R$", "").replace("$", "").replace("£", "").replace("€", "").strip()
     try:
         return float(clean_str)
     except (ValueError, TypeError):
@@ -419,7 +419,9 @@ def verify_citations(
 
             # Check currency symbol mismatch
             claimed_symbol = None
-            if raw_full.startswith("$") or "dollar" in segment.lower() or "usd" in segment.lower():
+            if raw_full.startswith("R$") or "brl" in segment.lower() or "real" in segment.lower() or "reais" in segment.lower():
+                claimed_symbol = "R$"
+            elif raw_full.startswith("$") or "dollar" in segment.lower() or "usd" in segment.lower():
                 claimed_symbol = "$"
             elif raw_full.startswith("£") or "pound" in segment.lower() or "gbp" in segment.lower():
                 claimed_symbol = "£"

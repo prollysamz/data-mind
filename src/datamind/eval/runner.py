@@ -88,6 +88,8 @@ class EvalItemResult:
     citations_invalid: int = 0
     verified_numbers: int = 0
     discrepancies: int = 0
+    silent_wrong: bool = False
+    lane: str = "freeform_sql"
 
 
 @dataclass
@@ -98,6 +100,9 @@ class EvalReport:
     passed: int = 0
     failed: int = 0
     not_run: int = 0
+    silent_wrong_count: int = 0
+    first_attempt_passes: int = 0
+    repair_passes: int = 0
     items: list[EvalItemResult] = field(default_factory=list)
 
     @property
@@ -113,6 +118,7 @@ def _evaluate_item(
     retriever: SQLiteFTSRetriever,
     semantic_model: Any,
     guard: SQLGuard,
+    agent_config: Any = None,
 ) -> EvalItemResult:
     """Evaluate a single test item against live orchestrator, SQL guard, and deterministic verifier."""
     qid = item["id"]
@@ -208,17 +214,56 @@ def _evaluate_item(
                 elapsed_ms=round(elapsed, 1),
             )
 
-    # Handle Business, Held-Out, and Fresh Held-Out analytical cases
+    # Handle Business, Held-Out, Fresh Held-Out, and Olist Dev analytical cases
     else:
+        category = item.get("category", "")
         orchestrator = AgentOrchestrator(
             llm_client=llm_client,
             db_adapter=adapter,
             retriever=retriever,
             semantic_model=semantic_model,
             sql_guard=guard,
+            config=agent_config,
         )
         agent_res = orchestrator.run(question)
         elapsed = (time.perf_counter() - t0) * 1000.0
+        ans_lower = agent_res.answer.lower()
+
+        if category == "unanswerable":
+            refusal_keywords = [
+                "not available", "do not have", "no information", "cannot answer",
+                "does not contain", "no table", "not have access", "not stored",
+                "not present", "not record", "limitation", "unable to",
+            ]
+            passed = len(agent_res.evidence_store.queries) == 0 or any(w in ans_lower for w in refusal_keywords)
+            reason = "Stated schema limitation correctly without ungrounded SQL" if passed else "Hallucinated answers to unanswerable question"
+            return EvalItemResult(
+                item_id=qid,
+                suite=item_suite,
+                question=question,
+                passed=passed,
+                status="PASS" if passed else "FAIL",
+                reason=reason,
+                elapsed_ms=round(elapsed, 1),
+                lane=getattr(agent_res, "lane", "freeform_sql"),
+            )
+
+        elif category == "ambiguous_question":
+            passed = "?" in agent_res.answer and (
+                len(agent_res.evidence_store.queries) == 0
+                or any(w in ans_lower for w in ["clarify", "specify", "which", "what specific", "mean by", "looking for", "should products", "does revenue"])
+            )
+            reason = "Asked clarifying question without ungrounded SQL" if passed else "Guessed intent without clarification"
+            return EvalItemResult(
+                item_id=qid,
+                suite=item_suite,
+                question=question,
+                passed=passed,
+                status="PASS" if passed else "FAIL",
+                reason=reason,
+                elapsed_ms=round(elapsed, 1),
+                lane=getattr(agent_res, "lane", "clarification"),
+            )
 
         cit_clean = agent_res.citation_report.is_clean
         has_evidence = (len(agent_res.evidence_store.queries) >= 1) or (len(agent_res.evidence_store.chunks) >= 1)
@@ -237,6 +282,7 @@ def _evaluate_item(
                 gt_detail = f"Ground truth execution error: {e}"
 
         passed = agent_res.success and cit_clean and has_evidence and prod_matched and gt_matched
+        silent_wrong = cit_clean and not gt_matched and not passed
         if passed:
             reason = "All numbers, citations, and ground-truth result sets verified"
         else:
@@ -265,6 +311,8 @@ def _evaluate_item(
             citations_invalid=agent_res.citation_report.invalid_count,
             verified_numbers=agent_res.citation_report.verified_numbers_count,
             discrepancies=agent_res.citation_report.discrepancy_count,
+            silent_wrong=silent_wrong,
+            lane=getattr(agent_res, "lane", "freeform_sql"),
         )
 
 
@@ -274,6 +322,7 @@ def run_evaluation(
     save_results: bool = True,
     provider: str = "local",
     use_cache: bool = False,
+    max_items: int | None = None,
 ) -> EvalReport:
     """Run business and trust benchmark evaluation suites."""
     config = load_config(config_path)
@@ -353,6 +402,19 @@ def run_evaluation(
                     q["_suite"] = "held_out_sealed"
                     items_to_evaluate.append(q)
 
+    # 6. Load Olist Development Suite
+    if suite in ("all", "olist_dev"):
+        dev_file = Path("eval/questions/olist_dev.yaml")
+        if dev_file.exists():
+            with open(dev_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+                for q in data.get("questions", []):
+                    q["_suite"] = "olist_dev"
+                    items_to_evaluate.append(q)
+
+    if max_items and max_items > 0:
+        items_to_evaluate = items_to_evaluate[:max_items]
+
     report.total = len(items_to_evaluate)
 
     try:
@@ -365,12 +427,19 @@ def run_evaluation(
                     retriever=retriever,
                     semantic_model=semantic_model,
                     guard=guard,
+                    agent_config=config.agent,
                 )
                 if item_res.passed:
                     report.passed += 1
+                    if item_res.lane != "freeform_sql":
+                        report.first_attempt_passes += 1
                 else:
                     report.failed += 1
+                if item_res.silent_wrong:
+                    report.silent_wrong_count += 1
                 report.items.append(item_res)
+                badge = "[PASS]" if item_res.passed else "[FAIL]"
+                print(f"  {badge:<6} [{idx+1:>2}/{report.total}] {item['id']:<14} ({item_res.elapsed_ms:>5.0f}ms) {item['question'][:50]}...", flush=True)
             except BudgetExceeded as exc:
                 print(f"\n[BUDGET EXCEEDED] Evaluation halted at question '{item['id']}': {exc}")
                 report.items.append(
@@ -407,14 +476,23 @@ def run_evaluation(
             report,
             model_name=config.llm.orchestrator_model,
             dataset_path=config.backend.duckdb_path,
+            agent_config=config.agent,
+            config_path=config_path,
         )
 
     return report
 
 
-def _save_eval_results(report: EvalReport, model_name: str = "gemma4:e2b", dataset_path: str = "examples/primary/demo.duckdb") -> None:
-    """Save JSON report with git provenance, latency, and update RESULTS.md."""
+def _save_eval_results(
+    report: EvalReport,
+    model_name: str = "gemma4:e2b",
+    dataset_path: str = "examples/primary/demo.duckdb",
+    agent_config: Any = None,
+    config_path: str = "",
+) -> None:
+    """Save JSON report with git provenance, latency, update RESULTS.md, and append to RunLedger."""
     import subprocess
+    from datamind.eval.ledger import LedgerEntry, RunLedger, compute_file_sha256
 
     results_dir = Path("eval/results")
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -429,6 +507,42 @@ def _save_eval_results(report: EvalReport, model_name: str = "gemma4:e2b", datas
     latencies = [i.elapsed_ms for i in report.items if i.elapsed_ms > 0]
     median_lat = round(sorted(latencies)[len(latencies) // 2], 1) if latencies else 0.0
     p90_lat = round(sorted(latencies)[int(len(latencies) * 0.90)], 1) if latencies else 0.0
+
+    # Record in append-only run ledger
+    ledger = RunLedger()
+    q_hash = compute_file_sha256("eval/questions/olist_dev.yaml") if report.suite == "olist_dev" else ""
+    cfg_hash = compute_file_sha256(config_path) if config_path else ""
+    run_id = f"run_{date_str.replace('-', '')}_{int(time.time())}"
+
+    ledger.record_run(
+        LedgerEntry(
+            run_id=run_id,
+            timestamp=report.timestamp,
+            git_commit=commit_hash,
+            suite_name=report.suite,
+            question_set_hash=q_hash,
+            config_hash=cfg_hash,
+            flags={
+                "schema_pruning": getattr(agent_config, "schema_pruning", False),
+                "dynamic_few_shot": getattr(agent_config, "dynamic_few_shot", False),
+                "execution_guided_repair": getattr(agent_config, "execution_guided_repair", True),
+                "structured_query_lane": getattr(agent_config, "structured_query_lane", False),
+                "self_consistency": getattr(agent_config, "self_consistency", False),
+            },
+            model=model_name,
+            backend="duckdb",
+            total=report.total,
+            passed=report.passed,
+            failed=report.failed,
+            not_run=report.not_run,
+            pass_rate_pct=report.pass_rate_pct,
+            silent_wrong_count=report.silent_wrong_count,
+            first_attempt_passes=report.first_attempt_passes,
+            repair_passes=report.repair_passes,
+            median_latency_ms=median_lat,
+            p90_latency_ms=p90_lat,
+        )
+    )
 
     # Save JSON artifacts (both latest and dated/commit-tagged)
     data = {

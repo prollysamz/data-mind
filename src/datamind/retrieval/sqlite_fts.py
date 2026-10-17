@@ -90,9 +90,14 @@ class SQLiteFTSRetriever(Retriever):
             self.conn.commit()
         return chunk_id
 
-    def build_index(self) -> None:
-        """Ingest and index documents from source database (SUPPORT_TICKETS)."""
+    def build_index(self, force: bool = False) -> None:
+        """Ingest and index documents from source database (SUPPORT_TICKETS / OLIST_ORDER_REVIEWS)."""
         if not self.source_db_path or not Path(self.source_db_path).exists():
+            return
+
+        cur = self.conn.cursor()
+        cur.execute("SELECT count(*) FROM documents_meta")
+        if not force and cur.fetchone()[0] > 0:
             return
 
         duck_conn = duckdb.connect(self.source_db_path, read_only=True)

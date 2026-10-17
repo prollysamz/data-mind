@@ -1,0 +1,40 @@
+{
+  "model_path": "examples\\olist\\semantic_model.yaml",
+  "questions_path": "eval\\questions\\olist_dev.yaml",
+  "threshold": 0.8,
+  "max_similarity": 0.1632,
+  "passed": true,
+  "violations_count": 0,
+  "top_matches": [
+    {
+      "eval_id": "olist_dev_18",
+      "similarity": 0.1632,
+      "training_question": "What is the average freight delivery fee for items in the watches gifts category?",
+      "eval_question": "What is the average number of items per delivered order?"
+    },
+    {
+      "eval_id": "olist_dev_16",
+      "similarity": 0.15,
+      "training_question": "How many customer orders were canceled across all records?",
+      "eval_question": "How many customer reviews gave the maximum score of 5 stars?"
+    },
+    {
+      "eval_id": "olist_dev_17",
+      "similarity": 0.15,
+      "training_question": "How many customer orders were canceled across all records?",
+      "eval_question": "How many customer reviews gave the lowest score of 1 star?"
+    },
+    {
+      "eval_id": "olist_dev_06",
+      "similarity": 0.1376,
+      "training_question": "How many customer orders were canceled across all records?",
+      "eval_question": "How many distinct individual customers placed delivered orders?"
+    },
+    {
+      "eval_id": "olist_dev_12",
+      "similarity": 0.125,
+      "training_question": "How many customer orders were canceled across all records?",
+      "eval_question": "How many delivered orders arrived after the estimated delivery date?"
+    }
+  ]
+}

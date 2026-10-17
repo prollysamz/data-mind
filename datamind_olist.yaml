@@ -17,6 +17,11 @@ agent:
   max_steps: 6
   max_sql_repairs: 2
   max_tokens_per_question: 32768
+  schema_pruning: true
+  dynamic_few_shot: true
+  execution_guided_repair: true
+  structured_query_lane: true
+  self_consistency: false
 
 llm:
   base_url: ${LLM_BASE_URL:-http://localhost:11434/v1}
