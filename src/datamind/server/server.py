@@ -72,13 +72,18 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 }
                 for t in semantic_model.tables
             ]
-            sample_questions = [
-                "Which products experienced the largest month-over-month revenue decline?",
-                "Which products had revenue decline and what were customer complaints about them?",
-                "What is the total sales revenue across all products in the database?",
-                "What is the average order line amount across all sales?",
-                "How many critical priority support tickets were logged?",
-            ]
+            # Generate sample questions directly from semantic model verified queries
+            if getattr(semantic_model, "verified_queries", None):
+                sample_questions = [vq.question for vq in semantic_model.verified_queries if vq.question]
+            else:
+                sample_questions = [
+                    f"What is the total count of records in {t.name}?" for t in semantic_model.tables[:3]
+                ]
+
+            from datamind.llm.budget import CostGuard
+            is_local = CostGuard.is_local_endpoint(self.config.llm.base_url)
+            privacy_indicator = "Local Only (Private)" if is_local else "Cloud Endpoint (Metered)"
+
             self._send_json(200, {
                 "backend": self.backend_name,
                 "model_name": self.orchestrator.llm_client.config.orchestrator_model,
@@ -87,6 +92,8 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 "currency_symbol": getattr(semantic_model, "currency_symbol", "$"),
                 "tables": tables,
                 "sample_questions": sample_questions,
+                "is_local": is_local,
+                "privacy_indicator": privacy_indicator,
             })
             return
 
@@ -222,15 +229,97 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         is_truncated = getattr(result, "is_truncated", False) or getattr(result.citation_report, "is_truncated", False)
         finish_reason = getattr(result, "finish_reason", None)
 
+        # 1. Deterministic Chart Planning
+        chart_data = None
+        if result.evidence_store.queries:
+            from datamind.trust.chart_planner import plan_chart
+            # Plan chart using primary analytical query
+            primary_query = result.evidence_store.queries[0]
+            chart_spec = plan_chart(primary_query, semantic_model=self.orchestrator.semantic_model)
+            chart_data = chart_spec.model_dump()
+
+        # 2. Three-State Trust Badge Computation
+        discrepancies = result.citation_report.discrepancy_count
+        invalids = result.citation_report.invalid_count
+        unsupported = result.citation_report.unsupported_claims_count
+        ans_lower = (result.answer or "").lower()
+
+        is_refusal = any(k in ans_lower for k in ["does not contain", "not available", "do not have", "cannot answer", "no table"])
+        is_clarification = ("?" in (result.answer or "")) and any(k in ans_lower for k in ["clarify", "specify", "which", "what specific", "mean by"])
+        is_partial = any(k in ans_lower for k in ["sub-question is unanswered", "partially answered", "search failed", "unable to retrieve"]) or is_truncated
+
+        response_type = "answer"
+        if is_refusal:
+            response_type = "refusal"
+            badge_state = "REFUSAL"
+            badge_label = "Schema Boundary (Refusal)"
+            badge_reason = "The requested metrics or entities do not exist in the configured schema."
+            badge_color = "#f59e0b"
+        elif is_clarification:
+            response_type = "clarification"
+            badge_state = "CLARIFICATION"
+            badge_label = "Clarification Requested"
+            badge_reason = "The query is ambiguous or underspecified."
+            badge_color = "#a855f7"
+        elif discrepancies > 0 or invalids > 0 or unsupported > 0:
+            badge_state = "NOT_VERIFIED"
+            badge_label = "Not Verified"
+            failing_items = []
+            if discrepancies > 0:
+                failing_items.append(f"{discrepancies} number discrepancy")
+            if invalids > 0:
+                failing_items.append(f"{invalids} invalid citation")
+            if unsupported > 0:
+                failing_items.append(f"{unsupported} unsupported claim")
+            badge_reason = f"Verification failed: {', '.join(failing_items)}."
+            badge_color = "#ef4444"
+        elif is_partial or is_truncated:
+            badge_state = "PARTIALLY_VERIFIED"
+            badge_label = "Partially Verified"
+            badge_reason = "Answer contains truncated output or partial tool coverage."
+            badge_color = "#eab308"
+        elif is_clean and overall_success:
+            badge_state = "VERIFIED"
+            badge_label = "Verified"
+            badge_reason = "Every number and citation was verified against database evidence."
+            badge_color = "#10b981"
+        else:
+            badge_state = "PARTIALLY_VERIFIED"
+            badge_label = "Partially Verified"
+            badge_reason = "Completed with partial verification."
+            badge_color = "#eab308"
+
+        # 3. Under the Hood Metadata
+        under_the_hood = {
+            "model": self.orchestrator.llm_client.config.orchestrator_model,
+            "backend": self.backend_name,
+            "dialect": "duckdb" if self.backend_name == "duckdb" else "snowflake",
+            "turns": result.turns,
+            "queries_executed": len(result.evidence_store.queries),
+            "documents_retrieved": len(result.evidence_store.chunks),
+            "is_truncated": is_truncated,
+            "finish_reason": finish_reason,
+            "verification_status": badge_state,
+        }
+
         response_data = {
             "question": result.question,
             "answer": result.answer,
+            "response_type": response_type,
             "success": overall_success and not is_truncated,
             "turns": result.turns,
             "error": result.error,
             "backend": self.backend_name,
             "is_truncated": is_truncated,
             "finish_reason": finish_reason,
+            "trust_badge": {
+                "state": badge_state,
+                "label": badge_label,
+                "reason": badge_reason,
+                "color": badge_color,
+            },
+            "chart": chart_data,
+            "under_the_hood": under_the_hood,
             "citation_report": {
                 "is_clean": is_clean and not is_truncated,
                 "is_truncated": is_truncated,

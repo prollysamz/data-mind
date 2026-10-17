@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DataMind — Verifiable AI Data Agent</title>
-  <meta name="description" content="Talk to your data with verifiable citations, deterministic numeric checks, and Snowflake/DuckDB execution.">
+  <meta name="description" content="Talk to your data with verifiable citations, deterministic numeric checks, interactive SVG charts, and Snowflake/DuckDB execution.">
   <!-- 100% Local Self-Contained System Fonts (No CDN / No External Tracking) -->
   <link rel="stylesheet" href="/index.css">
 </head>
@@ -16,7 +16,7 @@
   <!-- Header -->
   <header class="app-header">
     <div class="header-brand">
-      <div class="brand-logo">
+      <div class="brand-logo" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9"/>
           <path d="M12 3v18"/>
@@ -31,16 +31,29 @@
     </div>
 
     <div class="header-badges">
-      <div class="status-badge" id="backendBadge">
+      <div class="status-badge" id="backendBadge" title="Active Database Backend">
         <span class="status-dot"></span>
         <span id="backendName">Connecting...</span>
       </div>
-      <div class="status-badge model-badge" id="modelBadge">
+      <div class="status-badge model-badge" id="modelBadge" title="Configured Model">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
         </svg>
         <span id="modelName">Local Model</span>
       </div>
+      <div class="status-badge privacy-badge" id="privacyBadge" title="Privacy Guard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span id="privacyStatus">Local Only (Private)</span>
+      </div>
+      <button type="button" id="newChatBtn" class="btn-secondary-sm" title="Start a fresh conversation thread">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+          <path d="M12 5v14M5 12h14"></path>
+        </svg>
+        New Thread
+      </button>
       <label class="toggle-container" title="Strict Mode: Fails answers with any unverified numbers or fake citations">
         <input type="checkbox" id="strictModeToggle" checked>
         <span class="toggle-slider"></span>
@@ -55,7 +68,7 @@
     <section class="search-section">
       <form id="askForm" class="ask-box">
         <div class="input-wrapper">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon" aria-hidden="true">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
@@ -65,11 +78,12 @@
             placeholder="Ask a question about your revenue, sales trends, products, or customer support..."
             autocomplete="off"
             required
+            aria-label="Natural language data query"
           />
         </div>
-        <button type="submit" id="submitBtn" class="btn-primary">
+        <button type="submit" id="submitBtn" class="btn-primary" aria-label="Run Query">
           <span class="btn-text">Run Query</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="send-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="send-icon" aria-hidden="true">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
@@ -77,30 +91,38 @@
         </button>
       </form>
 
-      <!-- Suggestion Chips -->
+      <!-- Dynamic Suggestion Chips from Verified Queries -->
       <div class="chips-row" id="chipsContainer">
         <span class="chips-label">Sample Questions:</span>
-        <button class="chip" data-q="Which products experienced the largest month-over-month revenue decline?">MoM Revenue Decline</button>
-        <button class="chip" data-q="Which products experienced the largest month-over-month revenue decline and what were customer complaints about that product?">Mixed: Sales &amp; Tickets</button>
-        <button class="chip" data-q="What is the total sales revenue across all products in the database?">Total Revenue</button>
-        <button class="chip" data-q="What is the average order line amount across all sales?">Average Order Value</button>
-        <button class="chip" data-q="How many critical priority support tickets were logged?">Critical Tickets</button>
+        <div id="chipsList" class="chips-list"></div>
       </div>
     </section>
 
-    <!-- Interactive Loading State Indicator -->
-    <section class="loading-card" id="loadingState" style="display: none;">
+    <!-- Multi-stage Interactive Loading Indicator -->
+    <section class="loading-card" id="loadingState" style="display: none;" aria-live="polite">
       <div class="loading-pulse-ring"></div>
       <div class="loading-text-wrap">
-        <h3 class="loading-title">Synthesizing Answer &amp; Verifying Ground Truth...</h3>
-        <p class="loading-subtitle">Planning SQL, inspecting schema guardrails, and auditing citations</p>
+        <div class="loading-header-row">
+          <h3 class="loading-title" id="loadingTitle">Processing Query...</h3>
+          <span class="loading-timer" id="elapsedTimer">0.0s</span>
+        </div>
+        <div class="loading-stages">
+          <span class="stage-pill active" id="stagePlanning">1. Planning</span>
+          <span class="stage-arrow">&rarr;</span>
+          <span class="stage-pill" id="stageGuard">2. SQL Guard</span>
+          <span class="stage-arrow">&rarr;</span>
+          <span class="stage-pill" id="stageExec">3. Executing</span>
+          <span class="stage-arrow">&rarr;</span>
+          <span class="stage-pill" id="stageAudit">4. Verifying</span>
+        </div>
       </div>
+      <button type="button" id="cancelQueryBtn" class="btn-cancel" title="Cancel in-flight query">Cancel</button>
     </section>
 
-    <!-- Error & Refusal Callout State -->
-    <section class="error-card" id="errorState" style="display: none;">
-      <div class="error-icon-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <!-- Error & Notice Callout State -->
+    <section class="error-card" id="errorState" style="display: none;" role="alert">
+      <div class="error-icon-box" id="errorIconBox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="10"></circle>
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -109,52 +131,102 @@
       <div class="error-body">
         <h3 class="error-title" id="errorTitle">Notice</h3>
         <p class="error-message" id="errorMessage"></p>
+        <div id="clarificationButtons" class="clarification-buttons" style="display: none;"></div>
       </div>
     </section>
 
-    <!-- Results Section -->
+    <!-- Conversation Thread Container (Previous Turns) -->
+    <div id="conversationThread" class="conversation-thread"></div>
+
+    <!-- Active Results Section -->
     <section class="results-container" id="resultsContainer" style="display: none;">
       <!-- Answer Header & Trust Card -->
       <div class="answer-card">
         <div class="answer-top-bar">
           <div class="question-echo" id="questionEcho"></div>
           <div class="trust-summary" id="trustSummary">
-            <!-- Dynamically populated badges -->
+            <!-- Dynamically populated 3-state badges -->
           </div>
+        </div>
+
+        <!-- Result Action Bar: CSV Download, Copy SQL, Copy Answer -->
+        <div class="result-actions-bar">
+          <button type="button" class="action-btn" id="copyAnswerBtn" title="Copy formatted answer with citations">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copy Answer
+          </button>
+          <button type="button" class="action-btn" id="copySqlBtn" title="Copy executed audited SQL query">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+            Copy SQL
+          </button>
+          <button type="button" class="action-btn" id="exportCsvBtn" title="Download result table as CSV (formula-injection escaped)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download CSV
+          </button>
+        </div>
+
+        <!-- Clarification quick-replies when question is ambiguous -->
+        <div id="clarifyCard" class="clarify-card" style="display: none;">
+          <h4 class="clarify-title">&#9432; Suggested Clarifications:</h4>
+          <div id="clarifyChips" class="clarify-chips"></div>
         </div>
 
         <!-- Markdown formatted answer -->
         <div class="answer-content" id="answerContent"></div>
       </div>
 
-      <!-- Visual Data Chart Container -->
+      <!-- Visual Data Chart Container (Deterministic SVG Renderer) -->
       <div class="chart-card" id="chartCard" style="display: none;">
         <div class="chart-header">
           <div class="chart-title-wrap">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon" aria-hidden="true">
               <line x1="18" y1="20" x2="18" y2="10"></line>
               <line x1="12" y1="20" x2="12" y2="4"></line>
               <line x1="6" y1="20" x2="6" y2="14"></line>
             </svg>
             <h3 class="chart-title" id="chartTitle">Data Visualization</h3>
           </div>
-          <span class="chart-badge">Automated Chart</span>
+          <span class="chart-badge" id="chartTypeBadge">SVG Chart</span>
         </div>
-        <div class="chart-body" id="chartBody"></div>
+        <div class="chart-body" id="chartBody" role="img" aria-label="Query result chart"></div>
+        <div class="chart-footer-note" id="chartNote" style="display: none;"></div>
       </div>
 
-      <!-- Evidence Inspector Panels -->
+      <!-- Under The Hood Drawer & Evidence Inspector Panels -->
       <div class="inspector-card">
-        <div class="inspector-tabs">
-          <button class="tab-btn active" data-tab="sqlTab">
+        <div class="under-hood-header">
+          <div class="hood-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span>Under The Hood Evidence &amp; Provenance</span>
+          </div>
+          <div class="hood-meta" id="hoodMeta">
+            <!-- Dynamic stats: Dialect, Rows, Latency, Model, Tokens -->
+          </div>
+        </div>
+
+        <div class="inspector-tabs" role="tablist">
+          <button class="tab-btn active" data-tab="sqlTab" role="tab" aria-selected="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
               <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
               <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
               <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
             </svg>
-            Executed SQL Queries (<span id="sqlCount">0</span>)
+            Executed SQL &amp; Rows (<span id="sqlCount">0</span>)
           </button>
-          <button class="tab-btn" data-tab="docsTab">
+          <button class="tab-btn" data-tab="docsTab" role="tab" aria-selected="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
@@ -164,7 +236,7 @@
             </svg>
             Retrieved Documents (<span id="docsCount">0</span>)
           </button>
-          <button class="tab-btn" data-tab="numericTab">
+          <button class="tab-btn" data-tab="numericTab" role="tab" aria-selected="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
@@ -173,17 +245,17 @@
         </div>
 
         <!-- Tab 1: SQL Queries -->
-        <div class="tab-pane active" id="sqlTab">
+        <div class="tab-pane active" id="sqlTab" role="tabpanel">
           <div id="queriesList"></div>
         </div>
 
         <!-- Tab 2: Document Chunks -->
-        <div class="tab-pane" id="docsTab">
+        <div class="tab-pane" id="docsTab" role="tabpanel">
           <div id="docsList"></div>
         </div>
 
         <!-- Tab 3: Numeric Reconciliation -->
-        <div class="tab-pane" id="numericTab">
+        <div class="tab-pane" id="numericTab" role="tabpanel">
           <div id="numericList"></div>
         </div>
       </div>
@@ -192,23 +264,23 @@
     <!-- Empty State -->
     <section class="empty-state" id="emptyState">
       <div class="empty-icon-wrapper">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="empty-hero-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="empty-hero-icon" aria-hidden="true">
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
           <line x1="8" y1="21" x2="16" y2="21"></line>
           <line x1="12" y1="17" x2="12" y2="21"></line>
         </svg>
       </div>
       <h2>Every Claim Grounded &bull; Zero Hallucination</h2>
-      <p>DataMind executes audited SQL queries and BM25 document retrievals to answer business questions. Click on any citation tag like <code>[[Q1:R1]]</code> to inspect the exact underlying database row.</p>
+      <p>DataMind executes audited SQL queries and BM25 document retrievals to answer business questions. Click on any citation tag like <code>[[Q1:R1]]</code> or chart point to inspect the exact underlying database row.</p>
     </section>
   </main>
 
   <!-- Citation Detail Modal -->
-  <div class="modal-overlay" id="citationModal">
+  <div class="modal-overlay" id="citationModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modalTitle">Evidence Citation</h3>
-        <button class="modal-close" id="modalClose">&times;</button>
+        <button class="modal-close" id="modalClose" aria-label="Close modal">&times;</button>
       </div>
       <div class="modal-body" id="modalBody"></div>
     </div>

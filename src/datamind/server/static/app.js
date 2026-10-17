@@ -1,22 +1,20 @@
-// DataMind Frontend Application Logic
+// DataMind Frontend Application Logic & Dependency-Free SVG Chart Renderer (WP2)
 
 let currentResult = null;
+let currentAbortController = null;
+let queryTimerInterval = null;
+let queryStartTime = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
   initModal();
+  initActions();
   await loadConfig();
 
   const form = document.getElementById('askForm');
   const input = document.getElementById('questionInput');
-  const chips = document.querySelectorAll('.chip');
-
-  chips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      input.value = chip.getAttribute('data-q');
-      form.dispatchEvent(new Event('submit'));
-    });
-  });
+  const newChatBtn = document.getElementById('newChatBtn');
+  const cancelBtn = document.getElementById('cancelQueryBtn');
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -24,6 +22,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!query) return;
     await executeQuery(query);
   });
+
+  if (newChatBtn) {
+    newChatBtn.addEventListener('click', () => {
+      resetConversation();
+    });
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      if (currentAbortController) {
+        currentAbortController.abort();
+      }
+    });
+  }
 });
 
 async function loadConfig() {
@@ -33,9 +45,86 @@ async function loadConfig() {
     const data = await res.json();
     document.getElementById('backendName').textContent = data.backend.toUpperCase();
     document.getElementById('modelName').textContent = data.model_name;
+
+    const privacyEl = document.getElementById('privacyStatus');
+    if (privacyEl && data.privacy_indicator) {
+      privacyEl.textContent = data.privacy_indicator;
+    }
+
+    // Dynamic Sample Questions from Semantic Model
+    const chipsList = document.getElementById('chipsList');
+    if (chipsList && data.sample_questions && data.sample_questions.length) {
+      chipsList.innerHTML = '';
+      data.sample_questions.forEach(q => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip';
+        btn.textContent = q.length > 55 ? q.substring(0, 52) + '...' : q;
+        btn.title = q;
+        btn.setAttribute('data-q', q);
+        btn.addEventListener('click', () => {
+          document.getElementById('questionInput').value = q;
+          document.getElementById('askForm').dispatchEvent(new Event('submit'));
+        });
+        chipsList.appendChild(btn);
+      });
+    }
   } catch (err) {
     console.error('Failed to load config:', err);
     document.getElementById('backendName').textContent = 'OFFLINE';
+  }
+}
+
+function resetConversation() {
+  currentResult = null;
+  document.getElementById('questionInput').value = '';
+  document.getElementById('resultsContainer').style.display = 'none';
+  document.getElementById('errorState').style.display = 'none';
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  document.getElementById('conversationThread').innerHTML = '';
+}
+
+function startTimer() {
+  queryStartTime = performance.now();
+  const timerEl = document.getElementById('elapsedTimer');
+  const stagePlanning = document.getElementById('stagePlanning');
+  const stageGuard = document.getElementById('stageGuard');
+  const stageExec = document.getElementById('stageExec');
+  const stageAudit = document.getElementById('stageAudit');
+
+  // Reset stages
+  [stagePlanning, stageGuard, stageExec, stageAudit].forEach(s => {
+    if (s) {
+      s.className = 'stage-pill';
+    }
+  });
+  if (stagePlanning) stagePlanning.className = 'stage-pill active';
+
+  queryTimerInterval = setInterval(() => {
+    const elapsedSec = ((performance.now() - queryStartTime) / 1000).toFixed(1);
+    if (timerEl) timerEl.textContent = `${elapsedSec}s`;
+
+    // Progress simulation through real lifecycle stages
+    if (elapsedSec > 0.8 && stageGuard && !stageGuard.classList.contains('active') && !stageGuard.classList.contains('done')) {
+      if (stagePlanning) stagePlanning.className = 'stage-pill done';
+      stageGuard.className = 'stage-pill active';
+    }
+    if (elapsedSec > 1.8 && stageExec && !stageExec.classList.contains('active') && !stageExec.classList.contains('done')) {
+      if (stageGuard) stageGuard.className = 'stage-pill done';
+      stageExec.className = 'stage-pill active';
+    }
+    if (elapsedSec > 3.2 && stageAudit && !stageAudit.classList.contains('active') && !stageAudit.classList.contains('done')) {
+      if (stageExec) stageExec.className = 'stage-pill done';
+      stageAudit.className = 'stage-pill active';
+    }
+  }, 100);
+}
+
+function stopTimer() {
+  if (queryTimerInterval) {
+    clearInterval(queryTimerInterval);
+    queryTimerInterval = null;
   }
 }
 
@@ -55,11 +144,13 @@ async function executeQuery(question) {
   sendIcon.style.display = 'none';
   btnText.textContent = 'Analyzing...';
 
-  // Toggle loading UI states
   if (emptyState) emptyState.style.display = 'none';
   if (resultsContainer) resultsContainer.style.display = 'none';
   if (errorState) errorState.style.display = 'none';
   if (loadingState) loadingState.style.display = 'flex';
+
+  currentAbortController = new AbortController();
+  startTimer();
 
   try {
     const res = await fetch('/api/ask', {
@@ -69,13 +160,14 @@ async function executeQuery(question) {
         question: question,
         permissive: !isStrict,
       }),
+      signal: currentAbortController.signal,
     });
 
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
       if (data.error_type === 'budget_exceeded') {
-        const err = new Error(data.message || data.error || 'Cloud or session budget ceiling reached.');
+        const err = new Error(data.message || data.error || 'Budget limit reached.');
         err.isBudget = true;
         throw err;
       }
@@ -90,11 +182,18 @@ async function executeQuery(question) {
   } catch (err) {
     if (loadingState) loadingState.style.display = 'none';
     if (errorState) {
-      document.getElementById('errorTitle').textContent = err.isBudget ? 'Budget Limit Reached' : 'Query Execution Failed';
-      document.getElementById('errorMessage').textContent = err.message || 'An unexpected error occurred during execution.';
+      if (err.name === 'AbortError') {
+        document.getElementById('errorTitle').textContent = 'Query Cancelled';
+        document.getElementById('errorMessage').textContent = 'Query execution was cancelled by user.';
+      } else {
+        document.getElementById('errorTitle').textContent = err.isBudget ? 'Budget Limit Reached' : 'Query Execution Failed';
+        document.getElementById('errorMessage').textContent = err.message || 'An unexpected error occurred during execution.';
+      }
       errorState.style.display = 'flex';
     }
   } finally {
+    stopTimer();
+    currentAbortController = null;
     submitBtn.disabled = false;
     btnSpinner.style.display = 'none';
     sendIcon.style.display = 'block';
@@ -105,89 +204,83 @@ async function executeQuery(question) {
 function renderResult(data) {
   document.getElementById('questionEcho').textContent = data.question;
 
-  // Render Trust Badges
+  // Render Three-State Trust Badges
   const trustDiv = document.getElementById('trustSummary');
   trustDiv.innerHTML = '';
 
-  const isClean = data.citation_report && data.citation_report.is_clean;
-  const verifiedCount = data.citation_report ? data.citation_report.verified_numbers_count : 0;
-  const discrepancies = data.citation_report ? data.citation_report.discrepancy_count : 0;
-  const unsupported = data.citation_report ? data.citation_report.unsupported_claims_count : 0;
+  const badgeInfo = data.trust_badge || {};
+  const badgeState = badgeInfo.state || 'VERIFIED';
 
-  // Check for Refusal or Schema limitation
-  const isTruncated = data.is_truncated || (data.citation_report && data.citation_report.is_truncated) || data.finish_reason === 'length';
-  const ansLower = (data.answer || '').toLowerCase();
-  const isRefusal = ansLower.includes('does not contain') || ansLower.includes('not available') || ansLower.includes('do not have') || ansLower.includes('cannot answer') || ansLower.includes('no table');
-  const isClarification = (data.answer || '').includes('?') && (ansLower.includes('clarify') || ansLower.includes('specify') || ansLower.includes('which'));
-  const isPartial = (
-    ansLower.includes('search failed') ||
-    ansLower.includes('cannot report') ||
-    ansLower.includes('unable to retrieve') ||
-    ansLower.includes('partially answered') ||
-    ansLower.includes('could not find customer complaints') ||
-    ansLower.includes('sub-question is unanswered') ||
-    ansLower.includes('retrieval failed')
-  );
+  const mainBadge = document.createElement('span');
+  mainBadge.className = 'trust-badge';
 
-  if (isTruncated) {
-    const truncBadge = document.createElement('span');
-    truncBadge.className = 'trust-badge badge-clean-fail';
-    truncBadge.style.background = 'rgba(239, 68, 68, 0.15)';
-    truncBadge.style.color = '#ef4444';
-    truncBadge.style.border = '1px solid rgba(239, 68, 68, 0.35)';
-    truncBadge.innerHTML = '&#9888; Partially Answered (Token Limit Truncated)';
-    trustDiv.appendChild(truncBadge);
-  } else if (isRefusal) {
-    const refBadge = document.createElement('span');
-    refBadge.className = 'trust-badge';
-    refBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-    refBadge.style.color = '#f59e0b';
-    refBadge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
-    refBadge.innerHTML = '&#9888; Refusal: Schema Boundary';
-    trustDiv.appendChild(refBadge);
-  } else if (isClarification) {
-    const clarBadge = document.createElement('span');
-    clarBadge.className = 'trust-badge';
-    clarBadge.style.background = 'rgba(168, 85, 247, 0.15)';
-    clarBadge.style.color = '#a855f7';
-    clarBadge.style.border = '1px solid rgba(168, 85, 247, 0.35)';
-    clarBadge.innerHTML = '&#9432; Clarification Requested';
-    trustDiv.appendChild(clarBadge);
-  } else if (isPartial) {
-    const partBadge = document.createElement('span');
-    partBadge.className = 'trust-badge';
-    partBadge.style.background = 'rgba(234, 179, 8, 0.15)';
-    partBadge.style.color = '#eab308';
-    partBadge.style.border = '1px solid rgba(234, 179, 8, 0.35)';
-    partBadge.innerHTML = '&#9888; Partially Answered (Tool Limitation)';
-    trustDiv.appendChild(partBadge);
-  } else if (!isClean || discrepancies > 0 || unsupported > 0) {
-    const failBadge = document.createElement('span');
-    failBadge.className = 'trust-badge badge-clean-fail';
-    failBadge.innerHTML = '&#9888; Verification Discrepancy';
-    trustDiv.appendChild(failBadge);
-  } else {
-    const cleanBadge = document.createElement('span');
-    cleanBadge.className = 'trust-badge badge-clean-pass';
-    cleanBadge.innerHTML = '&#10003; 100% Grounded & Verified';
-    trustDiv.appendChild(cleanBadge);
+  if (badgeState === 'VERIFIED') {
+    mainBadge.classList.add('badge-clean-pass');
+    mainBadge.innerHTML = `&#10003; ${badgeInfo.label || 'Verified Grounded'}`;
+  } else if (badgeState === 'PARTIALLY_VERIFIED') {
+    mainBadge.style.background = 'rgba(234, 179, 8, 0.15)';
+    mainBadge.style.color = '#eab308';
+    mainBadge.style.border = '1px solid rgba(234, 179, 8, 0.4)';
+    mainBadge.innerHTML = `&#9888; ${badgeInfo.label || 'Partially Verified'}`;
+  } else if (badgeState === 'NOT_VERIFIED') {
+    mainBadge.classList.add('badge-clean-fail');
+    mainBadge.innerHTML = `&#9888; ${badgeInfo.label || 'Not Verified'}`;
+  } else if (badgeState === 'REFUSAL') {
+    mainBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+    mainBadge.style.color = '#f59e0b';
+    mainBadge.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+    mainBadge.innerHTML = `&#9888; ${badgeInfo.label || 'Schema Boundary'}`;
+  } else if (badgeState === 'CLARIFICATION') {
+    mainBadge.style.background = 'rgba(168, 85, 247, 0.15)';
+    mainBadge.style.color = '#a855f7';
+    mainBadge.style.border = '1px solid rgba(168, 85, 247, 0.4)';
+    mainBadge.innerHTML = `&#9432; ${badgeInfo.label || 'Clarification'}`;
   }
+  trustDiv.appendChild(mainBadge);
 
-  if (verifiedCount > 0) {
+  const citReport = data.citation_report || {};
+  if (citReport.verified_numbers_count > 0) {
     const numBadge = document.createElement('span');
     numBadge.className = 'trust-badge badge-num-verified';
-    numBadge.textContent = `${verifiedCount} Numbers Verified`;
+    numBadge.textContent = `${citReport.verified_numbers_count} Numbers Verified`;
     trustDiv.appendChild(numBadge);
   }
 
-  if (discrepancies > 0) {
+  if (citReport.discrepancy_count > 0) {
     const discBadge = document.createElement('span');
     discBadge.className = 'trust-badge badge-clean-fail';
-    discBadge.textContent = `${discrepancies} Discrepancies`;
+    discBadge.textContent = `${citReport.discrepancy_count} Discrepancies`;
     trustDiv.appendChild(discBadge);
   }
 
-  // Render Answer with Interactive Citations
+  // Handle Clarification state quick-replies
+  const clarifyCard = document.getElementById('clarifyCard');
+  const clarifyChips = document.getElementById('clarifyChips');
+  if (data.response_type === 'clarification') {
+    clarifyCard.style.display = 'block';
+    clarifyChips.innerHTML = '';
+    const suggestions = [
+      'Total revenue across all products',
+      'Month-over-month revenue decline',
+      'Customer support tickets by priority',
+      'Average order line amount',
+    ];
+    suggestions.forEach(s => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'clarify-chip';
+      btn.textContent = s;
+      btn.addEventListener('click', () => {
+        document.getElementById('questionInput').value = s;
+        document.getElementById('askForm').dispatchEvent(new Event('submit'));
+      });
+      clarifyChips.appendChild(btn);
+    });
+  } else {
+    clarifyCard.style.display = 'none';
+  }
+
+  // Render Answer Markdown
   const answerContent = document.getElementById('answerContent');
   answerContent.innerHTML = formatMarkdownWithCitations(data.answer, data);
 
@@ -200,8 +293,11 @@ function renderResult(data) {
     });
   });
 
-  // Render Visual Chart if numeric data is available
-  renderChart(data);
+  // Render SVG Chart
+  renderChart(data.chart);
+
+  // Render Under The Hood Metadata
+  renderUnderTheHood(data);
 
   // Render Inspector Tab 1: SQL Queries
   const queries = (data.evidence && data.evidence.queries) || [];
@@ -214,106 +310,356 @@ function renderResult(data) {
   renderDocs(docs);
 
   // Render Inspector Tab 3: Numeric Checks
-  const checks = (data.citation_report && data.citation_report.numeric_checks) || [];
+  const checks = (citReport.numeric_checks) || [];
   document.getElementById('numChecksCount').textContent = checks.length;
   renderNumericChecks(checks);
 }
 
-function renderChart(data) {
+// -------------------------------------------------------------
+// Pure SVG Dependency-Free Chart Renderer (Bar, Horizontal Bar, Line, KPI)
+// -------------------------------------------------------------
+function renderChart(chartSpec) {
   const chartCard = document.getElementById('chartCard');
   const chartBody = document.getElementById('chartBody');
+  const chartTitle = document.getElementById('chartTitle');
+  const chartBadge = document.getElementById('chartTypeBadge');
+  const chartNote = document.getElementById('chartNote');
+
   chartBody.innerHTML = '';
+  chartNote.style.display = 'none';
 
-  const queries = (data.evidence && data.evidence.queries) || [];
-  if (!queries.length) {
+  if (!chartSpec || chartSpec.type === 'table' || !chartSpec.points || !chartSpec.points.length) {
     chartCard.style.display = 'none';
     return;
   }
-
-  // Look for query with at least 2 rows and columns suitable for charting
-  let targetQuery = null;
-  for (let q of queries) {
-    if (q.result && q.result.rows && q.result.rows.length >= 2) {
-      targetQuery = q;
-      break;
-    }
-  }
-
-  if (!targetQuery) {
-    chartCard.style.display = 'none';
-    return;
-  }
-
-  const cols = targetQuery.result.columns || [];
-  const rows = targetQuery.result.rows || [];
-
-  function parseNum(v) {
-    if (typeof v === 'number') return v;
-    if (v === null || v === undefined) return NaN;
-    const cleaned = String(v).replace(/[$,£€]/g, '').trim();
-    if (cleaned === '') return NaN;
-    return Number(cleaned);
-  }
-
-  // Find a string/label column and a numeric column (prioritize last numeric column like decline or sales)
-  let labelColIdx = 0;
-  let valColIdx = -1;
-
-  for (let c = cols.length - 1; c >= 0; c--) {
-    const num = parseNum(rows[0][c]);
-    if (!isNaN(num)) {
-      valColIdx = c;
-      break;
-    }
-  }
-
-  if (valColIdx === -1) {
-    chartCard.style.display = 'none';
-    return;
-  }
-
-  // Find label column (first non-numeric column)
-  for (let c = 0; c < cols.length; c++) {
-    if (isNaN(parseNum(rows[0][c]))) {
-      labelColIdx = c;
-      break;
-    }
-  }
-
-  // Extract top items (up to 6)
-  const items = rows.slice(0, 6).map(r => ({
-    label: String(r[labelColIdx] ?? `Item`),
-    value: parseNum(r[valColIdx]),
-  })).filter(item => !isNaN(item.value));
-
-  if (!items.length) {
-    chartCard.style.display = 'none';
-    return;
-  }
-
-  const maxVal = Math.max(...items.map(it => Math.abs(it.value)), 1);
-
-  document.getElementById('chartTitle').textContent = `Metric Comparison: ${cols[valColIdx] || 'Value'} by ${cols[labelColIdx] || 'Dimension'}`;
-
-  items.forEach(it => {
-    const pct = Math.min(100, Math.max(5, Math.round((Math.abs(it.value) / maxVal) * 100)));
-    const formattedVal = it.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-
-    const row = document.createElement('div');
-    row.className = 'chart-bar-row';
-    row.innerHTML = `
-      <div class="chart-bar-meta">
-        <span class="chart-bar-label">${it.label}</span>
-        <span class="chart-bar-value">${formattedVal}</span>
-      </div>
-      <div class="chart-bar-track">
-        <div class="chart-bar-fill" style="width: ${pct}%"></div>
-      </div>
-    `;
-    chartBody.appendChild(row);
-  });
 
   chartCard.style.display = 'flex';
+  chartTitle.textContent = chartSpec.title || 'Data Visualization';
+  chartBadge.textContent = (chartSpec.type || 'chart').replace('_', ' ').toUpperCase();
+
+  if (chartSpec.alt_text) {
+    chartBody.setAttribute('aria-label', chartSpec.alt_text);
+  }
+
+  if (chartSpec.note) {
+    chartNote.textContent = chartSpec.note;
+    chartNote.style.display = 'block';
+  }
+
+  try {
+    if (chartSpec.type === 'kpi') {
+      renderKpiChart(chartBody, chartSpec);
+    } else if (chartSpec.type === 'horizontal_bar') {
+      renderHorizontalBarChart(chartBody, chartSpec);
+    } else if (chartSpec.type === 'diverging_bar') {
+      renderDivergingBarChart(chartBody, chartSpec);
+    } else if (chartSpec.type === 'line') {
+      renderLineChart(chartBody, chartSpec);
+    } else {
+      chartCard.style.display = 'none';
+    }
+  } catch (err) {
+    console.warn('SVG chart render fallback to table:', err);
+    chartBody.innerHTML = '<p class="chart-footer-note">Detailed tabular rows available in the inspector table below.</p>';
+  }
+}
+
+function renderKpiChart(container, spec) {
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-kpi-container';
+  wrap.innerHTML = `
+    <div class="chart-kpi-value">${spec.kpi_value || '0'}</div>
+    <div class="chart-kpi-label">${spec.kpi_label || spec.title}</div>
+  `;
+  container.appendChild(wrap);
+}
+
+function renderHorizontalBarChart(container, spec) {
+  const points = spec.points || [];
+  if (!points.length) return;
+
+  const width = 760;
+  const barHeight = 24;
+  const barGap = 12;
+  const labelWidth = 140;
+  const valueWidth = 100;
+  const plotWidth = width - labelWidth - valueWidth;
+  const height = points.length * (barHeight + barGap) + 30;
+
+  const maxVal = Math.max(...points.map(p => Number(p.y) || 0), 1);
+
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img">`;
+
+  points.forEach((p, idx) => {
+    const y = idx * (barHeight + barGap) + 10;
+    const val = Number(p.y) || 0;
+    const barW = Math.max(4, (val / maxVal) * plotWidth);
+    const label = String(p.x || '');
+    const cleanLabel = label.length > 18 ? label.substring(0, 16) + '...' : label;
+    const formattedVal = val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+    svg += `
+      <g class="chart-bar-group" data-row-id="${p.row_id}" tabindex="0" role="button" aria-label="${label}: ${formattedVal}">
+        <title>${label}: ${formattedVal} (Click to inspect row ${p.row_id})</title>
+        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${cleanLabel}</text>
+        <rect x="${labelWidth}" y="${y}" width="${plotWidth}" height="${barHeight}" rx="4" fill="rgba(255,255,255,0.03)" />
+        <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="url(#barGrad)" class="chart-bar-rect" data-row-id="${p.row_id}" />
+        <text x="${labelWidth + barW + 10}" y="${y + 16}" class="chart-bar-value" fill="#38bdf8">${formattedVal}</text>
+      </g>
+    `;
+  });
+
+  svg += `
+    <defs>
+      <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#6366f1" />
+        <stop offset="100%" stop-color="#38bdf8" />
+      </linearGradient>
+    </defs>
+  </svg>`;
+
+  container.innerHTML = svg;
+  bindChartClicks(container);
+}
+
+function renderDivergingBarChart(container, spec) {
+  const points = spec.points || [];
+  if (!points.length) return;
+
+  const width = 760;
+  const barHeight = 24;
+  const barGap = 12;
+  const labelWidth = 140;
+  const plotWidth = width - labelWidth - 40;
+  const height = points.length * (barHeight + barGap) + 30;
+
+  const maxAbs = Math.max(...points.map(p => Math.abs(Number(p.y) || 0)), 1);
+  const midX = labelWidth + plotWidth / 2;
+
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img">`;
+  svg += `<line x1="${midX}" y1="5" x2="${midX}" y2="${height - 10}" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" />`;
+
+  points.forEach((p, idx) => {
+    const y = idx * (barHeight + barGap) + 10;
+    const val = Number(p.y) || 0;
+    const barW = Math.max(4, (Math.abs(val) / maxAbs) * (plotWidth / 2));
+    const isNeg = val < 0;
+    const barX = isNeg ? midX - barW : midX;
+    const color = isNeg ? '#ef4444' : '#10b981';
+    const label = String(p.x || '');
+    const cleanLabel = label.length > 18 ? label.substring(0, 16) + '...' : label;
+    const formattedVal = val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+    svg += `
+      <g class="chart-bar-group" data-row-id="${p.row_id}" tabindex="0" role="button" aria-label="${label}: ${formattedVal}">
+        <title>${label}: ${formattedVal} (Click to inspect row ${p.row_id})</title>
+        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${cleanLabel}</text>
+        <rect x="${barX}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${color}" class="chart-bar-rect ${isNeg ? 'chart-bar-neg' : ''}" data-row-id="${p.row_id}" />
+        <text x="${isNeg ? barX - 8 : barX + barW + 8}" y="${y + 16}" text-anchor="${isNeg ? 'end' : 'start'}" class="chart-bar-value" fill="${color}">${formattedVal}</text>
+      </g>
+    `;
+  });
+
+  svg += '</svg>';
+  container.innerHTML = svg;
+  bindChartClicks(container);
+}
+
+function renderLineChart(container, spec) {
+  const points = spec.points || [];
+  if (!points.length) return;
+
+  const width = 760;
+  const height = 280;
+  const padLeft = 70;
+  const padRight = 30;
+  const padTop = 20;
+  const padBottom = 40;
+
+  const plotW = width - padLeft - padRight;
+  const plotH = height - padTop - padBottom;
+
+  const values = points.map(p => Number(Array.isArray(p.y) ? p.y[0] : p.y) || 0);
+  const minVal = Math.min(0, ...values);
+  const maxVal = Math.max(...values, 1);
+  const valRange = maxVal - minVal || 1;
+
+  const xStep = points.length > 1 ? plotW / (points.length - 1) : plotW / 2;
+
+  const coords = points.map((p, idx) => {
+    const val = Number(Array.isArray(p.y) ? p.y[0] : p.y) || 0;
+    const cx = padLeft + idx * xStep;
+    const cy = padTop + plotH - ((val - minVal) / valRange) * plotH;
+    return { cx, cy, p, val };
+  });
+
+  const pathD = coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.cx.toFixed(1)} ${c.cy.toFixed(1)}`).join(' ');
+
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img">`;
+
+  // Grid lines
+  for (let i = 0; i <= 4; i++) {
+    const gy = padTop + (plotH / 4) * i;
+    const gVal = (maxVal - (valRange / 4) * i).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    svg += `
+      <line x1="${padLeft}" y1="${gy}" x2="${width - padRight}" y2="${gy}" class="chart-grid-line" />
+      <text x="${padLeft - 8}" y="${gy + 4}" text-anchor="end" class="chart-axis-text">${gVal}</text>
+    `;
+  }
+
+  // Line path
+  svg += `<path d="${pathD}" class="chart-line-path" stroke="url(#lineGrad)" />`;
+
+  // Data points
+  coords.forEach(c => {
+    const label = String(c.p.x || '');
+    const formattedVal = c.val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    svg += `
+      <g data-row-id="${c.p.row_id}" tabindex="0" role="button" aria-label="${label}: ${formattedVal}">
+        <title>${label}: ${formattedVal} (Click to inspect row ${c.p.row_id})</title>
+        <circle cx="${c.cx}" cy="${c.cy}" r="5" fill="#38bdf8" stroke="#0f172a" stroke-width="2" class="chart-point-circle" data-row-id="${c.p.row_id}" />
+        <text x="${c.cx}" y="${height - padBottom + 18}" text-anchor="middle" class="chart-axis-text">${label}</text>
+      </g>
+    `;
+  });
+
+  svg += `
+    <defs>
+      <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#38bdf8" />
+        <stop offset="100%" stop-color="#818cf8" />
+      </linearGradient>
+    </defs>
+  </svg>`;
+
+  container.innerHTML = svg;
+  bindChartClicks(container);
+}
+
+function bindChartClicks(container) {
+  container.querySelectorAll('[data-row-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      const rowId = el.getAttribute('data-row-id');
+      if (rowId) {
+        highlightTableRow(rowId);
+      }
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const rowId = el.getAttribute('data-row-id');
+        if (rowId) highlightTableRow(rowId);
+      }
+    });
+  });
+}
+
+function highlightTableRow(rowId) {
+  // 1. Switch to SQL Tab
+  const sqlTabBtn = document.querySelector('[data-tab="sqlTab"]');
+  if (sqlTabBtn) sqlTabBtn.click();
+
+  // 2. Find matching row element
+  const targetRow = document.querySelector(`[data-row-id="${rowId}"]`);
+  if (targetRow) {
+    document.querySelectorAll('.highlighted-row').forEach(r => r.classList.remove('highlighted-row'));
+    targetRow.classList.add('highlighted-row');
+    targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function renderUnderTheHood(data) {
+  const hoodMeta = document.getElementById('hoodMeta');
+  if (!hoodMeta) return;
+
+  const hood = data.under_the_hood || {};
+  const queries = (data.evidence && data.evidence.queries) || [];
+  const primaryQ = queries[0] || {};
+  const elapsedMs = primaryQ.result ? primaryQ.result.elapsed_ms : 0;
+  const rowsCount = primaryQ.result && primaryQ.result.rows ? primaryQ.result.rows.length : 0;
+
+  hoodMeta.innerHTML = `
+    <span class="hood-pill">Dialect: ${hood.dialect ? hood.dialect.toUpperCase() : 'DUCKDB'}</span>
+    <span class="hood-pill">Rows: ${rowsCount}</span>
+    <span class="hood-pill">Latency: ${elapsedMs ? elapsedMs.toFixed(1) : '<1'}ms</span>
+    <span class="hood-pill">Model: ${hood.model || 'gemma4:e2b'}</span>
+    <span class="hood-pill">Status: ${hood.verification_status || 'VERIFIED'}</span>
+  `;
+}
+
+function initActions() {
+  const copyAnswerBtn = document.getElementById('copyAnswerBtn');
+  const copySqlBtn = document.getElementById('copySqlBtn');
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
+
+  if (copyAnswerBtn) {
+    copyAnswerBtn.addEventListener('click', () => {
+      if (!currentResult || !currentResult.answer) return;
+      navigator.clipboard.writeText(currentResult.answer).then(() => {
+        copyAnswerBtn.textContent = '✓ Copied!';
+        setTimeout(() => { copyAnswerBtn.textContent = 'Copy Answer'; }, 2000);
+      });
+    });
+  }
+
+  if (copySqlBtn) {
+    copySqlBtn.addEventListener('click', () => {
+      const queries = (currentResult && currentResult.evidence && currentResult.evidence.queries) || [];
+      if (!queries.length) return;
+      const sqlText = queries.map(q => q.sql).join('\n\n');
+      navigator.clipboard.writeText(sqlText).then(() => {
+        copySqlBtn.textContent = '✓ SQL Copied!';
+        setTimeout(() => { copySqlBtn.textContent = 'Copy SQL'; }, 2000);
+      });
+    });
+  }
+
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', () => {
+      exportResultCsv();
+    });
+  }
+}
+
+function exportResultCsv() {
+  const queries = (currentResult && currentResult.evidence && currentResult.evidence.queries) || [];
+  if (!queries.length || !queries[0].result) {
+    alert('No tabular data available to export.');
+    return;
+  }
+
+  const q = queries[0];
+  const cols = q.result.columns || [];
+  const rows = q.result.rows || [];
+
+  function sanitizeCell(cell) {
+    if (cell === null || cell === undefined) return '""';
+    let s = String(cell);
+    // Escape formula injection prefixes: =, +, -, @
+    if (/^[=+\-@]/.test(s)) {
+      s = "'" + s;
+    }
+    // Escape quotes
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+
+  const csvRows = [];
+  csvRows.push(['"Row_ID"', ...cols.map(c => `"${c}"`)].join(','));
+
+  rows.forEach((r, idx) => {
+    const rowId = `"${q.query_label || 'Q1'}:R${idx + 1}"`;
+    const cells = r.map(c => sanitizeCell(c));
+    csvRows.push([rowId, ...cells].join(','));
+  });
+
+  const blob = new Blob([csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `datamind_result_${Date.now()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 function formatMarkdownWithCitations(text, data) {
@@ -324,9 +670,7 @@ function formatMarkdownWithCitations(text, data) {
   // Clean raw markdown link syntax around citations if pasted e.g. [\[◆ Q1:R1\]](http...) or [Q1:R1](...)
   formatted = formatted.replace(/\[\\?\[?[◆\s]*(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\\?\]?\]\([^\)]+\)/g, '[[$1]]');
 
-  // Convert markdown headings:
-  // 1. Heading with newline after it: ### Heading\n
-  // 2. Heading without newline (inline with sentence text): ### Heading Sentence starts here...
+  // Convert markdown headings
   formatted = formatted.replace(/(?:^|\n)\s*###\s+(Revenue Decline (?:Details|Analysis)|[A-Z][A-Za-z0-9\s/&,\-]{2,40}?)\s+(?=[A-Z][a-z]+)/g, '\n<h3>$1</h3>\n');
   formatted = formatted.replace(/(?:^|\n)\s*####\s*([^\n<]+)/g, '\n<h4>$1</h4>\n');
   formatted = formatted.replace(/(?:^|\n)\s*###\s*([^\n<]+)/g, '\n<h3>$1</h3>\n');
@@ -397,209 +741,255 @@ function formatMarkdownWithCitations(text, data) {
   formatted = formatted.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
   formatted = formatted.replace(/`([^`\n]+)`/g, '<code>$1</code>');
 
-  // Wrap loose paragraphs in <p>...</p>
-  const rawParagraphs = formatted.split(/\n\n+/);
-  formatted = rawParagraphs.map(p => {
-    const trimmed = p.trim();
-    if (!trimmed) return '';
-    if (trimmed.startsWith('<h') || trimmed.startsWith('<table') || trimmed.startsWith('<ul') || trimmed.startsWith('<div')) {
-      return trimmed;
-    }
-    return `<p>${trimmed}</p>`;
-  }).join('\n');
-
-  // Replace single or grouped citation bracket tokens with interactive pills
-  formatted = formatted.replace(/\[\[(.*?)\]\]/g, (match, inner) => {
-    const ids = inner.match(/Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+/g);
-    if (ids && ids.length > 0) {
-      return ids.map(id => {
-        const isSql = id.startsWith('Q');
-        const icon = isSql ? '&#9670;' : '&#128196;';
-        const cls = isSql ? 'token-sql' : 'token-doc';
-        return `<a href="#${id}" class="citation-token ${cls}" data-citation="${id}">[${icon} ${id}]</a>`;
-      }).join(' ');
-    }
-    return match;
+  // Replace [[Q1:R1]] and [[D:...]] citation pills
+  formatted = formatted.replace(/\[\[(Q\d+:R\d+)\]\]/g, (match, id) => {
+    return `<a href="#${id}" class="citation-token token-sql" data-citation="${id}" title="Database row evidence: ${id}">&#9670; ${id}</a>`;
   });
 
-  // Also replace single-bracketed tags if model omitted double brackets
-  formatted = formatted.replace(/(?<!\[)\[(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\](?!\])/g, (match, id) => {
-    const isSql = id.startsWith('Q');
-    const icon = isSql ? '&#9670;' : '&#128196;';
-    const cls = isSql ? 'token-sql' : 'token-doc';
-    return `<a href="#${id}" class="citation-token ${cls}" data-citation="${id}">[${icon} ${id}]</a>`;
+  formatted = formatted.replace(/\[\[(D:[^\]]+)\]\]/g, (match, id) => {
+    return `<a href="#${id}" class="citation-token token-doc" data-citation="${id}" title="Document chunk evidence: ${id}">&#9632; ${id}</a>`;
   });
 
   return formatted;
 }
 
 function handleCitationClick(targetId) {
+  if (!currentResult) return;
+
+  const modal = document.getElementById('citationModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+
   if (targetId.startsWith('Q')) {
-    // Row citation: Q1:R1
-    const parts = targetId.split(':');
-    const qLabel = parts[0];
-    const rIdx = parseInt(parts[1].replace('R', ''), 10);
+    modalTitle.textContent = `SQL Row Evidence [${targetId}]`;
+    const queries = (currentResult.evidence && currentResult.evidence.queries) || [];
+    const [qLabel, rLabel] = targetId.split(':');
+    const rowIdx = parseInt(rLabel.replace('R', ''), 10) - 1;
 
-    // Switch to SQL tab
-    switchTab('sqlTab');
+    let targetQuery = queries.find(q => q.query_label === qLabel);
+    if (!targetQuery && queries.length > 0) targetQuery = queries[0];
 
-    // Highlight row
-    const rowEl = document.getElementById(`row-${targetId}`);
-    if (rowEl) {
-      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      rowEl.classList.add('highlighted-row');
-      setTimeout(() => rowEl.classList.remove('highlighted-row'), 2800);
+    if (targetQuery && targetQuery.rows && targetQuery.rows[rowIdx]) {
+      const row = targetQuery.rows[rowIdx];
+      const cols = targetQuery.columns;
+
+      let tableHtml = '<table class="evidence-table"><thead><tr>';
+      cols.forEach(c => tableHtml += `<th>${c}</th>`);
+      tableHtml += '</tr></thead><tbody><tr>';
+      row.forEach(val => tableHtml += `<td><strong>${val !== null ? val : 'NULL'}</strong></td>`);
+      tableHtml += '</tr></tbody></table>';
+
+      tableHtml += `<div style="margin-top: 1rem;"><span class="badge-mini">SQL Query (${targetQuery.query_id || 'LOCAL'})</span><pre class="sql-code-block">${targetQuery.sql}</pre></div>`;
+      modalBody.innerHTML = tableHtml;
+    } else {
+      modalBody.innerHTML = `<p class="error-msg">Row ${targetId} not found in executed queries.</p>`;
     }
   } else if (targetId.startsWith('D:')) {
-    // Document citation: D:SUPPORT_TICKETS:TK-1001
-    const chunk = currentResult?.evidence?.chunks?.find(c => c.chunk_id === targetId);
-    if (chunk) {
-      openModal(targetId, `
-        <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-purple); margin-bottom: 0.75rem;">
-          Collection: ${chunk.doc_name} &bull; BM25 Score: ${chunk.score}
+    modalTitle.textContent = `Document Chunk [${targetId}]`;
+    const docs = (currentResult.evidence && currentResult.evidence.chunks) || [];
+    const targetDoc = docs.find(d => d.chunk_id === targetId);
+
+    if (targetDoc) {
+      modalBody.innerHTML = `
+        <div class="doc-card modal-doc">
+          <div class="doc-header">
+            <span class="doc-badge">&#9632; ${targetDoc.chunk_id}</span>
+            <span class="doc-score">BM25 Relevance: ${targetDoc.score}</span>
+          </div>
+          <div class="doc-title">${targetDoc.doc_name}</div>
+          <div class="doc-content">${targetDoc.text}</div>
         </div>
-        <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); white-space: pre-wrap; line-height: 1.6;">
-          ${chunk.text}
-        </div>
-      `);
+      `;
     } else {
-      switchTab('docsTab');
-      const docEl = document.getElementById(`doc-${targetId}`);
-      if (docEl) docEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      modalBody.innerHTML = `<p class="error-msg">Document ${targetId} not found in retrieved chunks.</p>`;
     }
   }
+
+  modal.classList.add('open');
+  highlightTableRow(targetId);
 }
 
 function renderQueries(queries) {
   const container = document.getElementById('queriesList');
-  if (!queries || queries.length === 0) {
-    container.innerHTML = '<p style="color: var(--text-dim);">No SQL queries were executed for this request.</p>';
+  container.innerHTML = '';
+
+  if (!queries.length) {
+    container.innerHTML = '<p class="text-muted">No SQL queries were required for this answer.</p>';
     return;
   }
 
-  container.innerHTML = queries.map(q => {
-    let rowsHtml = '';
-    if (q.rows && q.rows.length > 0) {
-      const headerHtml = '<tr><th>RowID</th>' + q.columns.map(c => `<th>${c}</th>`).join('') + '</tr>';
-      const bodyHtml = q.rows.map((row, idx) => {
-        const rowId = `${q.query_label}:R${idx + 1}`;
-        const cellsHtml = `<td><span class="query-pill">${rowId}</span></td>` + row.map(v => `<td>${v !== null ? v : 'NULL'}</td>`).join('');
-        return `<tr id="row-${rowId}">${cellsHtml}</tr>`;
-      }).join('');
+  queries.forEach(q => {
+    const item = document.createElement('div');
+    item.className = 'query-item';
 
-      rowsHtml = `
-        <div class="table-preview">
-          <table>
-            <thead>${headerHtml}</thead>
-            <tbody>${bodyHtml}</tbody>
-          </table>
-        </div>
-      `;
+    const header = document.createElement('div');
+    header.className = 'query-header';
+    header.innerHTML = `
+      <div class="query-meta">
+        <span class="query-badge">&#9670; ${q.query_label}</span>
+        <span class="query-id">${q.query_id || 'DuckDB'}</span>
+        <span class="query-time">${q.elapsed_ms.toFixed(1)}ms</span>
+        <span class="query-rows">${q.rows.length} rows</span>
+      </div>
+      <button class="btn-copy-sql" title="Copy SQL">Copy</button>
+    `;
+
+    const copyBtn = header.querySelector('.btn-copy-sql');
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(q.sql);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+    });
+
+    const purpose = document.createElement('div');
+    purpose.className = 'query-purpose';
+    purpose.textContent = `Purpose: ${q.purpose}`;
+
+    const sqlBlock = document.createElement('pre');
+    sqlBlock.className = 'sql-code-block';
+    sqlBlock.textContent = q.sql;
+
+    item.appendChild(header);
+    item.appendChild(purpose);
+    item.appendChild(sqlBlock);
+
+    if (q.rows && q.rows.length) {
+      const tableWrapper = document.createElement('div');
+      tableWrapper.className = 'table-scroll-wrap';
+
+      const table = document.createElement('table');
+      table.className = 'evidence-table';
+
+      let thead = '<thead><tr><th>Row ID</th>';
+      q.columns.forEach(c => thead += `<th>${c}</th>`);
+      thead += '</tr></thead>';
+
+      let tbody = '<tbody>';
+      q.rows.slice(0, 100).forEach((r, idx) => {
+        const rowId = `${q.query_label}:R${idx + 1}`;
+        tbody += `<tr id="query_${q.query_label}_row_${rowId}" data-row-id="${rowId}">`;
+        tbody += `<td class="row-id-cell"><code>${rowId}</code></td>`;
+        r.forEach(val => {
+          tbody += `<td>${val !== null ? val : '<span class="null-val">NULL</span>'}</td>`;
+        });
+        tbody += '</tr>';
+      });
+      tbody += '</tbody>';
+
+      table.innerHTML = thead + tbody;
+      tableWrapper.appendChild(table);
+      item.appendChild(tableWrapper);
     }
 
-    return `
-      <div class="query-item" id="query-${q.query_label}">
-        <div class="query-header">
-          <div class="query-meta">
-            <span class="query-pill">${q.query_label}</span>
-            <span>Query ID: ${q.query_id || 'local'}</span>
-            <span>Elapsed: ${q.elapsed_ms}ms</span>
-            <span>Rows: ${q.rows ? q.rows.length : 0}</span>
-          </div>
-          <div style="color: var(--text-dim); font-size: 0.8rem;">${q.purpose || ''}</div>
-        </div>
-        <div class="code-container">${escapeHtml(q.sql)}</div>
-        ${rowsHtml}
-      </div>
-    `;
-  }).join('');
+    container.appendChild(item);
+  });
 }
 
-function renderDocs(chunks) {
+function renderDocs(docs) {
   const container = document.getElementById('docsList');
-  if (!chunks || chunks.length === 0) {
-    container.innerHTML = '<p style="color: var(--text-dim);">No document chunks were retrieved for this request.</p>';
+  container.innerHTML = '';
+
+  if (!docs.length) {
+    container.innerHTML = '<p class="text-muted">No document retrievals were performed for this answer.</p>';
     return;
   }
 
-  container.innerHTML = chunks.map(c => `
-    <div class="chunk-item" id="doc-${c.chunk_id}">
-      <div class="chunk-header">
-        <span class="chunk-id">${c.chunk_id} (${c.doc_name})</span>
-        <span class="chunk-score">BM25 Relevance: ${c.score}</span>
+  docs.forEach(d => {
+    const item = document.createElement('div');
+    item.className = 'doc-card';
+    item.id = `doc_${d.chunk_id}`;
+    item.innerHTML = `
+      <div class="doc-header">
+        <span class="doc-badge">&#9632; ${d.chunk_id}</span>
+        <span class="doc-score">BM25 Score: ${d.score}</span>
       </div>
-      <div class="chunk-body">${escapeHtml(c.text)}</div>
-    </div>
-  `).join('');
+      <div class="doc-title">${d.doc_name}</div>
+      <div class="doc-content">${d.text}</div>
+    `;
+    container.appendChild(item);
+  });
 }
 
 function renderNumericChecks(checks) {
   const container = document.getElementById('numericList');
-  if (!checks || checks.length === 0) {
-    container.innerHTML = '<p style="color: var(--text-dim);">No numeric assertions found in response.</p>';
+  container.innerHTML = '';
+
+  if (!checks.length) {
+    container.innerHTML = '<p class="text-muted">No numeric assertions requiring deterministic reconciliation.</p>';
     return;
   }
 
-  container.innerHTML = checks.map(nc => {
-    let pillClass = 'pill-verified';
-    if (nc.status === 'DISCREPANCY') pillClass = 'pill-discrepancy';
-    if (nc.status === 'UNSUPPORTED') pillClass = 'pill-unsupported';
+  let tableHtml = `
+    <div class="table-scroll-wrap">
+      <table class="evidence-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Claimed in Answer</th>
+            <th>Database Cell</th>
+            <th>Evidence Row</th>
+            <th>Matched Column</th>
+            <th>Verification Note</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
 
-    return `
-      <div class="numeric-item">
-        <span class="status-pill ${pillClass}">${nc.status}</span>
-        <div style="flex: 1;">
-          <div style="font-weight: 600; color: var(--text-main); margin-bottom: 0.2rem;">
-            Claimed ${nc.raw_text}
-          </div>
-          <div style="color: var(--text-dim); font-size: 0.8rem;">
-            ${nc.message}
-          </div>
-        </div>
-      </div>
+  checks.forEach(nc => {
+    const isPass = nc.status === 'VERIFIED';
+    const statusClass = isPass ? 'badge-clean-pass' : 'badge-clean-fail';
+    const statusIcon = isPass ? '&#10003; VERIFIED' : '&#9888; DISCREPANCY';
+
+    tableHtml += `
+      <tr>
+        <td><span class="trust-badge ${statusClass}" style="font-size: 0.72rem;">${statusIcon}</span></td>
+        <td><strong>${nc.claimed_value}</strong></td>
+        <td><code>${nc.cell_value !== null ? nc.cell_value : 'N/A'}</code></td>
+        <td><a href="#${nc.row_id}" class="citation-token token-sql" onclick="highlightTableRow('${nc.row_id}'); return false;">${nc.row_id}</a></td>
+        <td><code>${nc.matched_column || 'N/A'}</code></td>
+        <td><span class="check-msg">${nc.message}</span></td>
+      </tr>
     `;
-  }).join('');
+  });
+
+  tableHtml += '</tbody></table></div>';
+  container.innerHTML = tableHtml;
 }
 
 function initTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      const tabId = btn.getAttribute('data-tab');
-      switchTab(tabId);
-    });
-  });
-}
+      tabBtns.forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
 
-function switchTab(tabId) {
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
-  });
-  document.querySelectorAll('.tab-pane').forEach(p => {
-    p.classList.toggle('active', p.id === tabId);
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      const targetId = btn.getAttribute('data-tab');
+      const targetPane = document.getElementById(targetId);
+      if (targetPane) targetPane.classList.add('active');
+    });
   });
 }
 
 function initModal() {
   const modal = document.getElementById('citationModal');
   const closeBtn = document.getElementById('modalClose');
-  closeBtn.addEventListener('click', () => modal.classList.remove('open'));
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.remove('open');
-  });
-}
 
-function openModal(title, contentHtml) {
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalBody').innerHTML = contentHtml;
-  document.getElementById('citationModal').classList.add('open');
-}
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      modal.classList.remove('open');
+    });
+  }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.remove('open');
+      }
+    });
+  }
 }
