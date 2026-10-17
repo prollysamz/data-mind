@@ -107,6 +107,11 @@ def format_orchestrator_result(
     is_clarification = ("?" in (result.answer or "")) and any(k in ans_lower for k in ["clarify", "specify", "which", "what specific", "mean by"])
     is_partial = any(k in ans_lower for k in ["sub-question is unanswered", "partially answered", "search failed", "unable to retrieve"]) or is_truncated
 
+    assumptions_card = getattr(result, "assumptions_card", None) or getattr(result.citation_report, "assumptions_card", None)
+    assumptions_data = None
+    if assumptions_card:
+        assumptions_data = assumptions_card.to_dict() if hasattr(assumptions_card, "to_dict") else assumptions_card
+
     response_type = "answer"
     if is_refusal:
         response_type = "refusal"
@@ -132,6 +137,11 @@ def format_orchestrator_result(
             failing_items.append(f"{unsupported} unsupported claim")
         badge_reason = f"Verification failed: {', '.join(failing_items)}."
         badge_color = "#ef4444"
+    elif assumptions_card and getattr(assumptions_card, "badge_status", "") == "PARTIALLY_VERIFIED":
+        badge_state = "PARTIALLY_VERIFIED"
+        badge_label = "Partially Verified"
+        badge_reason = getattr(assumptions_card, "badge_reason", "Completed with lint findings.")
+        badge_color = "#eab308"
     elif is_partial or is_truncated:
         badge_state = "PARTIALLY_VERIFIED"
         badge_label = "Partially Verified"
@@ -176,6 +186,7 @@ def format_orchestrator_result(
             "reason": badge_reason,
             "color": badge_color,
         },
+        "assumptions_card": assumptions_data,
         "chart": chart_data,
         "under_the_hood": under_the_hood,
         "citation_report": {

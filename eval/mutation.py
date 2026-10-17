@@ -249,6 +249,32 @@ def build_mutation_suite() -> list[MutationCase]:
     for name, orig, mut in derived_hallucinations:
         cases.append(MutationCase(f"derived_{name}", "derived_value_error", orig, mut, store))
 
+    # Category 12: Hand-Reviewed Adversarial & Subtly Corrupted Edge-Cases (WP-F3 Trust Upgrades)
+    adversarial_edge_cases = [
+        ("ticket_count_mismatch", "There were 18 high priority tickets [[Q3:R2]].", "There were 17 high priority tickets [[Q3:R2]]."),
+        ("critical_ticket_zero", "Critical tickets logged were 4 [[Q3:R1]].", "Critical tickets logged were 0 [[Q3:R1]]."),
+        ("medium_ticket_drift", "Medium priority tickets were 42 [[Q3:R3]].", "Medium priority tickets were 43 [[Q3:R3]]."),
+        ("low_ticket_drift", "Low tickets totaled 110 [[Q3:R4]].", "Low tickets totaled 115 [[Q3:R4]]."),
+        ("currency_drift_cent", "Novaship March revenue was $28,357.22 [[Q1:R1]].", "Novaship March revenue was $28,357.20 [[Q1:R1]]."),
+        ("currency_drift_dollar", "CloudSync revenue reached $12,450.00 [[Q1:R2]].", "CloudSync revenue reached $12,451.00 [[Q1:R2]]."),
+        ("securevault_revenue_drift", "SecureVault revenue was $68,100.00 [[Q1:R4]].", "SecureVault revenue was $68,100.50 [[Q1:R4]]."),
+        ("dataflow_revenue_drift", "DataFlow revenue was $45,200.50 [[Q1:R3]].", "DataFlow revenue was $45,200.00 [[Q1:R3]]."),
+        ("customer_count_mismatch", "Novaship served 85 customers [[Q2:R1]].", "Novaship served 86 customers [[Q2:R1]]."),
+        ("customer_count_securevault", "SecureVault served 190 customers [[Q2:R2]].", "SecureVault served 189 customers [[Q2:R2]]."),
+        ("customer_count_dataflow", "DataFlow had 115 customers [[Q2:R3]].", "DataFlow had 114 customers [[Q2:R3]]."),
+        ("orders_count_mismatch", "Novaship handled 142 total orders [[Q2:R1]].", "Novaship handled 140 total orders [[Q2:R1]]."),
+        ("orders_count_dataflow", "DataFlow processed 205 orders [[Q2:R3]].", "DataFlow processed 206 orders [[Q2:R3]]."),
+        ("inverted_difference_drift", "SecureVault outsold Novaship by $39,742.78 [[Q1:R1]] [[Q1:R4]].", "SecureVault outsold Novaship by $41,500.00 [[Q1:R1]] [[Q1:R4]]."),
+        ("multi_row_sum_drift_dollar", "Combined revenue for Novaship and CloudSync was $40,807.22 [[Q1:R1]] [[Q1:R2]].", "Combined revenue for Novaship and CloudSync was $40,808.22 [[Q1:R1]] [[Q1:R2]]."),
+        ("multi_row_sum_three_products", "Sum of Novaship, CloudSync, and DataFlow was $86,007.72 [[Q1:R1]] [[Q1:R2]] [[Q1:R3]].", "Sum of Novaship, CloudSync, and DataFlow was $86,010.00 [[Q1:R1]] [[Q1:R2]] [[Q1:R3]]."),
+        ("subtle_percentage_error", "Novaship accounts for 29.4% of combined sales [[Q1:R1]] [[Q1:R4]].", "Novaship accounts for 35.0% of combined sales [[Q1:R1]] [[Q1:R4]]."),
+        ("total_tickets_all_priorities", "Across all four priority levels, 174 total tickets were received [[Q3:R1]] [[Q3:R2]] [[Q3:R3]] [[Q3:R4]].", "Across all four priority levels, 175 total tickets were received [[Q3:R1]] [[Q3:R2]] [[Q3:R3]] [[Q3:R4]]."),
+        ("doc_duplicate_charge_drift", "Customer had duplicate charges of $120.00 [[D:tickets:TK-1002]].", "Customer had duplicate charges of $125.00 [[D:tickets:TK-1002]]."),
+        ("currency_drift_euro_symbol", "Novaship March revenue was $28,357.22 [[Q1:R1]].", "Novaship March revenue was €28,357.22 [[Q1:R1]]."),
+    ]
+    for name, orig, mut in adversarial_edge_cases:
+        cases.append(MutationCase(f"adversarial_{name}", "adversarial_edge_cases", orig, mut, store))
+
     return cases
 
 

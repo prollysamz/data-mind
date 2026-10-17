@@ -282,6 +282,9 @@ function renderResult(data) {
     clarifyCard.style.display = 'none';
   }
 
+  // Render Query Method & Assumptions Card (AST Linter Integrity)
+  renderAssumptionsCard(data.assumptions_card);
+
   // Render Answer Markdown
   const answerContent = document.getElementById('answerContent');
   answerContent.innerHTML = formatMarkdownWithCitations(data.answer, data);
@@ -315,6 +318,80 @@ function renderResult(data) {
   const checks = (citReport.numeric_checks) || [];
   document.getElementById('numChecksCount').textContent = checks.length;
   renderNumericChecks(checks);
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderAssumptionsCard(card) {
+  const box = document.getElementById('assumptionsBox');
+  const badge = document.getElementById('assumptionsBadge');
+  const body = document.getElementById('assumptionsBody');
+  if (!box || !badge || !body) return;
+
+  if (!card) {
+    box.style.display = 'none';
+    return;
+  }
+
+  box.style.display = 'block';
+  const isAmber = card.badge_status === 'PARTIALLY_VERIFIED';
+  badge.textContent = isAmber ? 'Partially Verified Method' : 'Verified Method';
+  if (isAmber) {
+    badge.className = 'assumptions-badge badge-amber';
+    box.open = true; // Auto-expand when there are lint diagnostics
+  } else {
+    badge.className = 'assumptions-badge';
+    box.open = false;
+  }
+
+  let html = '<div class="assumptions-grid">';
+  if (card.tables && card.tables.length) {
+    html += `<div class="assumptions-item"><div class="assumptions-item-label">Tables Used</div><div class="assumptions-item-val">${escapeHtml(card.tables.join(', '))}</div></div>`;
+  }
+  if (card.join_keys && card.join_keys.length) {
+    html += `<div class="assumptions-item"><div class="assumptions-item-label">Join Keys</div><div class="assumptions-item-val">${escapeHtml(card.join_keys.join('; '))}</div></div>`;
+  }
+  if (card.filters && card.filters.length) {
+    html += `<div class="assumptions-item"><div class="assumptions-item-label">Business Filters</div><div class="assumptions-item-val">${escapeHtml(card.filters.join(' AND '))}</div></div>`;
+  }
+  if (card.group_by && card.group_by.length) {
+    html += `<div class="assumptions-item"><div class="assumptions-item-label">Grouping</div><div class="assumptions-item-val">${escapeHtml(card.group_by.join(', '))}</div></div>`;
+  }
+  if (card.metrics && card.metrics.length) {
+    html += `<div class="assumptions-item"><div class="assumptions-item-label">Metric Aggregations</div><div class="assumptions-item-val">${escapeHtml(card.metrics.join(', '))}</div></div>`;
+  }
+  if (card.date_range) {
+    html += `<div class="assumptions-item"><div class="assumptions-item-label">Date Window</div><div class="assumptions-item-val">${escapeHtml(card.date_range)}</div></div>`;
+  }
+  html += '</div>';
+
+  if (card.plain_language_assumptions && card.plain_language_assumptions.length) {
+    html += '<ul style="margin: 0.5rem 0 0.5rem 1.25rem; padding: 0;">';
+    card.plain_language_assumptions.forEach(item => {
+      html += `<li>${escapeHtml(item)}</li>`;
+    });
+    html += '</ul>';
+  }
+
+  if (card.lint_findings && card.lint_findings.length) {
+    html += '<div class="assumptions-warnings">';
+    html += '<div class="assumptions-warning-title">&#9888; Structural Integrity &amp; Lint Diagnostics:</div>';
+    html += '<ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">';
+    card.lint_findings.forEach(f => {
+      html += `<li><strong>[${escapeHtml((f.severity || '').toUpperCase())}]</strong> ${escapeHtml(f.message)}</li>`;
+    });
+    html += '</ul></div>';
+  }
+
+  body.innerHTML = html;
 }
 
 // -------------------------------------------------------------

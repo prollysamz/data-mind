@@ -41,6 +41,7 @@ class AgentResult:
     finish_reason: str | None = None
     messages: list[dict[str, Any]] = field(default_factory=list)
     lane: str = "freeform_sql"
+    assumptions_card: Any = None
 
 
 class AgentOrchestrator:
@@ -210,7 +211,7 @@ class AgentOrchestrator:
                                 lines.append(f"- {' : '.join(r_cells)} [[{r_id}]]")
                             ans = "\n".join(lines)
 
-                        rep = verify_citations(ans, self.evidence_store, self.semantic_model)
+                        rep = verify_citations(ans, self.evidence_store, self.semantic_model, question=question)
                         return AgentResult(
                             question=question,
                             answer=ans,
@@ -220,6 +221,7 @@ class AgentOrchestrator:
                             success=True,
                             lane="structured_query_lane",
                             messages=[{"role": "assistant", "content": ans}],
+                            assumptions_card=getattr(rep, "assumptions_card", None),
                         )
 
         # Apply schema pruning and dynamic few-shot if configured
@@ -281,7 +283,7 @@ class AgentOrchestrator:
                 final_text = reply.get("content") or ""
                 finish_reason = reply.get("finish_reason")
                 is_truncated = (finish_reason == "length")
-                report = verify_citations(final_text, self.evidence_store, self.semantic_model)
+                report = verify_citations(final_text, self.evidence_store, self.semantic_model, question=question)
                 if is_truncated:
                     from datamind.agent.verifier import NumericCheck
                     report.is_truncated = True
@@ -307,6 +309,8 @@ class AgentOrchestrator:
                     is_truncated=is_truncated,
                     finish_reason=finish_reason,
                     messages=messages,
+                    lane="freeform_sql",
+                    assumptions_card=getattr(report, "assumptions_card", None),
                 )
 
             # Process tool calls

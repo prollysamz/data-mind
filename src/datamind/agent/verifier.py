@@ -44,6 +44,10 @@ class CitationReport:
     unsupported_claims_count: int = 0
     is_clean: bool = True
     is_truncated: bool = False
+    badge_status: str = "VERIFIED"
+    badge_reason: str = "All numbers match cited rows with zero discrepancies."
+    lint_findings: list[Any] = field(default_factory=list)
+    assumptions_card: Any = None
 
     def get_invalid_ids(self) -> list[str]:
         return [c.target_id for c in self.citations if not c.is_valid]
@@ -225,6 +229,7 @@ def verify_citations(
     text: str,
     evidence_store: EvidenceStore,
     semantic_model: Any = None,
+    question: str = "",
 ) -> CitationReport:
     """Extract and verify all citations and perform deterministic numeric, currency, and date reconciliation."""
     report = CitationReport()
@@ -486,7 +491,7 @@ def verify_citations(
                                 or diff_abs <= 0.05 or rel_diff_abs <= 0.02
                             )
                         else:
-                            is_exact_or_round = (diff_signed <= 0.05 or diff_abs <= 0.05)
+                            is_exact_or_round = (diff_signed <= 0.01 or diff_abs <= 0.01)
 
                         is_bound_match = (has_lower_bound and cell_float >= claimed_float and (cell_float - claimed_float) / max(cell_float, 1.0) < 0.20)
 
@@ -532,12 +537,18 @@ def verify_citations(
                             col_counts[c_name] = col_counts.get(c_name, 0) + 1
                             numeric_cells_list.append((r_id, c_name, c_num))
 
+                has_approx = bool(re.search(r"\b(?:approximately|approx|about|around|~)\b", segment, re.I))
+
                 # Check column sums across cited rows
                 for c_name, total_sum in col_sums.items():
                     if col_counts[c_name] >= 2:
                         diff = abs(claimed_float - total_sum)
                         rel_diff = diff / max(abs(total_sum), 1.0)
-                        if diff <= 0.05 or rel_diff <= 0.02:
+                        if has_approx:
+                            is_sum_match = (diff <= 0.05 or rel_diff <= 0.02)
+                        else:
+                            is_sum_match = (diff <= 0.02)
+                        if is_sum_match:
                             matched = True
                             matched_id = candidate_rows[0]
                             matched_col_or_field = f"derived_sum({c_name})"
@@ -556,7 +567,12 @@ def verify_citations(
                             # Difference
                             diff_val = v1 - v2
                             abs_diff = abs(diff_val)
-                            if abs(claimed_float - diff_val) <= 0.05 or abs(claimed_float - abs_diff) <= 0.05:
+                            if has_approx:
+                                is_diff_match = (abs(claimed_float - diff_val) <= 0.05 or abs(claimed_float - abs_diff) <= 0.05 or (abs(claimed_float - abs_diff) / max(abs(diff_val), 1.0) <= 0.02))
+                            else:
+                                is_diff_match = (abs(claimed_float - diff_val) <= 0.02 or abs(claimed_float - abs_diff) <= 0.02)
+
+                            if is_diff_match:
                                 matched = True
                                 matched_id = r1
                                 matched_col_or_field = f"derived_diff({c1}, {c2})"
@@ -568,15 +584,16 @@ def verify_citations(
                                 pct_change = ((v1 - v2) / abs(v2)) * 100.0
                                 abs_pct = abs(pct_change)
                                 pct_share = (v1 / v2) * 100.0
+                                pct_tol = 0.5 if has_approx else 0.1
                                 if (
-                                    abs(claimed_float - pct_change) <= 0.1
-                                    or abs(claimed_float - abs_pct) <= 0.1
-                                    or abs(claimed_float - pct_share) <= 0.1
+                                    abs(claimed_float - pct_change) <= pct_tol
+                                    or abs(claimed_float - abs_pct) <= pct_tol
+                                    or abs(claimed_float - pct_share) <= pct_tol
                                 ):
                                     matched = True
                                     matched_id = r1
                                     matched_col_or_field = f"derived_pct({c1}, {c2})"
-                                    matched_val = round(pct_change if abs(claimed_float - pct_change) <= 0.1 else pct_share, 2)
+                                    matched_val = round(pct_change if abs(claimed_float - pct_change) <= pct_tol else pct_share, 2)
                                     break
                         if matched:
                             break
@@ -755,5 +772,34 @@ def verify_citations(
                 )
                 report.unsupported_claims_count += 1
                 report.is_clean = False
+
+    # 3. Deterministic Query Linting & Assumptions Card
+    if evidence_store and evidence_store.queries:
+        from datamind.guardrails.query_lint import QueryLinter
+        last_q = evidence_store.queries[-1]
+        linter = QueryLinter(semantic_model)
+        rows = last_q.result.rows if last_q.result else []
+        lint_findings, assumptions_card = linter.lint_query(
+            sql=last_q.sql,
+            question=question,
+            result_rows=rows,
+        )
+        report.lint_findings = lint_findings
+        report.assumptions_card = assumptions_card
+        if not report.is_clean:
+            report.badge_status = "UNVERIFIED"
+            report.badge_reason = f"Unverified: Discrepancy found in claimed values ({report.discrepancy_count} discrepancies, {report.unsupported_claims_count} unsupported claims)."
+        elif assumptions_card.badge_status == "PARTIALLY_VERIFIED":
+            report.badge_status = "PARTIALLY_VERIFIED"
+            report.badge_reason = assumptions_card.badge_reason
+        else:
+            report.badge_status = "VERIFIED"
+            report.badge_reason = "Verified: All numbers match cited rows with zero query lint warnings."
+    elif not report.is_clean:
+        report.badge_status = "UNVERIFIED"
+        report.badge_reason = f"Unverified: Discrepancies detected ({report.discrepancy_count} discrepancies, {report.unsupported_claims_count} unsupported claims)."
+    else:
+        report.badge_status = "VERIFIED"
+        report.badge_reason = "Verified: Clean citation provenance."
 
     return report
