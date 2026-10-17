@@ -238,6 +238,7 @@ datamind mcp
 - [WP-F3: Trust & Groundedness Upgrades (AST Linter & 73/73 Mutations)](docs/WP-F3-Trust-Groundedness-Upgrades.md)
 - [WP-F4: Review Classification & Sentiment Agreement](docs/WP-F4-Review-Classification-Sentiment.md)
 - [WP-F5: Sealed Evaluation & 40-Item Human Citation Audit](docs/WP-F5-Sealed-Evaluation-Human-Audit.md)
+- [WP-F6: Demonstration Script & MCP Integration](docs/WP-F6-Demo-Script-And-Presentation.md)
 - [WP-F7: Packaging, System Diagnostics & Version Freeze](docs/WP-F7-Packaging-And-Artifact-Freeze.md)
 - [WP-F8: Model Registry, Trust Layer & Live Red-Team Challenge](docs/WP-F8-Trust-Model-Registry-Red-Team.md)
 
