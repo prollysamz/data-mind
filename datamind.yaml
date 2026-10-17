@@ -27,8 +27,8 @@ llm:
   temperature: 0.0
   budget:
     max_usd_total: ${DATAMIND_BUDGET_MAX_USD:-10.0}
-    max_usd_per_run: ${DATAMIND_BUDGET_MAX_USD_PER_RUN:-2.0}
-    max_calls_per_run: 50
+    max_usd_per_run: ${DATAMIND_BUDGET_MAX_USD_PER_RUN:-5.0}
+    max_calls_per_run: ${DATAMIND_BUDGET_MAX_CALLS_PER_RUN:-300}
     max_tokens_per_call: 16384
     max_calls_per_minute: 60
     price_per_million_input_usd: ${DATAMIND_PRICE_INPUT_M:-}
