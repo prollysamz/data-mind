@@ -313,8 +313,9 @@ class UploadManager:
                 desc_df = conn.execute(f"DESCRIBE SELECT * FROM read_parquet('{temp_input.as_posix()}')").fetchall()
                 raw_columns = [row[0] for row in desc_df]
             else:
-                # Sniff CSV delimiter
-                sample_lines = "\n".join(text_content.splitlines()[:20]) if text_content else ""
+                # Sniff CSV delimiter (skipping comments)
+                non_comment_lines = [l for l in (text_content.splitlines() if text_content else []) if l.strip() and not l.strip().startswith("#")]
+                sample_lines = "\n".join(non_comment_lines[:20])
                 delimiter = "\t" if filename.lower().endswith(".tsv") else ","
                 try:
                     sniffer = csv.Sniffer()
@@ -324,7 +325,7 @@ class UploadManager:
                     pass
 
                 # Read header
-                first_line = (text_content.splitlines() or [""])[0] if text_content else ""
+                first_line = non_comment_lines[0] if non_comment_lines else ""
                 f_reader = csv.reader([first_line], delimiter=delimiter)
                 raw_columns = next(f_reader, [])
 

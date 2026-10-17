@@ -85,37 +85,20 @@ Open **`http://localhost:8080`** in your browser.
 
 ## Evaluation & Empirical Benchmarks
 
-All benchmark evaluations are deterministic, execute live against configured backends, and log full provenance.
+All benchmark evaluations are deterministic, execute live against configured backends, and log full provenance. See [eval/HISTORY.md](eval/HISTORY.md) for full historical run reconstruction.
 
-### Headline Benchmark: Sealed Held-Out Generalization
-*Run **once** on the frozen configuration (`eval-freeze`, Git `5fc44b2`, 2026-10-17) on local `gemma4:e2b` with zero tuning:*
+### Development & Iterated Benchmarks Summary
+*Note: In accordance with our Authenticity Charter, the previously reported 15/20 score on `held_out_sealed.yaml` represents an **iterated score on a used test set**, not a clean unseen generalisation benchmark. The questions were authored by the coding agent and run across multiple iterations. A genuine sealed benchmark authored by an independent party will be evaluated once on frozen tag `eval-freeze-v2` in WP-F5.*
 
-| Evaluation Suite | Question Count | Passed | Failed | Pass Rate | Evaluation Standard |
+| Evaluation Suite | Question Count | Passed | Failed | Pass Rate | Provenance & Standard |
 |---|:---:|:---:|:---:|:---:|---|
-| **Sealed Held-Out Suite** | **20** | **15** | **5** | **75.0%** | **Unseen generalisation benchmark**. Tested once on frozen git tag. 5 failures transparently documented below. |
-
-#### Analysis of Sealed Benchmark Failures (Local Gemma 2B Boundary Cases):
-1. `S_Q1_AVG_UNIT_PRICE_BY_CAT`: 5-row group aggregation calculation mismatch.
-2. `S_Q2_ORDERS_OVER_1000`: `HAVING SUM(amount) > 1000` nested aggregate citation discrepancy.
-3. `S_Q7_LOGISTICS_SUPPORT_TICKETS`: Cross-table join between support tickets and product category filter.
-4. `S_Q8_SINGLE_UNIT_ORDERS`: Citation tag discrepancy on single-unit transactions.
-5. `S_Q12_LOWEST_REALIZED_PRICE_PRODUCT`: Selected alternative low-price product.
-
----
-
-### Full Benchmark Suite Summary
-
-*Empirical results across all suites on local `gemma4:e2b`:*
-
-| Suite | Status / Catch Rate | Notes |
-|---|:---:|---|
-| **Sealed Held-Out Suite (n=20)** | **75.0%** (15/20) | Headline unseen test on frozen config |
-| **Business Suite (n=21)** | **100.0%** (21/21) | Tuned during development; verified to the cent |
-| **Trust & Adversarial Suite (n=6)** | **100.0%** (6/6) | Planted numbers, DROP injections, Cartesian joins |
-| **Automated Security Suite (n=50)** | **100.0%** (50/50) | Destructive SQL, CTE writes, file functions, Unicode, injection |
-| **Verifier Mutation Suite (n=53)** | **100.0%** (53/53) | Perturbations, magnitudes, direction flips, currency swaps caught |
-| **False-Positive Suite (n=20)** | **0.0%** FP (20/20 Clean) | Clean years, versions, quarters, error codes not flagged |
-| **Real UCI Retail Ingestion (541k rows)** | **100.0%** (5/5) | Full UCI dataset ingested in 1.95s, verified answers |
+| **Used Set (`held_out_sealed.yaml`)** | **20** | **15** | **5** | **75.0%** | **Iterated on used set** (first run scored 6/10 = 60.0% at `2888eb7`). Not a generalisation number. |
+| **Business Suite (`business.yaml`)** | **21** | **21** | **0** | **100.0%** | Development tuning set; verified to the exact cent. |
+| **Trust Suite (`trust.yaml`)** | **6** | **6** | **0** | **100.0%** | Planted numbers, DROP injections, Cartesian joins. |
+| **Automated Security Suite** | **50** | **50** | **0** | **100.0%** | Destructive SQL, CTE writes, file functions, Unicode, injection defenses. |
+| **Verifier Mutation Suite** | **53** | **53** | **0** | **100.0%** | Self-authored synthetic mutation suite (perturbations, flips, swaps). |
+| **False-Positive Control Suite** | **20** | **20** | **0** | **0.0% FP** | Clean years, versions, quarters, error codes not flagged. |
+| **UCI Retail Ingestion (541k rows)** | **5** | **5** | **0** | **100.0%** | Real UCI dataset ingested in 1.95s, verified answers. |
 
 ---
 
@@ -206,17 +189,19 @@ datamind mcp
 
 ---
 
-## Limitations
+## Limitations & Known Gaps
 
-- **Small Local Model Boundaries:** The local Gemma 2B model achieves 75.0% on complex unseen sealed analytical questions. For enterprise deployments with complex multi-level CTEs, swap to Gemma 26B or 31B.
-- **Synthetic Demo Data:** The primary demo (`examples/primary/demo.duckdb`) is synthetic data created for demonstration purposes. Real-world validation is provided on the full 541k-row UCI Online Retail dataset.
+- **"Verified but Wrong" Silent Error Risk:** The deterministic verifier verifies that numbers, currencies, and dates in the response match cited cells in evidence. It does **not** prove that the generated SQL represents the logically correct business question (e.g., if a wrong filter or join fan-out produces self-consistent but incorrect numbers). Measuring this silent-wrong rate and catching it via query AST linting and second opinions is the core focus of WP-F3 and WP-F8.
+- **Iterated Test Set:** The 15/20 score on `held_out_sealed.yaml` was iterated on during development and written by the coding agent itself; true zero-shot generalisation will be established only on the human-authored sealed set in WP-F5.
+- **Synthetic Demo Data:** The primary demo (`examples/primary/demo.duckdb`) is synthetic data (1,450 rows, 100 tickets) where outages directly correlate with revenue drops. Authentic real-world validation on the Olist Brazilian E-Commerce dataset is introduced in WP-F1.
 - **Snowflake Cortex Hosted Inference:** Snowflake trial accounts without AWS IAM linkage restrict hosted Cortex inference (`COMPLETE`); DataMind utilizes Gemma as the reasoning agent while Snowflake functions as the high-performance data execution layer.
-- **Document Semantics:** The verifier deterministically checks numbers, currency, dates, and direction words, but does not mathematically prove that qualitative customer ticket text represents statistical causation.
+- **Qualitative Causation:** The verifier deterministically checks numbers, currency, dates, and direction words, but does not prove statistical causation between customer complaint text and revenue changes.
 
 ---
 
 ## Documentation
 
+- [Evaluation History & Integrity Log](eval/HISTORY.md)
 - [Quickstart Guide](docs/quickstart.md)
 - [Local-Only Air-Gapped Mode](docs/local-only.md)
 - [Configuration Reference](docs/configuration.md)

@@ -53,7 +53,7 @@ This script walks through the core capabilities of DataMind in under 3 minutes, 
 
 ### [01:30 - 02:10] Scene 5: Live CSV Upload & Instant Verification
 1. **Action:** Click **"Upload CSV Dataset"** in the top navigation.
-2. **Action:** Drag and drop `examples/secondary/messy/customer_feedback_messy.csv`.
+2. **Action:** Drag and drop `tests/fixtures/customer_feedback_messy.csv`.
 3. **Observe:**
    - Immediate client-side validation (BOM decoded, Latin-1 notice, PII heuristic flags contact email).
    - Data profiling table displays column types, null %, min/max, distinct counts.

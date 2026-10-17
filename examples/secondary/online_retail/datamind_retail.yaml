@@ -1,4 +1,4 @@
-# DataMind Configuration for UCI Online Retail Secondary Demo (Zero Code Changes)
+# DataMind Configuration for UCI Online Retail Secondary Dataset Demo
 backend:
   type: duckdb
   duckdb_path: examples/secondary/online_retail/online_retail.duckdb

@@ -130,7 +130,7 @@ def run_acceptance() -> dict:
     # DATASET 2: Chinook Relational Tracks Sample
     # ---------------------------------------------------------
     print("\n[2/3] Testing Chinook Music Store Dataset...")
-    chinook_path = Path("examples/secondary/chinook/chinook_tracks.csv")
+    chinook_path = Path("tests/fixtures/chinook_tracks.csv")
     s2 = mgr.create_session()
     start_t2 = time.perf_counter()
     meta2 = mgr.ingest_file(s2, "chinook_tracks.csv", chinook_path.read_bytes())
@@ -187,7 +187,7 @@ def run_acceptance() -> dict:
     # DATASET 3: Messy Customer Feedback (BOM, Semicolons, PII, Text)
     # ---------------------------------------------------------
     print("\n[3/3] Testing Messy Customer Support Feedback Dataset...")
-    messy_path = Path("examples/secondary/messy/customer_feedback_messy.csv")
+    messy_path = Path("tests/fixtures/customer_feedback_messy.csv")
     s3 = mgr.create_session()
     start_t3 = time.perf_counter()
     meta3 = mgr.ingest_file(s3, "customer_feedback.csv", messy_path.read_bytes())
