@@ -58,3 +58,7 @@ This document reconstructs every evaluation run in DataMind's development trajec
 - WP-F5 quoted a sealed-set digest (`2e604f76...`) that matches no file; the committed digest `40d6cab3...` in `sealed_commitment.txt` matches `held_out_sealed.yaml` as stored in git (LF line endings; a Windows CRLF checkout hashes differently).
 - WP reports F2-F7 carry dated correction notes; "Completed & Certified" was changed to "Completed (self-reported)".
 
+### I. Runs After the Grain Check and Server Lock (2026-10-18)
+- Business suite, commit `f74f3d0`: 20/21 (`Q_MONTHLY_REVENUE_TREND` failed); trust 6/6. Results now store each item's answer, executed SQL and query IDs.
+- One earlier run on commit `cc47ea5` scored business 21/21 and trust 6/6. Its result files were discarded because the trust file was wrongly labelled `-dirty` (fixed in the same session); it is mentioned here so the range quoted in the README (19-21 of 21 over five runs) is complete.
+
