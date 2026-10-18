@@ -146,3 +146,50 @@ def test_server_rejects_invalid_max_turns(server_url, max_turns):
     with pytest.raises(Exception) as exc:
         urlopen(req)
     assert "400" in str(exc.value)
+
+
+def test_server_runs_questions_one_at_a_time(monkeypatch):
+    """Concurrent /api/ask requests must not overlap on the shared orchestrator."""
+    import datamind.server.server as server_mod
+
+    config = load_config("datamind.yaml")
+    server, adapter, retriever, upload_mgr = create_server(
+        config, backend="duckdb", host="127.0.0.1", port=0, enable_uploads=False
+    )
+    state = {"in_flight": 0, "max_in_flight": 0}
+    counter_lock = threading.Lock()
+
+    def fake_run(question, max_turns=6):
+        with counter_lock:
+            state["in_flight"] += 1
+            state["max_in_flight"] = max(state["max_in_flight"], state["in_flight"])
+        time.sleep(0.2)
+        with counter_lock:
+            state["in_flight"] -= 1
+        return object()
+
+    monkeypatch.setattr(server.RequestHandlerClass.orchestrator, "run", fake_run)
+    monkeypatch.setattr(server_mod, "format_orchestrator_result", lambda **kwargs: {"ok": True})
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/api/ask"
+
+    def ask():
+        req = Request(url, data=json.dumps({"question": "q"}).encode("utf-8"),
+                      headers={"Content-Type": "application/json"}, method="POST")
+        with urlopen(req) as res:
+            assert res.status == 200
+
+    try:
+        workers = [threading.Thread(target=ask) for _ in range(3)]
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join(timeout=10)
+        assert state["max_in_flight"] == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        adapter.close()
+        retriever.close()
+        upload_mgr.cleanup_all()

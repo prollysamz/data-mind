@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -241,6 +242,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
     config: AppConfig
     backend_name: str
     upload_manager: UploadManager
+    agent_lock: threading.Lock = threading.Lock()
 
     def _is_allowed_host(self) -> bool:
         host_header = self.headers.get("Host", "")
@@ -441,12 +443,13 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
 
             from datamind.llm.models import ModelRegistry
             reg = ModelRegistry(self.config)
+            selected_model: str | None = None
             if model_id:
                 valid, msg, model_info = reg.validate_model_selection(model_id)
                 if not valid:
                     self._send_json(400, {"error": msg, "error_type": "invalid_model"})
                     return
-                self.orchestrator.llm_client.config.orchestrator_model = model_id
+                selected_model = model_id
             elif preset_id:
                 preset = reg.get_preset(preset_id)
                 if preset:
@@ -454,7 +457,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                     if target_m:
                         valid, msg, _ = reg.validate_model_selection(target_m)
                         if valid:
-                            self.orchestrator.llm_client.config.orchestrator_model = target_m
+                            selected_model = target_m
                         elif preset.get("requires_cloud", False):
                             self._send_json(400, {
                                 "error": f"Preset '{preset.get('label')}' requires AWS Bedrock access, but cloud is not enabled: {msg}",
@@ -475,35 +478,40 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 })
                 return
 
-            try:
-                result = self.orchestrator.run(question, max_turns=max_turns)
-            except BudgetExceeded as e:
-                logger.warning("Budget limit reached: %s", e)
-                self._send_json(429, {
-                    "error_type": "budget_exceeded",
-                    "error": str(e),
-                    "message": f"Query halted by budget guard: {e}",
-                })
-                return
-            except BudgetConfigError as e:
-                logger.warning("Budget configuration error: %s", e)
-                self._send_json(400, {
-                    "error_type": "budget_config_error",
-                    "error": str(e),
-                    "message": f"Configuration error: {e}",
-                })
-                return
-            except Exception as e:
-                logger.exception("Agent execution error")
-                self._send_json(500, {"error": f"Execution error: {e}"})
-                return
+            # One shared orchestrator serves the UI; its evidence store and model setting
+            # are per-question state, so questions run one at a time.
+            with self.agent_lock:
+                if selected_model:
+                    self.orchestrator.llm_client.config.orchestrator_model = selected_model
+                try:
+                    result = self.orchestrator.run(question, max_turns=max_turns)
+                except BudgetExceeded as e:
+                    logger.warning("Budget limit reached: %s", e)
+                    self._send_json(429, {
+                        "error_type": "budget_exceeded",
+                        "error": str(e),
+                        "message": f"Query halted by budget guard: {e}",
+                    })
+                    return
+                except BudgetConfigError as e:
+                    logger.warning("Budget configuration error: %s", e)
+                    self._send_json(400, {
+                        "error_type": "budget_config_error",
+                        "error": str(e),
+                        "message": f"Configuration error: {e}",
+                    })
+                    return
+                except Exception as e:
+                    logger.exception("Agent execution error")
+                    self._send_json(500, {"error": f"Execution error: {e}"})
+                    return
 
-            response_data = format_orchestrator_result(
-                result=result,
-                orchestrator=self.orchestrator,
-                backend_name=self.backend_name,
-                is_permissive=is_permissive,
-            )
+                response_data = format_orchestrator_result(
+                    result=result,
+                    orchestrator=self.orchestrator,
+                    backend_name=self.backend_name,
+                    is_permissive=is_permissive,
+                )
             self._send_json(200, response_data)
             return
 

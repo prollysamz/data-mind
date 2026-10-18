@@ -195,7 +195,7 @@ class AgentOrchestrator:
         total_tokens_consumed = 0
         sql_repairs_count = 0
         max_sql_repairs = getattr(self, "max_sql_repairs", 2)
-        max_question_tokens = 32768
+        max_question_tokens = self.config.max_tokens_per_question
 
         for turn_idx in range(max_turns):
             turns_taken = turn_idx + 1
