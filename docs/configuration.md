@@ -62,7 +62,10 @@ llm:
   max_tokens: 4096
   temperature: 0.0
   timeout_seconds: 60.0
+  thinking: false                # allow Gemma/Qwen thinking mode on local Ollama (default off; see below)
 ```
+
+`thinking: false` sends `reasoning_effort: none` to local servers. Thinking tokens count against `max_tokens`, so with thinking on a small model can spend the whole completion budget reasoning and return an empty reply (`finish_reason=length`).
 
 ---
 

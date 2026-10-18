@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Sequence
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 from datamind.config import LLMConfig
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ class LLMClient:
         self.use_cache = use_cache
         self.purpose = purpose
         self._custom_client_provided = (client is not None)
+        self._reasoning_effort_supported = True
         if client is not None:
             self._client = client
         else:
@@ -77,6 +78,32 @@ class LLMClient:
                 api_key=api_key,
                 timeout=self.config.timeout_seconds,
             )
+
+    def _create_local(self, kwargs: dict[str, Any], extra_body: dict[str, Any]) -> Any:
+        """Send a request to a local OpenAI-compatible server, turning thinking mode off unless enabled.
+
+        Thinking tokens count against the completion limit, so leaving them on can produce an
+        empty reply with finish_reason='length'. Servers or models that reject the parameter
+        are remembered and called without it.
+        """
+        want_effort = (
+            not self.config.thinking
+            and self._reasoning_effort_supported
+            and self.cost_guard.is_local_endpoint(self.config.base_url)
+        )
+        if want_effort:
+            try:
+                return self._client.chat.completions.create(
+                    **kwargs, extra_body={**extra_body, "reasoning_effort": "none"}
+                )
+            except BadRequestError as exc:
+                if "think" not in str(exc).lower() and "reasoning" not in str(exc).lower():
+                    raise
+                logger.warning("Server rejected reasoning_effort; continuing without it: %s", exc)
+                self._reasoning_effort_supported = False
+        if extra_body:
+            kwargs = {**kwargs, "extra_body": extra_body}
+        return self._client.chat.completions.create(**kwargs)
 
     def chat(
         self,
@@ -152,7 +179,7 @@ class LLMClient:
                 kwargs["response_format"] = response_format
 
             if self._custom_client_provided:
-                return self._client.chat.completions.create(**kwargs)
+                return self._create_local(kwargs, {})
 
             is_cloud = (
                 target_model.startswith("google.")
@@ -186,8 +213,9 @@ class LLMClient:
                     ) from auth_err
             else:
                 # Enforce dynamic prediction limit in Ollama options
-                kwargs["extra_body"] = {"options": {"num_ctx": 16384, "num_predict": current_tokens}}
-                return self._client.chat.completions.create(**kwargs)
+                return self._create_local(
+                    kwargs, {"options": {"num_ctx": 16384, "num_predict": current_tokens}}
+                )
 
         response = _make_call(token_limit)
         choice = response.choices[0]
@@ -198,17 +226,29 @@ class LLMClient:
         has_content = bool(message.content and message.content.strip())
         has_tools = bool(getattr(message, "tool_calls", None))
 
-        if not has_content and not has_tools and finish_reason == "length":
+        retry_limit = token_limit * 2
+        if b.max_tokens_per_call:
+            retry_limit = min(retry_limit, b.max_tokens_per_call - prompt_tok_estimate)
+
+        if not has_content and not has_tools and finish_reason == "length" and retry_limit <= token_limit:
+            logger.warning(
+                "Empty reply with finish_reason='length' for model %s; no budget headroom to retry "
+                "(prompt ~%d tokens, per-call cap %s).",
+                target_model,
+                prompt_tok_estimate,
+                b.max_tokens_per_call,
+            )
+        elif not has_content and not has_tools and finish_reason == "length":
             logger.warning(
                 "Empty reply with finish_reason='length' for model %s. Retrying once with higher token limit (%d -> %d).",
                 target_model,
                 token_limit,
-                token_limit * 2,
+                retry_limit,
             )
             self.cost_guard.check_before_call(
                 base_url=self.config.base_url,
                 estimated_prompt_tokens=prompt_tok_estimate,
-                max_tokens=token_limit * 2,
+                max_tokens=retry_limit,
                 max_usd_total=b.max_usd_total,
                 max_usd_per_run=b.max_usd_per_run,
                 max_calls_per_run=b.max_calls_per_run,
@@ -217,7 +257,7 @@ class LLMClient:
                 price_per_million_input_usd=b.price_per_million_input_usd,
                 price_per_million_output_usd=b.price_per_million_output_usd,
             )
-            response = _make_call(token_limit * 2)
+            response = _make_call(retry_limit)
             choice = response.choices[0]
             message = choice.message
             finish_reason = getattr(choice, "finish_reason", None)

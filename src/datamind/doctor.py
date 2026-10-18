@@ -14,6 +14,24 @@ from datamind.config import AppConfig, load_config
 from datamind.llm.budget import CostGuard
 
 
+MIN_OLLAMA_CONTEXT = 8192
+
+
+def ollama_configured_context(parameters_text: str, env_value: str | None = None) -> int | None:
+    """Return the context length Ollama will use, from a model's Modelfile parameters or OLLAMA_CONTEXT_LENGTH.
+
+    Ollama's OpenAI-compatible /v1 endpoint ignores per-request ``options.num_ctx``, so the window
+    is whatever the model or server is configured with (4096 by default). Returns None if unset.
+    """
+    for line in (parameters_text or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "num_ctx" and parts[1].isdigit():
+            return int(parts[1])
+    if env_value and env_value.strip().isdigit():
+        return int(env_value.strip())
+    return None
+
+
 class DoctorCheck:
     def __init__(self, name: str, description: str) -> None:
         self.name = name
@@ -28,14 +46,14 @@ def run_diagnostics(config_path: str = "datamind.yaml") -> list[DoctorCheck]:
     checks: list[DoctorCheck] = []
 
     # 1. Python Version
-    c1 = DoctorCheck("Python Version", "Python >= 3.10 runtime environment")
+    c1 = DoctorCheck("Python Version", "Python >= 3.11 runtime environment")
     py_ver = sys.version_info
-    if py_ver >= (3, 10):
+    if py_ver >= (3, 11):
         c1.passed = True
         c1.details = f"Python {py_ver.major}.{py_ver.minor}.{py_ver.micro}"
     else:
         c1.passed = False
-        c1.details = f"Python {py_ver.major}.{py_ver.minor} is below minimum requirement 3.10"
+        c1.details = f"Python {py_ver.major}.{py_ver.minor} is below minimum requirement 3.11"
     checks.append(c1)
 
     # 2. Dependencies
@@ -46,7 +64,6 @@ def run_diagnostics(config_path: str = "datamind.yaml") -> list[DoctorCheck]:
         ("openai", "OpenAI API client"),
         ("pydantic", "Schema validation"),
         ("yaml", "PyYAML loader"),
-        ("snowflake.connector", "Snowflake connector"),
     ]
     missing = []
     installed = []
@@ -116,12 +133,30 @@ def run_diagnostics(config_path: str = "datamind.yaml") -> list[DoctorCheck]:
                 data = json.loads(resp.read().decode("utf-8"))
                 models = [m.get("name") for m in data.get("models", [])]
                 target = cfg.llm.orchestrator_model
-                if any(target in m for m in models):
-                    c5.passed = True
-                    c5.details = f"Ollama reachable at {host_root}. Target model '{target}' loaded. Context: 16,384 tokens."
+                if target in models or f"{target}:latest" in models:
+                    show_req = urllib.request.Request(
+                        f"{host_root}/api/show",
+                        data=json.dumps({"model": target}).encode("utf-8"),
+                        headers={"User-Agent": "DataMind-Doctor", "Content-Type": "application/json"},
+                    )
+                    with urllib.request.urlopen(show_req, timeout=5) as show_resp:
+                        params = json.loads(show_resp.read().decode("utf-8")).get("parameters", "")
+                    ctx = ollama_configured_context(params, os.environ.get("OLLAMA_CONTEXT_LENGTH"))
+                    if ctx is not None and ctx >= MIN_OLLAMA_CONTEXT:
+                        c5.passed = True
+                        c5.details = f"Ollama reachable at {host_root}. Target model '{target}' is available (context {ctx})."
+                    else:
+                        c5.passed = False
+                        c5.details = (
+                            f"Model '{target}' has no context window >= {MIN_OLLAMA_CONTEXT} configured, so Ollama "
+                            "defaults to 4096 and long answers are cut off (finish_reason=length). Create a variant "
+                            "with 'PARAMETER num_ctx 16384' in a Modelfile (see docs/quickstart.md section 5) or set "
+                            "OLLAMA_CONTEXT_LENGTH=16384 for the Ollama server."
+                        )
                 else:
-                    c5.passed = True
-                    c5.details = f"Ollama reachable ({len(models)} models available). Note: '{target}' may need pull."
+                    c5.passed = False
+                    available = ", ".join(models[:5]) if models else "none"
+                    c5.details = f"Ollama reachable, but target model '{target}' is unavailable. Available: {available}."
         else:
             c5.passed = True
             c5.details = f"Remote endpoint configured ({base_url}). Checked via CostGuard."

@@ -102,3 +102,96 @@ def test_llm_client_token_param_selection():
     assert "max_completion_tokens" in call_kwargs
     assert call_kwargs["max_completion_tokens"] == 150
     assert "max_tokens" not in call_kwargs
+
+
+def _stop_resp(text: str = "OK") -> MagicMock:
+    choice = MagicMock()
+    choice.message.content = text
+    choice.message.tool_calls = None
+    choice.finish_reason = "stop"
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.usage = None
+    return resp
+
+
+def _empty_length_resp() -> MagicMock:
+    resp = _stop_resp("")
+    resp.choices[0].finish_reason = "length"
+    return resp
+
+
+def test_local_endpoint_disables_thinking_by_default():
+    mock_openai = MagicMock()
+    mock_openai.chat.completions.create.return_value = _stop_resp()
+
+    client = LLMClient(config=LLMConfig(base_url="http://localhost:11434/v1"), client=mock_openai)
+    client.chat([{"role": "user", "content": "Hi"}])
+
+    kwargs = mock_openai.chat.completions.create.call_args.kwargs
+    assert kwargs["extra_body"]["reasoning_effort"] == "none"
+
+
+def test_thinking_true_does_not_send_reasoning_effort():
+    mock_openai = MagicMock()
+    mock_openai.chat.completions.create.return_value = _stop_resp()
+
+    client = LLMClient(
+        config=LLMConfig(base_url="http://localhost:11434/v1", thinking=True), client=mock_openai
+    )
+    client.chat([{"role": "user", "content": "Hi"}])
+
+    assert "extra_body" not in mock_openai.chat.completions.create.call_args.kwargs
+
+
+def test_reasoning_effort_rejection_falls_back_and_is_remembered():
+    from openai import BadRequestError
+
+    mock_openai = MagicMock()
+    rejected = BadRequestError(
+        "model does not support thinking", response=MagicMock(status_code=400), body=None
+    )
+    mock_openai.chat.completions.create.side_effect = [rejected, _stop_resp(), _stop_resp()]
+
+    client = LLMClient(config=LLMConfig(base_url="http://localhost:11434/v1"), client=mock_openai)
+    assert client.chat([{"role": "user", "content": "Hi"}])["content"] == "OK"
+    client.chat([{"role": "user", "content": "Again"}])
+
+    calls = mock_openai.chat.completions.create.call_args_list
+    assert len(calls) == 3  # rejected attempt, fallback, then a single call once remembered
+    assert "extra_body" not in calls[1].kwargs
+    assert "extra_body" not in calls[2].kwargs
+
+
+def test_length_retry_is_clamped_to_per_call_budget():
+    from datamind.config import BudgetConfig
+
+    mock_openai = MagicMock()
+    mock_openai.chat.completions.create.side_effect = [_empty_length_resp(), _stop_resp("done")]
+
+    cfg = LLMConfig(max_tokens=800, budget=BudgetConfig(max_tokens_per_call=1000))
+    client = LLMClient(config=cfg, client=mock_openai)
+    res = client.chat([{"role": "user", "content": "x" * 35}])  # ~10 prompt tokens
+
+    assert res["content"] == "done"
+    retry_kwargs = mock_openai.chat.completions.create.call_args_list[1].kwargs
+    assert 800 < retry_kwargs["max_tokens"] <= 1000 - 10
+
+
+def test_length_retry_skipped_without_budget_headroom():
+    from datamind.config import BudgetConfig
+    from datamind.llm.client import _estimate_tokens
+
+    messages = [{"role": "user", "content": "x" * 350}]
+    # The first call exactly fills the per-call cap, so a larger retry could never be allowed.
+    cfg = LLMConfig(
+        max_tokens=1000 - _estimate_tokens(messages),
+        budget=BudgetConfig(max_tokens_per_call=1000),
+    )
+    mock_openai = MagicMock()
+    mock_openai.chat.completions.create.return_value = _empty_length_resp()
+
+    res = LLMClient(config=cfg, client=mock_openai).chat(messages)
+
+    assert mock_openai.chat.completions.create.call_count == 1
+    assert res["finish_reason"] == "length"

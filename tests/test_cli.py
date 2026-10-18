@@ -179,3 +179,25 @@ def test_cli_eval_command(capsys: pytest.CaptureFixture):
         captured = capsys.readouterr()
         assert "DATAMIND EVALUATION RUNNER" in captured.out
         assert "EVALUATION SUMMARY: 2 / 2 Passed" in captured.out
+
+
+def test_cli_ask_reports_budget_exceeded_cleanly(capsys: pytest.CaptureFixture):
+    """A budget stop must exit with a readable error, not a traceback."""
+    from datamind.llm.budget import BudgetExceeded
+
+    with patch("datamind.cli.AgentOrchestrator") as mock_orch_cls:
+        mock_orch_cls.return_value.run.side_effect = BudgetExceeded("Token limit exceeded: test")
+        exit_code = main(["ask", "How many products are there?"])
+
+    assert exit_code == 2
+    err = capsys.readouterr().err
+    assert "budget guard" in err
+    assert "Token limit exceeded: test" in err
+
+
+def test_doctor_reads_ollama_context_from_modelfile_or_env():
+    from datamind.doctor import ollama_configured_context
+
+    assert ollama_configured_context("num_ctx                        16384\ntemperature 0") == 16384
+    assert ollama_configured_context("temperature 0", env_value="8192") == 8192
+    assert ollama_configured_context("temperature 0", env_value=None) is None

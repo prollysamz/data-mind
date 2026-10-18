@@ -14,6 +14,7 @@ from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.config import load_config, load_dotenv
 from datamind.eval.runner import run_evaluation
+from datamind.llm.budget import BudgetConfigError, BudgetExceeded
 from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
@@ -64,6 +65,9 @@ def handle_ask(args: argparse.Namespace) -> int:
 
     try:
         result = orchestrator.run(args.question, max_turns=config.agent.max_steps)
+    except (BudgetExceeded, BudgetConfigError) as exc:
+        print(f"Error: request stopped by the budget guard: {exc}", file=sys.stderr)
+        return 2
     finally:
         adapter.close()
         retriever.close()

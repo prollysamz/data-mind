@@ -88,6 +88,14 @@ class LLMConfig(BaseModel):
     max_tokens: int = Field(default=8192)
     temperature: float = Field(default=0.0)
     timeout_seconds: float = Field(default=60.0)
+    thinking: bool = Field(
+        default=False,
+        description=(
+            "Allow the model's thinking mode on local OpenAI-compatible servers (Ollama). "
+            "When False, requests send reasoning_effort='none' so thinking tokens cannot "
+            "consume the completion budget and leave an empty reply."
+        ),
+    )
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
 
     def get_api_key(self) -> str:
@@ -145,7 +153,6 @@ class AgentConfig(BaseModel):
     schema_pruning: bool = False
     dynamic_few_shot: bool = False
     execution_guided_repair: bool = True
-    structured_query_lane: bool = False
     self_consistency: bool = False
 
 
