@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import random
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,14 +11,13 @@ from typing import Any
 import duckdb
 
 from datamind.agent.classifier import (
-    ReviewClassifier,
-    ReviewClassificationResult,
-    verify_verbatim_quotes,
     SENTIMENT_CATEGORIES,
-    TOPIC_CATEGORIES,
+    ReviewClassificationResult,
+    ReviewClassifier,
     map_star_rating_to_sentiment,
+    verify_verbatim_quotes,
 )
-from datamind.eval.ledger import RunLedger, LedgerEntry, get_git_commit_hash
+from datamind.eval.ledger import LedgerEntry, RunLedger, get_git_commit_hash
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +59,7 @@ def run_review_classification_eval(
 
     # Confusion matrix: [actual_sentiment][predicted_sentiment]
     confusion: dict[str, dict[str, int]] = {
-        act: {pred: 0 for pred in SENTIMENT_CATEGORIES}
+        act: dict.fromkeys(SENTIMENT_CATEGORIES, 0)
         for act in SENTIMENT_CATEGORIES
     }
 
@@ -114,7 +111,7 @@ def run_review_classification_eval(
     # Topic Accuracy on subset of 50
     topic_sample = selected[:topic_sample_size]
     topic_correct = 0
-    for r_id, score, comment in topic_sample:
+    for r_id, _score, comment in topic_sample:
         c_low = comment.lower()
         # Heuristic ground truth for topic validation
         if any(w in c_low for w in ["entrega", "prazo", "chegou", "demora", "atraso"]):
@@ -144,8 +141,8 @@ def run_review_classification_eval(
     clean_narrative = f'Customer feedback highlighted "{real_quote_1}" and noted that "{real_quote_2}".'
     tampered_narrative = clean_narrative + ' One customer falsely claimed "the seller stole my package and fled the country".'
 
-    v_clean_pass, v_clean_diag = verify_verbatim_quotes(clean_narrative, sample_passages)
-    v_tamper_pass, v_tamper_diag = verify_verbatim_quotes(tampered_narrative, sample_passages)
+    v_clean_pass, _v_clean_diag = verify_verbatim_quotes(clean_narrative, sample_passages)
+    v_tamper_pass, _v_tamper_diag = verify_verbatim_quotes(tampered_narrative, sample_passages)
 
     # Format Markdown Report
     report_md = f"""# WP-F4 Evaluation Report: Review Sentiment & Topic Classification

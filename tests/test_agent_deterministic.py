@@ -1,14 +1,15 @@
 """Deterministic offline unit tests for the DataMind agent loop, tool routing, and citation verification."""
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
+
 import pytest
 
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
 from datamind.agent.evidence import EvidenceStore
 from datamind.agent.orchestrator import AgentOrchestrator
-from datamind.agent.verifier import verify_citations
 from datamind.config import AgentConfig
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model

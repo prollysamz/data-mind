@@ -15,9 +15,10 @@ from stored query rows. Never uses model-generated numbers.
 from __future__ import annotations
 
 import datetime
-from decimal import Decimal
 import re
+from decimal import Decimal
 from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 from datamind.agent.evidence import QueryRecord

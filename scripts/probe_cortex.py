@@ -11,6 +11,8 @@ import argparse
 import os
 import sys
 
+from datamind.config import load_dotenv
+
 
 def probe_cortex_analyst(conn) -> tuple[str, str]:
     """Probe Cortex Analyst via SQL / REST."""
@@ -57,8 +59,6 @@ def probe_cortex_agents(conn) -> tuple[str, str]:
     # Cortex Agents is typically in private/public preview via REST API or Snowpark
     return "INCONCLUSIVE", "Endpoint requires configured Agent specification and REST authentication."
 
-
-from datamind.config import load_dotenv
 
 
 def main() -> int:

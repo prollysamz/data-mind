@@ -1,7 +1,8 @@
 """Unit tests for Data Egress Sentinel Guard and privacy enforcement."""
 
 import pytest
-from datamind.guardrails.egress_guard import EgressSentinelGuard, DataEgressViolation, EgressLedger, EgressManifestItem
+
+from datamind.guardrails.egress_guard import DataEgressViolation, EgressLedger, EgressManifestItem, EgressSentinelGuard
 
 
 def test_egress_sentinel_blocks_secret_token():

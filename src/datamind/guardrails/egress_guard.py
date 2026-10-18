@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import re
 import logging
-from dataclasses import dataclass, field, asdict
-from typing import Any, ClassVar, Sequence
+import re
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, field
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 """Unit tests for SnowflakeAdapter using mocked cursor/connection."""
 
 from unittest.mock import MagicMock, patch
-import pytest
+
 from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 from datamind.config import SnowflakeConfig
 

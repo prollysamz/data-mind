@@ -1,6 +1,7 @@
 """Unit tests for DuckDBAdapter."""
 
 from pathlib import Path
+
 import duckdb
 import pytest
 

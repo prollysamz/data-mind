@@ -7,9 +7,8 @@ user's question based on keyword matching, descriptions, and foreign key relatio
 from __future__ import annotations
 
 import re
-from typing import Any
-from datamind.semantic.model import SemanticModel, TableDef, JoinDef
 
+from datamind.semantic.model import SemanticModel
 
 _STOP_WORDS = {
     "a", "an", "the", "in", "on", "at", "for", "to", "of", "and", "or", "is",

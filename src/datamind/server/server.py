@@ -20,7 +20,7 @@ from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
 from datamind.trust.chart_planner import plan_chart
-from datamind.uploads.manager import UploadError, UploadManager, UploadSession
+from datamind.uploads.manager import UploadError, UploadManager
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +299,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/models":
-            from datamind.llm.models import ModelRegistry, PRESETS
+            from datamind.llm.models import PRESETS, ModelRegistry
             reg = ModelRegistry(self.config)
             self._send_json(200, {
                 "models": [m.to_dict() for m in reg.list_models()],
@@ -445,7 +445,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             reg = ModelRegistry(self.config)
             selected_model: str | None = None
             if model_id:
-                valid, msg, model_info = reg.validate_model_selection(model_id)
+                valid, msg, _model_info = reg.validate_model_selection(model_id)
                 if not valid:
                     self._send_json(400, {"error": msg, "error_type": "invalid_model"})
                     return
@@ -520,7 +520,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             target = payload.get("model_id", "gemma4:e2b")
             from datamind.llm.models import ModelRegistry
             reg = ModelRegistry(self.config)
-            valid, msg, model_info = reg.validate_model_selection(target)
+            valid, msg, _model_info = reg.validate_model_selection(target)
             if not valid:
                 self._send_json(400, {"success": False, "error": msg})
                 return
@@ -577,10 +577,11 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
 
         # Red-Team Interactive Attack Engine: /api/red_team
         if path == "/api/red_team":
-            from datamind.agent.verifier import verify_citations
-            from datamind.agent.evidence import EvidenceStore
-            from datamind.adapters.base import QueryResult
             import re
+
+            from datamind.adapters.base import QueryResult
+            from datamind.agent.evidence import EvidenceStore
+            from datamind.agent.verifier import verify_citations
 
             answer = payload.get("answer", "")
             raw_evidence = payload.get("evidence", {})

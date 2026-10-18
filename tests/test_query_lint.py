@@ -1,7 +1,8 @@
 """Unit tests for deterministic query linting and assumptions card generation."""
 
 import pytest
-from datamind.guardrails.query_lint import QueryLinter, AssumptionsCard, QueryLintFinding
+
+from datamind.guardrails.query_lint import QueryLinter
 from datamind.semantic.loader import load_semantic_model
 from datamind.semantic.model import (
     ColumnDef,

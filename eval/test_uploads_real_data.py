@@ -8,11 +8,9 @@ Tests end-to-end ingestion, profiling, confirmation, and querying for:
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 import time
+from pathlib import Path
 
-from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.config import load_config
 from datamind.uploads.manager import UploadManager
 
@@ -222,7 +220,7 @@ def run_acceptance() -> dict:
             }
         },
     }
-    model3 = mgr.confirm_model(s3, review_cfg3)
+    mgr.confirm_model(s3, review_cfg3)
     assert s3.fts_path.exists(), "FTS5 SQLite index should be created for document column!"
     print(f"  FTS5 SQLite Index verified: {s3.fts_path}")
 

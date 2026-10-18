@@ -1,6 +1,6 @@
 # WP-F7 Report: Packaging, CLI Diagnostics & Version Freeze
 
-> **Correction (2026-10-18):** No `eval-freeze-v2` (or any other) git tag exists in the repository. CI runs the secret scan and pytest only; it does not run static type checking or linting. The test count is now 234.
+> **Correction (2026-10-18):** No `eval-freeze-v2` (or any other) git tag exists in the repository. CI runs ruff lint (rules in `pyproject.toml`), the secret scan and pytest; it does not run static type checking. The test count is now 259.
 
 
 **Work Package:** WP-F7  

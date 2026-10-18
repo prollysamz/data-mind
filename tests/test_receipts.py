@@ -1,11 +1,13 @@
 """Unit tests for cryptographic answer receipts, SHA-256 hash chains, and tamper verification."""
 
 import json
+
 import pytest
-from datamind.agent.evidence import EvidenceStore
-from datamind.agent.verifier import verify_citations
+
 from datamind.adapters.base import QueryResult
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
+from datamind.agent.evidence import EvidenceStore
+from datamind.agent.verifier import verify_citations
 from datamind.guardrails.sql_guard import SQLGuard
 from datamind.trust.receipts import ReceiptGenerator, ReceiptVerifier
 

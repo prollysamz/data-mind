@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
-import urllib.request
 import json
 import logging
-from dataclasses import dataclass, field, asdict
+import os
+import urllib.request
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
-from datamind.config import AppConfig, load_dotenv
+
+from datamind.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

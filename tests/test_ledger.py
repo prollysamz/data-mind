@@ -1,7 +1,6 @@
 """Unit tests for append-only run ledger."""
 
 from pathlib import Path
-import pytest
 
 from datamind.eval.ledger import LedgerEntry, RunLedger
 

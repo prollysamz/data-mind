@@ -3,7 +3,6 @@
 import os
 import sys
 
-
 from datamind.config import load_dotenv
 
 
@@ -82,7 +81,7 @@ def main() -> int:
             print(">>> [FAIL] INSERT succeeded on read-only role! (Should have been blocked)")
             return 1
         except Exception as e:
-            print(f"Insert test:  Blocked as expected by Snowflake permissions.")
+            print("Insert test:  Blocked as expected by Snowflake permissions.")
             print(f"              Error snippet: {str(e)[:120]}...")
             print(">>> [PASS] INSERT successfully blocked by DATAMIND_READONLY role.")
 
@@ -92,7 +91,7 @@ def main() -> int:
             print(">>> [FAIL] DROP succeeded on read-only role! (Should have been blocked)")
             return 1
         except Exception as e:
-            print(f"Drop test:    Blocked as expected by Snowflake permissions.")
+            print("Drop test:    Blocked as expected by Snowflake permissions.")
             print(f"              Error snippet: {str(e)[:120]}...")
             print(">>> [PASS] DROP TABLE successfully blocked by DATAMIND_READONLY role.")
 

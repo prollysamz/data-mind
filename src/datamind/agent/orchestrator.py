@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 from datamind.adapters.base import DBAdapter
@@ -17,6 +17,8 @@ from datamind.agent.answerability import (
 )
 from datamind.agent.evidence import EvidenceStore
 from datamind.agent.prompts import build_system_prompt
+from datamind.agent.techniques.dynamic_few_shot import retrieve_dynamic_few_shot
+from datamind.agent.techniques.schema_pruning import prune_semantic_model
 from datamind.agent.tools import (
     TOOL_DEFINITIONS,
     execute_retrieval_tool,
@@ -24,8 +26,6 @@ from datamind.agent.tools import (
 )
 from datamind.agent.verifier import CitationReport, verify_citations
 from datamind.config import AgentConfig
-from datamind.agent.techniques.schema_pruning import prune_semantic_model
-from datamind.agent.techniques.dynamic_few_shot import retrieve_dynamic_few_shot
 from datamind.guardrails.sql_guard import SQLGuard
 from datamind.llm.client import LLMClient, build_tool_messages
 from datamind.retrieval.base import Retriever

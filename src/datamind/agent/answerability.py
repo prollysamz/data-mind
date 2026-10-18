@@ -14,10 +14,10 @@ structured classification call to the local LLM settles it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from datamind.llm.budget import BudgetExceeded
@@ -31,38 +31,10 @@ AMBIGUOUS = "ambiguous"
 
 # Function words and analytics vocabulary that say nothing about which data a question needs.
 # Dataset-agnostic English; nothing here names a table, column or business attribute.
-_STOP_WORDS = set("""
-a an the and or but nor of in on at to for from by with without about into onto over under than then
-as per via vs versus between among across within during since until till before after up down out off
-is are was were be been being am do does did done doing have has had having can could will would shall
-should may might must let lets
-i me my mine we us our ours you your yours he him his she her hers it its they them their theirs
-this that these those there here what which who whom whose when where why how whats hows whos
-any some all each every both either neither no not none only just also too very really so such same other
-another own more most less least much many few several one ones
-please tell show give list find get display return provide want need like know see make
-compute calculate count sum total average avg mean median min max minimum maximum overall
-top bottom best worst highest lowest largest smallest biggest greatest high low big small large
-number amount value values rank ranking ranked sort sorted compare comparison
-group grouped grouping breakdown broken distribution split percent percentage share ratio rate
-change changes increase decrease growth trend trends difference differ
-day days daily week weeks weekly month months monthly quarter quarters quarterly year years yearly
-annual annually date dates time times period periods recent recently last past current currently
-today yesterday now ago latest earliest first previous next early late right
-january february march april may june july august september october november december
-jan feb mar apr jun jul aug sep sept oct nov dec
-table tables column columns row rows record records field fields database dataset query sql select
-join joined joins data
-distinct unique single multiple different various specific exact actual above below through rather
-relative against zero belong contain include exceed generate level volume calendar entire whole
-""".split())
+_STOP_WORDS = {"a", "an", "the", "and", "or", "but", "nor", "of", "in", "on", "at", "to", "for", "from", "by", "with", "without", "about", "into", "onto", "over", "under", "than", "then", "as", "per", "via", "vs", "versus", "between", "among", "across", "within", "during", "since", "until", "till", "before", "after", "up", "down", "out", "off", "is", "are", "was", "were", "be", "been", "being", "am", "do", "does", "did", "done", "doing", "have", "has", "had", "having", "can", "could", "will", "would", "shall", "should", "may", "might", "must", "let", "lets", "i", "me", "my", "mine", "we", "us", "our", "ours", "you", "your", "yours", "he", "him", "his", "she", "her", "hers", "it", "its", "they", "them", "their", "theirs", "this", "that", "these", "those", "there", "here", "what", "which", "who", "whom", "whose", "when", "where", "why", "how", "whats", "hows", "whos", "any", "some", "all", "each", "every", "both", "either", "neither", "no", "not", "none", "only", "just", "also", "too", "very", "really", "so", "such", "same", "other", "another", "own", "more", "most", "less", "least", "much", "many", "few", "several", "one", "ones", "please", "tell", "show", "give", "list", "find", "get", "display", "return", "provide", "want", "need", "like", "know", "see", "make", "compute", "calculate", "count", "sum", "total", "average", "avg", "mean", "median", "min", "max", "minimum", "maximum", "overall", "top", "bottom", "best", "worst", "highest", "lowest", "largest", "smallest", "biggest", "greatest", "high", "low", "big", "small", "large", "number", "amount", "value", "values", "rank", "ranking", "ranked", "sort", "sorted", "compare", "comparison", "group", "grouped", "grouping", "breakdown", "broken", "distribution", "split", "percent", "percentage", "share", "ratio", "rate", "change", "changes", "increase", "decrease", "growth", "trend", "trends", "difference", "differ", "day", "days", "daily", "week", "weeks", "weekly", "month", "months", "monthly", "quarter", "quarters", "quarterly", "year", "years", "yearly", "annual", "annually", "date", "dates", "time", "times", "period", "periods", "recent", "recently", "last", "past", "current", "currently", "today", "yesterday", "now", "ago", "latest", "earliest", "first", "previous", "next", "early", "late", "right", "january", "february", "march", "april", "june", "july", "august", "september", "october", "november", "december", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "table", "tables", "column", "columns", "row", "rows", "record", "records", "field", "fields", "database", "dataset", "query", "sql", "select", "join", "joined", "joins", "data", "distinct", "unique", "single", "multiple", "different", "various", "specific", "exact", "actual", "above", "below", "through", "rather", "relative", "against", "zero", "belong", "contain", "include", "exceed", "generate", "level", "volume", "calendar", "entire", "whole"}
 
 # Words that only make sense as a vague request for "the numbers" in general.
-_VAGUE_WORDS = set("""
-numbers figures metrics metric stats statistics kpi kpis business things thing everything anything
-something stuff performance situation status update updates overview summary summarize results
-progress health picture info information report reports going looking doing happening insight insights
-""".split())
+_VAGUE_WORDS = {"numbers", "figures", "metrics", "metric", "stats", "statistics", "kpi", "kpis", "business", "things", "thing", "everything", "anything", "something", "stuff", "performance", "situation", "status", "update", "updates", "overview", "summary", "summarize", "results", "progress", "health", "picture", "info", "information", "report", "reports", "going", "looking", "doing", "happening", "insight", "insights"}
 
 
 def _stem(word: str) -> str:
@@ -72,9 +44,7 @@ def _stem(word: str) -> str:
         w = w[:-3] + "y"
     elif len(w) > 5 and w.endswith("ing"):
         w = w[:-3]
-    elif len(w) > 4 and w.endswith("ed"):
-        w = w[:-2]
-    elif len(w) > 4 and w.endswith(("ches", "shes", "sses", "xes", "zes")):
+    elif (len(w) > 4 and w.endswith("ed")) or (len(w) > 4 and w.endswith(("ches", "shes", "sses", "xes", "zes"))):
         w = w[:-2]
     elif len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
         w = w[:-1]
@@ -86,7 +56,7 @@ def _stem(word: str) -> str:
 def _words(text: str) -> list[str]:
     """Lowercase word tokens; identifiers are split on '_' and camelCase."""
     spaced = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
-    return [w for w in re.findall(r"[a-z]+", spaced.lower().replace("'s", ""))]
+    return list(re.findall(r"[a-z]+", spaced.lower().replace("'s", "")))
 
 
 def schema_vocabulary(model: SemanticModel) -> set[str]:
@@ -225,7 +195,7 @@ def classify_with_llm(
         )
     except BudgetExceeded:
         raise
-    except Exception as e:  # noqa: BLE001 - a failed classification falls back to the schema screen
+    except Exception as e:
         logger.warning("Answerability classification call failed: %s", e)
         return None
     data = _parse_json_reply(reply.get("content") or "")

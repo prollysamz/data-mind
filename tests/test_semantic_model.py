@@ -1,6 +1,7 @@
 """Unit tests for semantic model parser, loader, and prompt context generator."""
 
 from pathlib import Path
+
 import pytest
 
 from datamind.semantic.loader import load_semantic_model

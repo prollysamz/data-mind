@@ -1,10 +1,9 @@
 """Unit tests for leakage guard."""
 
-import pytest
 from datamind.eval.leakage_guard import (
-    compute_question_similarity,
     check_leakage,
     check_model_leakage,
+    compute_question_similarity,
 )
 
 

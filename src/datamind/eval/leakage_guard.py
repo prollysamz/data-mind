@@ -7,14 +7,13 @@ Computes token and n-gram Jaccard similarity and fails if similarity exceeds the
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-import re
-from typing import Any
+
 import yaml
 
 from datamind.semantic.loader import load_semantic_model
-
 
 _STOP_WORDS = {
     "a", "an", "the", "in", "on", "at", "for", "to", "of", "and", "or", "is",
@@ -144,7 +143,7 @@ def check_model_leakage(
     model = load_semantic_model(s_path)
     training_questions = [vq.question for vq in model.verified_queries]
 
-    with open(q_path, "r", encoding="utf-8") as f:
+    with open(q_path, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
 
     eval_questions: list[tuple[str, str]] = []

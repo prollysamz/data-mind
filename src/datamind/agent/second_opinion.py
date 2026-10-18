@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field, asdict
-from typing import Any, Sequence
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from datamind.adapters.base import DBAdapter, QueryResult
+from datamind.guardrails.query_lint import AssumptionsCard, QueryLinter
 from datamind.guardrails.sql_guard import SQLGuard, SQLSecurityError
-from datamind.guardrails.query_lint import QueryLinter, AssumptionsCard
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +110,10 @@ def diff_assumptions(card1: AssumptionsCard, card2: AssumptionsCard) -> Assumpti
     group2 = set(getattr(card2, "grouping", getattr(card2, "group_by", [])))
 
     return AssumptionsDiff(
-        tables_diff=sorted(list(tables1.symmetric_difference(tables2))),
-        filters_diff=sorted(list(filters1.symmetric_difference(filters2))),
-        metrics_diff=sorted(list(metrics1.symmetric_difference(metrics2))),
-        group_by_diff=sorted(list(group1.symmetric_difference(group2))),
+        tables_diff=sorted(tables1.symmetric_difference(tables2)),
+        filters_diff=sorted(filters1.symmetric_difference(filters2)),
+        metrics_diff=sorted(metrics1.symmetric_difference(metrics2)),
+        group_by_diff=sorted(group1.symmetric_difference(group2)),
     )
 
 
@@ -171,8 +172,8 @@ class SecondOpinionEngine:
         # 4. Result set comparison
         verdict, explanation = compare_result_sets(p_res, s_res)
 
-        p_sample = [dict(zip(p_res.columns, row)) for row in p_res.rows[:5]]
-        s_sample = [dict(zip(s_res.columns, row)) for row in s_res.rows[:5]]
+        p_sample = [dict(zip(p_res.columns, row, strict=False)) for row in p_res.rows[:5]]
+        s_sample = [dict(zip(s_res.columns, row, strict=False)) for row in s_res.rows[:5]]
 
         labels = {
             "AGREE_EXACT": "Consensus (Identical Results)",

@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
-import io
 import json
 import logging
-import os
-from pathlib import Path
 import re
 import shutil
 import sqlite3
 import time
-from typing import Any
 import uuid
+from pathlib import Path
+from typing import Any
 
 import duckdb
 import yaml
@@ -21,7 +20,7 @@ import yaml
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
 from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.config import AppConfig
-from datamind.guardrails.sql_guard import SQLGuard, SQLSecurityError
+from datamind.guardrails.sql_guard import SQLGuard
 from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
@@ -112,7 +111,7 @@ class UploadSession:
 
     def load_metadata(self) -> None:
         if self.meta_path.exists():
-            with open(self.meta_path, "r", encoding="utf-8") as f:
+            with open(self.meta_path, encoding="utf-8") as f:
                 data = json.load(f)
                 self.created_at = data.get("created_at", self.created_at)
                 self.ttl_seconds = data.get("ttl_seconds", self.ttl_seconds)
@@ -332,7 +331,7 @@ class UploadManager:
                 raw_columns = [row[0] for row in desc_df]
             else:
                 # Sniff CSV delimiter (skipping comments)
-                non_comment_lines = [l for l in (text_content.splitlines() if text_content else []) if l.strip() and not l.strip().startswith("#")]
+                non_comment_lines = [line for line in (text_content.splitlines() if text_content else []) if line.strip() and not line.strip().startswith("#")]
                 sample_lines = "\n".join(non_comment_lines[:20])
                 delimiter = "\t" if filename.lower().endswith(".tsv") else ","
                 try:
@@ -410,14 +409,12 @@ class UploadManager:
 
             # Rename columns to sanitized names if needed
             db_cols = [r[1] for r in conn.execute(f"PRAGMA table_info('{sanitized_table}')").fetchall()]
-            for orig, clean in zip(db_cols, sanitized_cols):
+            for orig, clean in zip(db_cols, sanitized_cols, strict=False):
                 if orig != clean:
-                    try:
+                    with contextlib.suppress(Exception):
                         conn.execute(
                             f"ALTER TABLE {table_ident} RENAME COLUMN {quote_identifier(orig)} TO {quote_identifier(clean)};"
                         )
-                    except Exception:
-                        pass
 
             # 5. Row count check
             total_rows = conn.execute(f"SELECT COUNT(*) FROM {table_ident}").fetchone()[0]
@@ -459,10 +456,8 @@ class UploadManager:
         finally:
             conn.close()
             if temp_input.exists():
-                try:
+                with contextlib.suppress(Exception):
                     temp_input.unlink()
-                except Exception:
-                    pass
 
     def _profile_table(
         self,
@@ -669,7 +664,7 @@ class UploadManager:
 
         # Compile verified queries
         v_queries = []
-        for tbl_name, t_meta in session.tables_meta.items():
+        for t_meta in session.tables_meta.values():
             for cq in t_meta.get("candidate_queries", []):
                 v_queries.append({
                     "name": cq["name"],

@@ -1,9 +1,10 @@
 """Unit tests for SecondOpinionEngine cross-model query consensus and assumptions diffing."""
 
 import pytest
+
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
-from datamind.guardrails.sql_guard import SQLGuard
 from datamind.agent.second_opinion import SecondOpinionEngine
+from datamind.guardrails.sql_guard import SQLGuard
 
 
 @pytest.fixture

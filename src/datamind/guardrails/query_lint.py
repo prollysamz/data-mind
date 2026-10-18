@@ -18,9 +18,11 @@ Downgrades verification badge to "Partially verified" with plain-language diagno
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import contextlib
 import re
+from dataclasses import dataclass, field
 from typing import Any
+
 import sqlglot
 from sqlglot import exp
 
@@ -222,10 +224,8 @@ class QueryLinter:
         limit_val: int | None = None
         limit_node = ast.find(exp.Limit)
         if limit_node and limit_node.expression:
-            try:
+            with contextlib.suppress(ValueError):
                 limit_val = int(limit_node.expression.sql())
-            except ValueError:
-                pass
 
         # ----------------------------------------------------------------------
         # Check A: Join Fan-Out Detection

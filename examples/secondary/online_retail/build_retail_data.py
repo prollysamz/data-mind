@@ -6,10 +6,12 @@ and builds examples/secondary/online_retail/online_retail.duckdb.
 
 from __future__ import annotations
 
+import contextlib
 import csv
+import urllib.request
 from datetime import datetime
 from pathlib import Path
-import urllib.request
+
 import duckdb
 
 DATASET_URL = "https://raw.githubusercontent.com/guipsamora/pandas_exercises/master/07_Visualization/Online_Retail/Online_Retail.csv"
@@ -21,10 +23,8 @@ BUFFER_BYTES = 2_500_000  # Download ~2.5MB (approx 15,000 real transactions)
 def build_database() -> None:
     print(f"Connecting to DuckDB at {DB_PATH}...")
     if DB_PATH.exists():
-        try:
+        with contextlib.suppress(Exception):
             DB_PATH.unlink()
-        except Exception:
-            pass
 
     conn = duckdb.connect(str(DB_PATH))
     conn.execute("""

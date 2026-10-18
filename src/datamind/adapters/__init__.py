@@ -4,7 +4,7 @@ from datamind.adapters.base import DBAdapter, QueryResult
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
 from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 
-__all__ = ["DBAdapter", "DuckDBAdapter", "QueryResult", "SnowflakeAdapter", "build_adapter", "backend_label"]
+__all__ = ["DBAdapter", "DuckDBAdapter", "QueryResult", "SnowflakeAdapter", "backend_label", "build_adapter"]
 
 
 def build_adapter(config, backend: str | None = None) -> DBAdapter:

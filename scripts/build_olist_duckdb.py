@@ -2,7 +2,9 @@
 
 import pathlib
 import time
+
 import duckdb
+
 
 def build_olist_duckdb(data_dir: str = "data/olist", db_path: str = "data/olist/olist.duckdb") -> None:
     data_path = pathlib.Path(data_dir)

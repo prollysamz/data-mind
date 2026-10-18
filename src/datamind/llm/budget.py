@@ -10,16 +10,17 @@ Enforces strict client-side cost controls, metering, and fail-closed cloud prote
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import datetime
 import hashlib
 import json
 import logging
 import os
-from pathlib import Path
 import sqlite3
 import time
-from typing import Any, Sequence
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -345,7 +346,7 @@ class CostGuard:
                 "calls": [],
             }
         try:
-            with open(self.usage_file, "r", encoding="utf-8") as f:
+            with open(self.usage_file, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {

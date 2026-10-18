@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import logging
 import re
 import sqlite3
+from pathlib import Path
 from typing import Any
-import logging
 
 import duckdb
 
 from datamind.retrieval.base import Chunk, Retriever
-
 
 logger = logging.getLogger(__name__)
 

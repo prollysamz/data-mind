@@ -12,9 +12,8 @@ Outputs ablation markdown table reading directly from eval/run_ledger.jsonl.
 from __future__ import annotations
 
 import copy
-from pathlib import Path
 import sys
-import time
+from pathlib import Path
 
 from datamind.config import load_config
 from datamind.eval.ledger import RunLedger

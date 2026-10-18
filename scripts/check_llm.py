@@ -194,7 +194,7 @@ def main() -> int:
                 })
 
             tool_responses = build_tool_messages(raw_assistant_msg, fake_results)
-            round_trip_messages = list(step2_messages) + [raw_assistant_msg] + tool_responses
+            round_trip_messages = [*list(step2_messages), raw_assistant_msg, *tool_responses]
 
             res3 = client.chat(
                 messages=round_trip_messages,

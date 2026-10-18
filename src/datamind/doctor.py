@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import importlib
-import os
-from pathlib import Path
-import sys
-from typing import Any
-import urllib.request
 import json
+import os
+import sys
+import urllib.request
+from pathlib import Path
 
-from datamind.config import AppConfig, load_config
+from datamind.config import load_config
 from datamind.llm.budget import CostGuard
-
 
 MIN_OLLAMA_CONTEXT = 8192
 
@@ -67,7 +65,7 @@ def run_diagnostics(config_path: str = "datamind.yaml") -> list[DoctorCheck]:
     ]
     missing = []
     installed = []
-    for mod, desc in required_pkgs:
+    for mod, _desc in required_pkgs:
         try:
             importlib.import_module(mod)
             installed.append(mod)
@@ -170,7 +168,7 @@ def run_diagnostics(config_path: str = "datamind.yaml") -> list[DoctorCheck]:
     try:
         cfg = load_config(config_path)
         b = cfg.llm.budget
-        guard = CostGuard()
+        CostGuard()
         allow_cloud = os.environ.get("DATAMIND_ALLOW_CLOUD", "0") == "1"
         cap_str = f"${b.max_usd_total:.2f} USD" if b.max_usd_total is not None else "Unset (fail-closed)"
         cloud_active = (allow_cloud and b.max_usd_total is not None and b.price_per_million_input_usd is not None)

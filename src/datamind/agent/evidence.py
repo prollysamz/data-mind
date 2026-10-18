@@ -47,7 +47,7 @@ class EvidenceStore:
             row_ids.append(row_id)
             # Store column mapping (case-preserved and case-insensitive lookup)
             row_dict: dict[str, Any] = {}
-            for col_name, val in zip(result.columns, row_values):
+            for col_name, val in zip(result.columns, row_values, strict=False):
                 row_dict[col_name] = val
                 row_dict[col_name.lower()] = val
                 row_dict[col_name.upper()] = val

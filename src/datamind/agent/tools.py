@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+
 from datamind.adapters.base import DBAdapter
 from datamind.agent.evidence import EvidenceStore
 from datamind.guardrails.sql_guard import SQLGuard, SQLSecurityError
@@ -102,7 +102,7 @@ def execute_sql_tool(
         return "\n".join(lines)
 
     # Header with RowID column
-    header = ["RowID"] + query_result.columns
+    header = ["RowID", *query_result.columns]
     lines.append("| " + " | ".join(header) + " |")
     lines.append("| " + " | ".join(["---"] * len(header)) + " |")
 

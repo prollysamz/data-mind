@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import decimal
 import time
+
 import duckdb
-from datamind.config import load_config
+
 from datamind.adapters.snowflake_adapter import SnowflakeAdapter
+from datamind.config import load_config
 
 
 def normalize_val(val: any) -> any:
@@ -84,13 +86,13 @@ def main() -> int:
         # 1. Execute on DuckDB
         t0_duck = time.perf_counter()
         duck_rows = duck_conn.execute(sql).fetchall()
-        t_duck = time.perf_counter() - t0_duck
+        time.perf_counter() - t0_duck
 
         # 2. Execute on Snowflake
         t0_sf = time.perf_counter()
         sf_res = sf_adapter.execute(sql)
         sf_rows = sf_res.rows
-        t_sf = time.perf_counter() - t0_sf
+        time.perf_counter() - t0_sf
 
         norm_duck = [[normalize_val(c) for c in r] for r in duck_rows]
         norm_sf = [[normalize_val(c) for c in r] for r in sf_rows]
@@ -110,8 +112,9 @@ def main() -> int:
 
     # Suspend warehouse after comparison
     try:
-        from datamind.cli import handle_warehouse_suspend
         import argparse
+
+        from datamind.cli import handle_warehouse_suspend
         handle_warehouse_suspend(argparse.Namespace(config="datamind_snowflake.yaml"))
     except Exception:
         pass

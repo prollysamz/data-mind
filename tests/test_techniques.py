@@ -1,9 +1,10 @@
 """Unit tests for WP-F2 accuracy techniques."""
 
 import pytest
-from datamind.semantic.loader import load_semantic_model
-from datamind.agent.techniques.schema_pruning import prune_semantic_model
+
 from datamind.agent.techniques.dynamic_few_shot import retrieve_dynamic_few_shot
+from datamind.agent.techniques.schema_pruning import prune_semantic_model
+from datamind.semantic.loader import load_semantic_model
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ This document provides a comprehensive index of all engineering Work Packages (W
 | **WP-F4** | **Review Classification & Sentiment** | Local Gemma review categorization, sentiment star agreement, and verbatim quote verification | `6823fa0` | **53.0% sentiment agreement (106/200)**, 80.0% topic agreement (40/50) | [Read WP-F4 Report](WP-F4-Review-Classification-Sentiment.md) |
 | **WP-F5** | **Sealed Evaluation & Human Audit** | SHA-256 sealed question commitment, 40-item human citation review | `ca6b005` | Claims **withdrawn**: agent-authored questions, digest mismatch, citation sheet not a real human audit | [Read WP-F5 Report](WP-F5-Sealed-Evaluation-Human-Audit.md) |
 | **WP-F6** | **Demonstration Script & MCP Integration** | 3-minute timed live walkthrough script & Model Context Protocol stdio server | `9c43564`<br>`3c5d244` | Video recording skipped per user instruction; live script & MCP server delivered | [Read WP-F6 Report](WP-F6-Demo-Script-And-Presentation.md) |
-| **WP-F7** | **Packaging, Diagnostics & Freeze** | `eval-freeze-v2` tag, `datamind doctor` CLI diagnostics, automated GitHub Actions CI | `1a34ab2` | Tests pass in CI (now 234); no freeze tag exists; CI has no lint/type checks | [Read WP-F7 Report](WP-F7-Packaging-And-Artifact-Freeze.md) |
+| **WP-F7** | **Packaging, Diagnostics & Freeze** | `eval-freeze-v2` tag, `datamind doctor` CLI diagnostics, automated GitHub Actions CI | `1a34ab2` | Tests pass in CI (now 259); no freeze tag exists; CI runs ruff lint but no type checks | [Read WP-F7 Report](WP-F7-Packaging-And-Artifact-Freeze.md) |
 | **WP-F8** | **Model Registry & Trust Layer** | Air-gap presets, Bedrock Mantle integration, SHA-256 receipts, second opinion, live red-team | `d556f5e`<br>`8db5b44`<br>`a756a3f` | Live Bedrock connected; 100% red-team catch rate; centered modals | [Read WP-F8 Report](WP-F8-Trust-Model-Registry-Red-Team.md) |
 
 ---
@@ -29,6 +29,6 @@ This document provides a comprehensive index of all engineering Work Packages (W
 | Trust & guardrails suite | 6 | 6 / 6 | Three runs |
 | Verifier mutation suite | 73 | 73 / 73 | Checks numbers and citations, not SQL intent |
 | Review sentiment agreement (Olist) | 200 | 53.0% | vs. customer star ratings |
-| Automated tests (pytest) | 234 | 234 / 234 | Offline, no credentials |
+| Automated tests (pytest) | 259 | 259 / 259 | Offline, no credentials |
 
 There is no independent, human-authored sealed evaluation and no human citation audit yet. See [eval/HISTORY.md](../eval/HISTORY.md) for the full record.

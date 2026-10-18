@@ -1,8 +1,9 @@
 """Tests for configuration loading, interpolation, and environment precedence."""
 
-import os
 from pathlib import Path
+
 import pytest
+
 from datamind.config import AppConfig, load_config
 
 

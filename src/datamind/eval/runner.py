@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import datetime
-import json
-from pathlib import Path
-import time
 import decimal
+import json
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
 import yaml
 
 from datamind.adapters import backend_label, build_adapter
@@ -134,7 +135,6 @@ def _evaluate_item(
     if item_suite == "trust":
         category = item.get("category", "")
         if category == "planted_wrong_number":
-            from datamind.agent.evidence import EvidenceStore
             from datamind.agent.verifier import verify_citations
             orchestrator = AgentOrchestrator(
                 llm_client=llm_client,
@@ -359,7 +359,7 @@ def run_evaluation(
     if suite in ("all", "business"):
         b_file = Path("eval/questions/business.yaml")
         if b_file.exists():
-            with open(b_file, "r", encoding="utf-8") as f:
+            with open(b_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for q in data.get("questions", []):
                     q["_suite"] = "business"
@@ -369,7 +369,7 @@ def run_evaluation(
     if suite in ("all", "trust"):
         t_file = Path("eval/questions/trust.yaml")
         if t_file.exists():
-            with open(t_file, "r", encoding="utf-8") as f:
+            with open(t_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for q in data.get("questions", []):
                     q["_suite"] = "trust"
@@ -379,7 +379,7 @@ def run_evaluation(
     if suite in ("all", "held_out"):
         h_file = Path("eval/questions/held_out.yaml")
         if h_file.exists():
-            with open(h_file, "r", encoding="utf-8") as f:
+            with open(h_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for q in data.get("questions", []):
                     q["_suite"] = "held_out"
@@ -389,7 +389,7 @@ def run_evaluation(
     if suite in ("all", "held_out_fresh"):
         hf_file = Path("eval/questions/held_out_fresh.yaml")
         if hf_file.exists():
-            with open(hf_file, "r", encoding="utf-8") as f:
+            with open(hf_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for q in data.get("questions", []):
                     q["_suite"] = "held_out_fresh"
@@ -399,7 +399,7 @@ def run_evaluation(
     if suite == "held_out_sealed":
         hs_file = Path("eval/questions/held_out_sealed.yaml")
         if hs_file.exists():
-            with open(hs_file, "r", encoding="utf-8") as f:
+            with open(hs_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for q in data.get("questions", []):
                     q["_suite"] = "held_out_sealed"
@@ -409,7 +409,7 @@ def run_evaluation(
     if suite in ("all", "olist_dev"):
         dev_file = Path("eval/questions/olist_dev.yaml")
         if dev_file.exists():
-            with open(dev_file, "r", encoding="utf-8") as f:
+            with open(dev_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
                 for q in data.get("questions", []):
                     q["_suite"] = "olist_dev"
@@ -495,6 +495,7 @@ def _save_eval_results(
 ) -> None:
     """Save JSON report with git provenance, latency, update RESULTS.md, and append to RunLedger."""
     import subprocess
+
     from datamind.eval.ledger import LedgerEntry, RunLedger, compute_file_sha256
 
     results_dir = Path("eval/results")

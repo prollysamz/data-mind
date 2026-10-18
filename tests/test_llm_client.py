@@ -1,7 +1,7 @@
 """Tests for LLMClient and tool round-trip message building (offline with mock transport)."""
 
-from typing import Any
 from unittest.mock import MagicMock
+
 from datamind.config import LLMConfig
 from datamind.llm.client import LLMClient, build_tool_messages
 

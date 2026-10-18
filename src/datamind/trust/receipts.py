@@ -7,13 +7,12 @@ import html as html_lib
 import json
 import logging
 from dataclasses import asdict
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Sequence
+from datetime import UTC, datetime
+from typing import Any
 
-from datamind.agent.evidence import EvidenceStore
-from datamind.agent.verifier import verify_citations, CitationReport
 from datamind.adapters.base import DBAdapter
+from datamind.agent.evidence import EvidenceStore
+from datamind.agent.verifier import CitationReport, verify_citations
 from datamind.guardrails.sql_guard import SQLGuard
 
 logger = logging.getLogger(__name__)
@@ -49,7 +48,7 @@ class ReceiptGenerator:
         config_dict: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Assemble all evidence, citations, and metadata into a hash-chained receipt."""
-        now_utc = datetime.now(timezone.utc).isoformat()
+        now_utc = datetime.now(UTC).isoformat()
 
         # Sanitize config
         safe_config = {}

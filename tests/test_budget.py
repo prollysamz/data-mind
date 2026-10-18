@@ -5,19 +5,18 @@ metering, pre-call limit enforcement, retries, response caching, and eval budget
 All tests run offline with mock transport (no network or real cloud calls).
 """
 
-from pathlib import Path
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
 import pytest
 
-from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.cli import main
-from datamind.config import AppConfig, BudgetConfig, LLMConfig
+from datamind.config import BudgetConfig, LLMConfig
 from datamind.eval.runner import run_evaluation
 from datamind.llm.budget import (
     BudgetConfigError,
     BudgetExceeded,
-    CallRecord,
     CostGuard,
     LLMResponseCache,
 )
@@ -279,7 +278,6 @@ def test_datamind_usage_cli(capsys: pytest.CaptureFixture, tmp_path: Path):
 
 def test_partial_eval_output_on_budget_exceeded(tmp_path: Path):
     """When BudgetExceeded is raised during evaluation, execution halts and unfinished items are marked NOT_RUN."""
-    from datamind.eval.runner import run_evaluation
 
     mock_guard = MagicMock()
     # Raise BudgetExceeded on first question call

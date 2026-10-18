@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import decimal
 import re
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from datamind.agent.evidence import EvidenceStore
@@ -219,10 +219,7 @@ def _is_real_metric(raw_full: str, raw_num_str: str, sentence: str, match_start:
 
     # 8. For bare unformatted integers, require adjacent metric/count context
     window = sentence[max(0, match_start - 35):min(len(sentence), match_start + len(raw_num_str) + 35)].lower()
-    if any(re.search(r"\b" + kw + r"\b", window) for kw in METRIC_KEYWORDS):
-        return True
-
-    return False
+    return bool(any(re.search(r"\b" + kw + r"\b", window) for kw in METRIC_KEYWORDS))
 
 
 def verify_citations(
@@ -433,24 +430,23 @@ def verify_citations(
             elif raw_full.startswith("€") or "euro" in segment.lower() or "eur" in segment.lower():
                 claimed_symbol = "€"
 
-            if claimed_symbol:
-                if claimed_symbol != expected_symbol:
-                    msg = (
-                        f"Currency unit mismatch: claimed '{claimed_symbol}' ({raw_full}) "
-                        f"but declared semantic model currency is '{expected_symbol}' ({expected_currency})."
+            if claimed_symbol and claimed_symbol != expected_symbol:
+                msg = (
+                    f"Currency unit mismatch: claimed '{claimed_symbol}' ({raw_full}) "
+                    f"but declared semantic model currency is '{expected_symbol}' ({expected_currency})."
+                )
+                report.numeric_checks.append(
+                    NumericCheck(
+                        raw_text=raw_full,
+                        claimed_value=claimed_float,
+                        sentence=segment,
+                        status="DISCREPANCY",
+                        message=msg,
                     )
-                    report.numeric_checks.append(
-                        NumericCheck(
-                            raw_text=raw_full,
-                            claimed_value=claimed_float,
-                            sentence=segment,
-                            status="DISCREPANCY",
-                            message=msg,
-                        )
-                    )
-                    report.discrepancy_count += 1
-                    report.is_clean = False
-                    continue
+                )
+                report.discrepancy_count += 1
+                report.is_clean = False
+                continue
 
             # Skip calendar years or list bullets
             if _is_calendar_or_bullet(raw_matched_num, cleaned_segment, match.start()):
@@ -562,7 +558,7 @@ def verify_citations(
                             if i == j:
                                 continue
                             r1, c1, v1 = numeric_cells_list[i]
-                            r2, c2, v2 = numeric_cells_list[j]
+                            _r2, c2, v2 = numeric_cells_list[j]
 
                             # Difference
                             diff_val = v1 - v2

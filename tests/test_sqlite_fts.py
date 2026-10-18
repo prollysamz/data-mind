@@ -1,7 +1,6 @@
 """Unit tests for SQLite FTS5 document retriever."""
 
 from pathlib import Path
-import pytest
 
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 

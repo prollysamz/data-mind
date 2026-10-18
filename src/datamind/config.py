@@ -10,9 +10,9 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-import yaml
 
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ENV_PATTERN = re.compile(r"\$\{([A-Za-z0-9_]+)(?::-(.*?))?\}")
 
@@ -22,7 +22,7 @@ def load_dotenv(dotenv_path: str | Path = ".env") -> None:
     p = Path(dotenv_path)
     if not p.exists():
         return
-    with open(p, "r", encoding="utf-8") as f:
+    with open(p, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -224,7 +224,7 @@ def load_config(config_path: str | Path | None = None, load_env: bool = True) ->
     if config_path is not None:
         path = Path(config_path)
         if path.exists():
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 raw_data = yaml.safe_load(f) or {}
                 data = _interpolate_env(raw_data)
 

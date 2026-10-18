@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, asdict
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any
 
-from datamind.llm.client import LLMClient
 from datamind.config import LLMConfig
+from datamind.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 

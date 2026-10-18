@@ -1,6 +1,7 @@
 """Write the exact installed versions of datamind[dev,snowflake] and its dependency closure."""
-import platform, sys
+import platform
 from importlib import metadata
+
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
@@ -12,7 +13,8 @@ def walk(name, extras=()):
     except metadata.PackageNotFoundError:
         return
     if key not in seen:
-        seen[key] = dist.version; order.append(key)
+        seen[key] = dist.version
+        order.append(key)
     for raw in dist.requires or []:
         req = Requirement(raw)
         env = {"extra": ""}

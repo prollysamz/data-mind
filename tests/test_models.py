@@ -1,8 +1,6 @@
 """Unit tests for ModelRegistry, preset configuration, and privacy classifications."""
 
-import os
-import pytest
-from datamind.llm.models import ModelRegistry, PRESETS, KNOWN_MODELS
+from datamind.llm.models import KNOWN_MODELS, PRESETS, ModelRegistry
 
 
 def test_registry_lists_models():
@@ -17,7 +15,7 @@ def test_registry_lists_models():
 def test_cloud_model_disabled_without_env(monkeypatch):
     monkeypatch.delenv("DATAMIND_ALLOW_CLOUD", raising=False)
     reg = ModelRegistry()
-    valid, msg, model_info = reg.validate_model_selection("google.gemma-4-26b-a4b")
+    valid, msg, _model_info = reg.validate_model_selection("google.gemma-4-26b-a4b")
     assert valid is False
     assert "DATAMIND_ALLOW_CLOUD=1 is not set" in msg
 
@@ -25,7 +23,7 @@ def test_cloud_model_disabled_without_env(monkeypatch):
 def test_local_model_always_allowed(monkeypatch):
     monkeypatch.delenv("DATAMIND_ALLOW_CLOUD", raising=False)
     reg = ModelRegistry()
-    valid, msg, model_info = reg.validate_model_selection("gemma4:e2b")
+    valid, _msg, model_info = reg.validate_model_selection("gemma4:e2b")
     assert valid is True
     assert model_info.privacy_class == "LOCAL_PRIVATE"
 

@@ -3,8 +3,9 @@
 Both DuckDBAdapter and SnowflakeAdapter must pass this exact suite.
 """
 
-from typing import Generator
+from collections.abc import Generator
 from unittest.mock import MagicMock
+
 import pytest
 
 from datamind.adapters.base import DBAdapter, QueryResult

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import time
-from typing import Any
 import uuid
+from pathlib import Path
+from typing import Any
+
 import duckdb
 
 from datamind.adapters.base import DBAdapter, QueryResult

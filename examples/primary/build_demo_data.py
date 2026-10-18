@@ -6,8 +6,9 @@ Deterministic seed ensures exact reproducibility across local DuckDB and Snowfla
 from __future__ import annotations
 
 import datetime
-from pathlib import Path
 import random
+from pathlib import Path
+
 import duckdb
 
 

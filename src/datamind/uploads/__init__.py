@@ -1,5 +1,5 @@
 """DataMind user upload and session isolation package."""
 
-from datamind.uploads.manager import UploadManager, UploadSession, UploadError
+from datamind.uploads.manager import UploadError, UploadManager, UploadSession
 
-__all__ = ["UploadManager", "UploadSession", "UploadError"]
+__all__ = ["UploadError", "UploadManager", "UploadSession"]

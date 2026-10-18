@@ -1,12 +1,12 @@
 """Unit tests for WP-F4 review classification, model-derived tagging, and verbatim quote verification."""
 
-import pytest
 import duckdb
+
 from datamind.agent.classifier import (
-    ReviewClassifier,
     ReviewClassificationResult,
-    verify_verbatim_quotes,
+    ReviewClassifier,
     map_star_rating_to_sentiment,
+    verify_verbatim_quotes,
 )
 
 

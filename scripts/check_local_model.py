@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+
 from openai import OpenAI
 
 from datamind.config import load_config

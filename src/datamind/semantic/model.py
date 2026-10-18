@@ -6,7 +6,7 @@ Defines tables, columns, metrics, join relationships, currency, and verified que
 from __future__ import annotations
 
 import re
-from typing import Any
+
 from pydantic import BaseModel, Field
 
 

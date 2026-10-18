@@ -6,10 +6,11 @@ Skips olist_geolocation_dataset.csv to save warehouse compute.
 
 from __future__ import annotations
 
-import os
+import contextlib
 import pathlib
 import sys
 import time
+
 import snowflake.connector
 
 from datamind.config import load_config
@@ -198,10 +199,8 @@ def main() -> int:
 
     # Clean up stage files
     for table_name, _, _ in tables:
-        try:
+        with contextlib.suppress(Exception):
             cursor.execute(f"REMOVE @%{table_name}")
-        except Exception:
-            pass
 
     # Suspend warehouse to prevent idle compute costs
     print("Suspending DATAMIND_XS warehouse...")

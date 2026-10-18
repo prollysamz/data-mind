@@ -5,14 +5,13 @@ credential isolation, and resource abuse protections.
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import pytest
 
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
-from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 from datamind.guardrails.sql_guard import SQLGuard, SQLSecurityError
-from datamind.uploads.manager import UploadManager, UploadError
-
+from datamind.uploads.manager import UploadError, UploadManager
 
 APPROVED_TABLES = ["PRODUCTS", "SALES", "SUPPORT_TICKETS", "CUSTOMERS"]
 
@@ -159,7 +158,7 @@ def test_prompt_injection_via_column_name(tmp_path):
     session = mgr.create_session()
 
     # Column name payload attempting injection
-    csv_content = 'id,"amount; DROP TABLE SALES; --"\n1,100.5\n2,200.0\n'.encode("utf-8")
+    csv_content = b'id,"amount; DROP TABLE SALES; --"\n1,100.5\n2,200.0\n'
     meta = mgr.ingest_file(session, "injection.csv", csv_content)
 
     # Cleaned table must have sanitized snake_case column names

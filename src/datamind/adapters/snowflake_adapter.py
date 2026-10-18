@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import time
@@ -160,10 +161,8 @@ class SnowflakeAdapter(DBAdapter):
     def close(self) -> None:
         """Close connection."""
         if hasattr(self, "_conn") and self._conn is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._conn.close()
-            except Exception:
-                pass
 
     def __enter__(self) -> SnowflakeAdapter:
         return self

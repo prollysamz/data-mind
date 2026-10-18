@@ -27,6 +27,7 @@ snowflake = [
 dev = [
     "pytest>=7.0.0",
     "detect-secrets>=1.4.0",
+    "ruff==0.17.1",
     "snowflake-connector-python>=3.0.0",
 ]
 
@@ -42,3 +43,21 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = [".datamind", "data"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "C4", "RUF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # unicode punctuation in prose strings is intentional
+    "SIM102",                      # nested ifs often mirror the verifier's rule structure
+    "SIM105",                      # explicit try/except/pass is clearer than contextlib.suppress here
+    "SIM108",                      # ternaries are not always clearer
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/run_live_trust_suite.py" = ["E402"]  # stdout is reconfigured before imports
+

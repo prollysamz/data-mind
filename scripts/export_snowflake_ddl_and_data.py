@@ -1,7 +1,7 @@
 """Export DuckDB demo dataset into a Snowflake SQL script with DDL, batch INSERTs, and role grants."""
 
-from pathlib import Path
 import duckdb
+
 
 def main() -> None:
     db_path = "examples/primary/demo.duckdb"
@@ -31,7 +31,7 @@ def main() -> None:
     # Products data
     prods = conn.execute("SELECT product_id, product_name, category, base_price FROM PRODUCTS").fetchall()
     prod_vals = [f"({p[0]}, '{p[1]}', '{p[2]}', {p[3]})" for p in prods]
-    lines.append(f"INSERT INTO PRODUCTS (product_id, product_name, category, base_price) VALUES\n  " + ",\n  ".join(prod_vals) + ";\n")
+    lines.append("INSERT INTO PRODUCTS (product_id, product_name, category, base_price) VALUES\n  " + ",\n  ".join(prod_vals) + ";\n")
     
     # 2. SUPPORT_TICKETS table
     lines.extend([
@@ -52,7 +52,7 @@ def main() -> None:
     for t in tickets:
         body_esc = t[5].replace("'", "''")
         ticket_vals.append(f"('{t[0]}', '{t[1]}', '{t[2]}', '{t[3]}', '{t[4]}', '{body_esc}')")
-    lines.append(f"INSERT INTO SUPPORT_TICKETS (ticket_id, created_at, product_name, category, priority, body) VALUES\n  " + ",\n  ".join(ticket_vals) + ";\n")
+    lines.append("INSERT INTO SUPPORT_TICKETS (ticket_id, created_at, product_name, category, priority, body) VALUES\n  " + ",\n  ".join(ticket_vals) + ";\n")
     
     # 3. SALES table
     lines.extend([
@@ -78,7 +78,7 @@ def main() -> None:
     for i in range(0, len(sales), chunk_size):
         chunk = sales[i:i+chunk_size]
         vals = [f"({s[0]}, {s[1]}, '{s[2]}', '{s[3]}', {s[4]}, '{s[5]}', {s[6]}, {s[7]})" for s in chunk]
-        lines.append(f"INSERT INTO SALES (order_id, line_no, order_date, order_month, product_id, product_name, quantity, amount) VALUES\n  " + ",\n  ".join(vals) + ";\n")
+        lines.append("INSERT INTO SALES (order_id, line_no, order_date, order_month, product_id, product_name, quantity, amount) VALUES\n  " + ",\n  ".join(vals) + ";\n")
         
     lines.extend([
         "-- 4. GRANT PERMISSIONS TO DATAMIND_READONLY",

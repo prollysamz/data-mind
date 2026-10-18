@@ -7,7 +7,7 @@ matching user question keywords, rather than supplying a static prompt list.
 from __future__ import annotations
 
 import re
-from typing import Any
+
 from datamind.semantic.model import VerifiedQuery
 
 

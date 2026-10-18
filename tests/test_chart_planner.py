@@ -10,13 +10,10 @@ Verifies all shape classifications:
 - Provable row-ID equality: every plotted value exactly equals the cell in its cited row ID
 """
 
-from decimal import Decimal
-import pytest
 
 from datamind.adapters.base import QueryResult
 from datamind.agent.evidence import QueryRecord
-from datamind.semantic.model import SemanticModel
-from datamind.trust.chart_planner import ChartSpec, plan_chart
+from datamind.trust.chart_planner import plan_chart
 
 
 def _make_query_record(columns: list[str], rows: list[list]) -> QueryRecord:

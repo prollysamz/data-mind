@@ -6,16 +6,14 @@ and audit metrics in eval/run_ledger.jsonl.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-import datetime
 import hashlib
 import json
-from pathlib import Path
+import os
 import subprocess
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 
-
-import os
 
 def get_ledger_path() -> Path:
     return Path(os.getenv("DATAMIND_RUN_LEDGER_PATH", "eval/run_ledger.jsonl"))
@@ -92,7 +90,7 @@ class RunLedger:
         if not self.ledger_path.exists():
             return []
         runs = []
-        with open(self.ledger_path, "r", encoding="utf-8") as f:
+        with open(self.ledger_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

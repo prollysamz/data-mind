@@ -1,8 +1,6 @@
 """Unit tests for DataMind MCP stdio server."""
 
 import json
-from unittest.mock import MagicMock
-import pytest
 
 from datamind.mcp_server import DataMindMCPServer, get_tool_definitions
 

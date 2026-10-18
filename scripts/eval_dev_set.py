@@ -1,9 +1,8 @@
 """Runner script for Olist Dev Set evaluation and ablation."""
 
 import sys
-from pathlib import Path
+
 from datamind.eval.runner import run_evaluation
-from datamind.eval.ledger import RunLedger
 
 
 def main():

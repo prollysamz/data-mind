@@ -1,21 +1,14 @@
 """Comprehensive test suite for WP3 user-uploaded datasets, security, profiling, and session isolation."""
 
-import io
-import json
-from pathlib import Path
 import shutil
-import time
+
 import duckdb
 import pytest
 
-from datamind.agent.orchestrator import AgentOrchestrator
-from datamind.config import load_config
 from datamind.guardrails.sql_guard import SQLGuard, SQLSecurityError
 from datamind.uploads.manager import (
-    DEFAULT_MAX_FILE_SIZE_BYTES,
     UploadError,
     UploadManager,
-    sanitize_identifier,
 )
 
 
@@ -240,7 +233,7 @@ def test_human_review_and_fts_indexing(upload_mgr):
         "101,Acme Corp,Database connection timed out during migration\n"
         "102,Globex,Billing duplicate charge on March statement\n"
     )
-    meta = upload_mgr.ingest_file(session, "tickets.csv", csv_data.encode("utf-8"))
+    upload_mgr.ingest_file(session, "tickets.csv", csv_data.encode("utf-8"))
 
     review_config = {
         "default_currency": "USD",
@@ -254,7 +247,7 @@ def test_human_review_and_fts_indexing(upload_mgr):
             }
         },
     }
-    model = upload_mgr.confirm_model(session, review_config)
+    upload_mgr.confirm_model(session, review_config)
     assert session.status == "active"
     assert session.fts_path.exists()
 

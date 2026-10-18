@@ -5,6 +5,7 @@ import threading
 import time
 from http.client import HTTPConnection
 from urllib.request import Request, urlopen
+
 import pytest
 
 from datamind.config import load_config

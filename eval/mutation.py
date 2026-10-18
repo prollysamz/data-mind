@@ -8,11 +8,9 @@ malformed citation) and evaluates false-positive rates on clean non-metric text.
 
 from __future__ import annotations
 
-import copy
-from dataclasses import dataclass, field
 import json
-import re
-from typing import Any, Callable
+from dataclasses import dataclass, field
+from typing import Any
 
 from datamind.adapters.base import QueryResult
 from datamind.agent.evidence import EvidenceStore

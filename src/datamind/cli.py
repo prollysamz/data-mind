@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
-from typing import Sequence
+from collections.abc import Sequence
+from pathlib import Path
+
 import yaml
 
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
@@ -270,7 +271,7 @@ def handle_eval(args: argparse.Namespace) -> int:
     if args.suite == "verifier":
         if str(Path.cwd()) not in sys.path:
             sys.path.insert(0, str(Path.cwd()))
-        from eval.mutation import run_mutation_suite, run_false_positive_suite, print_mutation_report
+        from eval.mutation import print_mutation_report, run_false_positive_suite, run_mutation_suite
         print("Running Deterministic Verifier Mutation and False-Positive Suite...")
         m_res = run_mutation_suite()
         fp_res = run_false_positive_suite()
@@ -426,7 +427,7 @@ def handle_serve(args: argparse.Namespace) -> int:
 
 def handle_demo(args: argparse.Namespace) -> int:
     """Run diagnostics, display demo overview and suggested questions, and launch interactive web server."""
-    from datamind.doctor import run_diagnostics, print_doctor_report
+    from datamind.doctor import print_doctor_report, run_diagnostics
     config_path = getattr(args, "config", "datamind_olist.yaml")
     if not Path(config_path).exists():
         config_path = "datamind.yaml"
@@ -553,8 +554,8 @@ def handle_models(args: argparse.Namespace) -> int:
         if model_info.status != "ready":
             print(f"[FAIL] Model status is '{model_info.status}': {model_info.status_reason}")
             return 1
-        from datamind.llm.client import LLMClient
         from datamind.config import load_config
+        from datamind.llm.client import LLMClient
         config = load_config()
         client = LLMClient(config.llm, purpose="test")
         try:
@@ -581,7 +582,7 @@ def handle_verify_receipt(args: argparse.Namespace) -> int:
         print(f"Error: Receipt file '{path}' not found.", file=sys.stderr)
         return 1
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     print(f"\n================ VERIFYING CRYPTOGRAPHIC RECEIPT: {path.name} ================")
