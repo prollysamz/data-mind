@@ -16,7 +16,7 @@ from datamind.adapters.base import QueryResult
 config = load_config("datamind.yaml")
 semantic_model = load_semantic_model(config.semantic_model)
 adapter = DuckDBAdapter(config.backend.duckdb_path, read_only=True)
-retriever = SQLiteFTSRetriever(config.retrieval.index_path, config.backend.duckdb_path)
+retriever = SQLiteFTSRetriever(config.retrieval.index_path, config.retrieval_source_path())
 retriever.build_index()
 guard = SQLGuard(approved_tables=semantic_model.get_approved_table_names(), dialect=adapter.dialect)
 llm_client = LLMClient(config.llm)

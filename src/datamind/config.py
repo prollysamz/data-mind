@@ -160,6 +160,9 @@ class RetrievalConfig(BaseModel):
     """Retrieval settings."""
     index_path: str = ".datamind/fts.sqlite"
     top_k: int = 5
+    # Local DuckDB file the document index is built from. Defaults to backend.duckdb_path;
+    # set it explicitly for the Snowflake backend so documents match the queried dataset.
+    source_duckdb_path: str | None = None
 
 
 class AppConfig(BaseModel):
@@ -171,6 +174,10 @@ class AppConfig(BaseModel):
     semantic_model: str = "examples/primary/semantic_model.yaml"
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
 
+    def retrieval_source_path(self) -> str:
+        """DuckDB file the full-text document index is built from."""
+        return self.retrieval.source_duckdb_path or self.backend.duckdb_path
+
 
 def apply_env_overrides(config: AppConfig) -> AppConfig:
     """Apply environment variable overrides according to precedence rules.
@@ -181,6 +188,7 @@ def apply_env_overrides(config: AppConfig) -> AppConfig:
     - LLM_ORCHESTRATOR_MODEL
     - LLM_REASONING_MODEL
     - LLM_FAST_MODEL
+    - SNOWFLAKE_ROLE, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA
     """
     if env_val := os.getenv("LLM_BASE_URL"):
         config.llm.base_url = env_val
@@ -192,6 +200,15 @@ def apply_env_overrides(config: AppConfig) -> AppConfig:
         config.llm.reasoning_model = env_val
     if env_val := os.getenv("LLM_FAST_MODEL"):
         config.llm.fast_model = env_val
+    sf = config.backend.snowflake
+    if env_val := os.getenv("SNOWFLAKE_ROLE"):
+        sf.role = env_val
+    if env_val := os.getenv("SNOWFLAKE_WAREHOUSE"):
+        sf.warehouse = env_val
+    if env_val := os.getenv("SNOWFLAKE_DATABASE"):
+        sf.database = env_val
+    if env_val := os.getenv("SNOWFLAKE_SCHEMA"):
+        sf.schema_ = env_val
     return config
 
 

@@ -7,9 +7,14 @@ from pathlib import Path
 import re
 import sqlite3
 from typing import Any
+import logging
+
 import duckdb
 
 from datamind.retrieval.base import Chunk, Retriever
+
+
+logger = logging.getLogger(__name__)
 
 
 class SQLiteFTSRetriever(Retriever):
@@ -92,7 +97,13 @@ class SQLiteFTSRetriever(Retriever):
 
     def build_index(self, force: bool = False) -> None:
         """Ingest and index documents from source database (SUPPORT_TICKETS / OLIST_ORDER_REVIEWS)."""
-        if not self.source_db_path or not Path(self.source_db_path).exists():
+        if not self.source_db_path:
+            return
+        if not Path(self.source_db_path).exists():
+            logger.warning(
+                "Document index source '%s' not found; document search will return no results.",
+                self.source_db_path,
+            )
             return
 
         cur = self.conn.cursor()

@@ -195,7 +195,6 @@ def main() -> int:
     # Grant SELECT on all created tables to DATAMIND_READONLY
     print("\nGranting SELECT on all loaded tables to DATAMIND_READONLY...")
     cursor.execute("GRANT SELECT ON ALL TABLES IN SCHEMA DATAMIND.PUBLIC TO ROLE DATAMIND_READONLY")
-    cursor.execute("GRANT SELECT ON FUTURE TABLES IN SCHEMA DATAMIND.PUBLIC TO ROLE DATAMIND_READONLY")
 
     # Clean up stage files
     for table_name, _, _ in tables:

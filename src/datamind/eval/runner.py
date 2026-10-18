@@ -11,7 +11,8 @@ import decimal
 from typing import Any
 import yaml
 
-from datamind.adapters.duckdb_adapter import DuckDBAdapter
+from datamind.adapters import backend_label, build_adapter
+from datamind.adapters.base import DBAdapter
 from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.config import load_config
 from datamind.guardrails.sql_guard import SQLGuard, SQLSecurityError
@@ -90,6 +91,9 @@ class EvalItemResult:
     discrepancies: int = 0
     silent_wrong: bool = False
     lane: str = "freeform_sql"
+    answer: str = ""
+    executed_sql: list[str] = field(default_factory=list)
+    query_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -114,7 +118,7 @@ class EvalReport:
 def _evaluate_item(
     item: dict[str, Any],
     llm_client: LLMClient,
-    adapter: DuckDBAdapter,
+    adapter: DBAdapter,
     retriever: SQLiteFTSRetriever,
     semantic_model: Any,
     guard: SQLGuard,
@@ -313,6 +317,9 @@ def _evaluate_item(
             discrepancies=agent_res.citation_report.discrepancy_count,
             silent_wrong=silent_wrong,
             lane=getattr(agent_res, "lane", "freeform_sql"),
+            answer=agent_res.answer,
+            executed_sql=[q.sql for q in agent_res.evidence_store.queries],
+            query_ids=[q.result.query_id for q in agent_res.evidence_store.queries if q.result],
         )
 
 
@@ -328,14 +335,10 @@ def run_evaluation(
     config = load_config(config_path)
     semantic_model = load_semantic_model(config.semantic_model)
 
-    adapter = DuckDBAdapter(
-        db_path=config.backend.duckdb_path,
-        read_only=True,
-        max_rows=config.guardrails.max_rows,
-    )
+    adapter = build_adapter(config)
     retriever = SQLiteFTSRetriever(
         index_path=config.retrieval.index_path,
-        source_db_path=config.backend.duckdb_path,
+        source_db_path=config.retrieval_source_path(),
     )
     retriever.build_index()
 
@@ -475,7 +478,7 @@ def run_evaluation(
         _save_eval_results(
             report,
             model_name=config.llm.orchestrator_model,
-            dataset_path=config.backend.duckdb_path,
+            dataset_path=backend_label(config),
             agent_config=config.agent,
             config_path=config_path,
         )
@@ -499,6 +502,9 @@ def _save_eval_results(
 
     try:
         commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+        # Results from a tree with uncommitted changes must not be attributed to the bare commit
+        if subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], text=True).strip():
+            commit_hash += "-dirty"
     except Exception:
         commit_hash = "head"
 
@@ -529,7 +535,7 @@ def _save_eval_results(
                 "self_consistency": getattr(agent_config, "self_consistency", False),
             },
             model=model_name,
-            backend="duckdb",
+            backend=dataset_path,
             total=report.total,
             passed=report.passed,
             failed=report.failed,
@@ -570,6 +576,9 @@ def _save_eval_results(
                 "citations_invalid": i.citations_invalid,
                 "verified_numbers": i.verified_numbers,
                 "discrepancies": i.discrepancies,
+                "answer": i.answer,
+                "executed_sql": i.executed_sql,
+                "query_ids": i.query_ids,
             }
             for i in report.items
         ],
@@ -580,7 +589,7 @@ def _save_eval_results(
     with open(latest_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-    versioned_path = results_dir / f"{date_str}_{commit_hash}.json"
+    versioned_path = results_dir / f"{date_str}_{commit_hash}_{report.suite}.json"
     with open(versioned_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
@@ -590,8 +599,8 @@ def _save_eval_results(
         "# DataMind Benchmark Evaluation Results",
         "",
         f"- **Provenance Git Commit:** `{commit_hash}`",
-        f"- **Model Used:** `{model_name}` (Local 16k context Ollama)",
-        f"- **Backend:** DuckDB (`{dataset_path}`) & Snowflake Data Warehouse",
+        f"- **Model Used:** `{model_name}`",
+        f"- **Backend:** {dataset_path}",
         f"- **Evaluation Timestamp:** {report.timestamp}",
         f"- **Suite Evaluated:** `{report.suite}`",
         f"- **Latency (Uncached):** Median: {median_lat}ms | p90: {p90_lat}ms",

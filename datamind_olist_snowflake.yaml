@@ -14,6 +14,8 @@ semantic_model: examples/olist/semantic_model.yaml
 
 retrieval:
   index_path: .datamind/fts_olist.sqlite
+  # Olist review text is indexed locally; build it with scripts/build_olist_duckdb.py
+  source_duckdb_path: data/olist/olist.duckdb
   top_k: 5
 
 guardrails:

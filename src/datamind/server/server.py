@@ -879,7 +879,7 @@ def create_server(
 
     retriever = SQLiteFTSRetriever(
         index_path=config.retrieval.index_path,
-        source_db_path=config.backend.duckdb_path,
+        source_db_path=config.retrieval_source_path(),
     )
     retriever.build_index()
 

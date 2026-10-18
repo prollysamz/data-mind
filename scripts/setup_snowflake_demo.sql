@@ -1,7 +1,8 @@
--- DataMind Snowflake Data Initialization Script
--- Run this in a Snowflake Worksheet as ACCOUNTADMIN or SYSADMIN
+-- DataMind Snowflake Data Initialization Script (synthetic demo tables)
+-- Run scripts/snowflake_bootstrap.sql first (as ACCOUNTADMIN); it creates the
+-- warehouse, database and roles used here. Then run this script in a worksheet.
 
-USE ROLE ACCOUNTADMIN;
+USE ROLE DATAMIND_LOADER;
 USE WAREHOUSE DATAMIND_XS;
 USE DATABASE DATAMIND;
 USE SCHEMA PUBLIC;
@@ -1515,11 +1516,7 @@ INSERT INTO SALES (order_id, line_no, order_date, order_month, product_id, produ
   (2449, 1, '2026-05-01', '2026-05-01', 105, 'OmniChat', 1, 107.02),
   (2450, 1, '2026-05-24', '2026-05-01', 105, 'OmniChat', 7, 1034.86);
 
--- 4. GRANT PERMISSIONS TO DATAMIND_READONLY
-GRANT USAGE ON WAREHOUSE DATAMIND_XS TO ROLE DATAMIND_READONLY;
-GRANT USAGE ON DATABASE DATAMIND TO ROLE DATAMIND_READONLY;
-GRANT USAGE ON SCHEMA DATAMIND.PUBLIC TO ROLE DATAMIND_READONLY;
+-- 4. READ ACCESS
+-- DATAMIND_READONLY already receives SELECT on these tables through the future
+-- grant in snowflake_bootstrap.sql; this keeps re-runs on older setups working.
 GRANT SELECT ON ALL TABLES IN SCHEMA DATAMIND.PUBLIC TO ROLE DATAMIND_READONLY;
-GRANT SELECT ON FUTURE TABLES IN SCHEMA DATAMIND.PUBLIC TO ROLE DATAMIND_READONLY;
-
-SELECT 'DataMind tables and read-only grants successfully initialized!' AS status;

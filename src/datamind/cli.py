@@ -51,7 +51,7 @@ def handle_ask(args: argparse.Namespace) -> int:
     # Initialize and sync FTS retriever index
     retriever = SQLiteFTSRetriever(
         index_path=config.retrieval.index_path,
-        source_db_path=config.backend.duckdb_path,
+        source_db_path=config.retrieval_source_path(),
     )
     retriever.build_index()
 
@@ -337,10 +337,10 @@ def handle_eval(args: argparse.Namespace) -> int:
 def handle_index(args: argparse.Namespace) -> int:
     """Build or rebuild SQLite FTS search index."""
     config = load_config(args.config)
-    print(f"Building FTS search index at '{config.retrieval.index_path}' from '{config.backend.duckdb_path}'...")
+    print(f"Building FTS search index at '{config.retrieval.index_path}' from '{config.retrieval_source_path()}'...")
     retriever = SQLiteFTSRetriever(
         index_path=config.retrieval.index_path,
-        source_db_path=config.backend.duckdb_path,
+        source_db_path=config.retrieval_source_path(),
     )
     retriever.build_index()
     retriever.close()

@@ -72,3 +72,35 @@ def test_token_param_config():
     assert cfg.llm.token_param == "max_tokens"
     cfg.llm.token_param = "max_completion_tokens"
     assert cfg.llm.token_param == "max_completion_tokens"
+
+
+def test_snowflake_env_overrides_yaml(monkeypatch, tmp_path):
+    from datamind.config import load_config
+
+    cfg_file = tmp_path / "cfg.yaml"
+    cfg_file.write_text(
+        "backend:\n  type: snowflake\n  snowflake:\n    role: YAML_ROLE\n    warehouse: YAML_WH\n"
+        "    database: YAML_DB\n    schema: YAML_SCHEMA\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SNOWFLAKE_ROLE", "ENV_ROLE")
+    monkeypatch.setenv("SNOWFLAKE_WAREHOUSE", "ENV_WH")
+    monkeypatch.setenv("SNOWFLAKE_DATABASE", "ENV_DB")
+    monkeypatch.setenv("SNOWFLAKE_SCHEMA", "ENV_SCHEMA")
+
+    sf = load_config(cfg_file, load_env=False).backend.snowflake
+    assert (sf.role, sf.warehouse, sf.database, sf.schema) == ("ENV_ROLE", "ENV_WH", "ENV_DB", "ENV_SCHEMA")
+
+
+def test_retrieval_source_defaults_to_backend_duckdb_and_can_be_overridden(tmp_path):
+    from datamind.config import load_config
+
+    cfg_file = tmp_path / "cfg.yaml"
+    cfg_file.write_text("backend:\n  duckdb_path: a.duckdb\n", encoding="utf-8")
+    assert load_config(cfg_file, load_env=False).retrieval_source_path() == "a.duckdb"
+
+    cfg_file.write_text(
+        "backend:\n  type: snowflake\nretrieval:\n  source_duckdb_path: data/olist/olist.duckdb\n",
+        encoding="utf-8",
+    )
+    assert load_config(cfg_file, load_env=False).retrieval_source_path() == "data/olist/olist.duckdb"

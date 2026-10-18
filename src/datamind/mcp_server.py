@@ -74,7 +74,7 @@ class DataMindMCPServer:
         )
         self.retriever = SQLiteFTSRetriever(
             index_path=self.config.retrieval.index_path,
-            source_db_path=self.config.backend.duckdb_path,
+            source_db_path=self.config.retrieval_source_path(),
         )
         self.guard = SQLGuard(
             approved_tables=self.semantic_model.get_approved_table_names(),
