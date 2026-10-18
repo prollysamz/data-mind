@@ -36,6 +36,41 @@ LOCAL_MODELS = [
 ]
 
 
+def test_bedrock_settings_discovery_selection_and_test_use_saved_credentials(provider_api, monkeypatch):
+    from types import SimpleNamespace
+
+    from datamind.llm import bedrock
+
+    request, _, _ = provider_api
+    catalogue_calls = []
+
+    def models(key, bearer, endpoint):
+        catalogue_calls.append((key, bearer, endpoint))
+        return [{"id": "google.gemma-4-26b-a4b", "name": "Gemma"}]
+
+    monkeypatch.setattr(bedrock, "list_models", models)
+    endpoint = "https://bedrock-mantle.us-west-2.api.aws/v1"
+    status, catalogue = request("POST", "/api/bedrock/models", {"bedrock_api_key": "test-bedrock-key", "bedrock_bearer_token": "test-bearer", "bedrock_base_url": endpoint})
+    assert status == 200 and catalogue["models"][0]["id"].startswith("google.gemma")
+    status, settings = request("POST", "/api/settings", {
+        "provider": "bedrock", "bedrock_api_key": "test-bedrock-key", "bedrock_bearer_token": "test-bearer",
+        "bedrock_model": "google.gemma-4-26b-a4b", "bedrock_base_url": endpoint,
+    })
+    assert status == 200 and settings["bedrock"]["active"]
+    assert "test-bedrock-key" not in json.dumps(settings)
+    assert catalogue_calls[-1] == ("test-bedrock-key", "test-bearer", endpoint)
+    used = []
+
+    def build(*args):
+        used.append(args)
+        return SimpleNamespace(chat=lambda *args, **kwargs: {"content": "Ready"})
+
+    monkeypatch.setattr(bedrock, "build_client", build)
+    assert request("POST", "/api/settings/test", {})[0] == 200
+    assert used[0][:4] == ("test-bedrock-key", "test-bearer", "google.gemma-4-26b-a4b", endpoint)
+    assert request("GET", "/api/config")[1]["model_name"] == "google.gemma-4-26b-a4b"
+
+
 @pytest.fixture
 def provider_api(tmp_path, monkeypatch):
     monkeypatch.setenv("DATAMIND_SETTINGS_PATH", str(tmp_path / "settings.json"))

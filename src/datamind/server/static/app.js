@@ -7,6 +7,7 @@ const state = {
   timer: null,
   startedAt: 0,
   activeUploadSession: null,
+  pendingUploadSession: null,
   uploadTable: null,
   history: [],
   activeConversationId: null,
@@ -225,6 +226,7 @@ async function loadConfig() {
     const config = await response.json();
     state.config = config;
     $('backendName').textContent = String(config.backend || 'Connected').toUpperCase();
+    document.querySelector('.workspace-switch small').textContent = config.backend?.toLowerCase().includes('snowflake') ? 'Snowflake workspace' : 'Local development';
     $('backendBadge').classList.add('online');
     $('privacyStatus').textContent = config.privacy_indicator || (config.is_local ? 'Local-only execution' : 'Metered cloud endpoint');
     $('executionMode').textContent = config.is_local ? 'Local execution' : 'Cloud execution';
@@ -580,7 +582,7 @@ function sortTable(header) {
 function renderDocs(docs) {
   const container = $('docsList');
   if (!docs.length) { container.innerHTML = '<p class="evidence-empty">No documents were retrieved for this answer.</p>'; return; }
-  container.innerHTML = docs.map((doc) => `<article class="doc-item" data-chunk-id="${escapeHtml(doc.chunk_id)}"><div class="doc-item-head"><span class="query-label">${escapeHtml(doc.chunk_id)}</span><span class="query-meta">Relevance ${escapeHtml(doc.score)}</span></div><strong>${escapeHtml(doc.doc_name)}</strong><p class="doc-text">${escapeHtml(doc.text)}</p></article>`).join('');
+  container.innerHTML = docs.map((doc) => `<article class="doc-item" data-chunk-id="${escapeHtml(doc.chunk_id)}"><div class="doc-item-head"><span class="query-label">${escapeHtml(doc.chunk_id)}</span><span class="query-meta">${doc.metadata?.evidence_type === 'query_row' ? escapeHtml(doc.metadata.source_location || 'Live Snowflake row') : `Relevance ${escapeHtml(doc.score)}`}</span></div><strong>${escapeHtml(doc.doc_name)}</strong><p class="doc-text">${escapeHtml(doc.text)}</p></article>`).join('');
 }
 
 function renderNumericChecks(checks) {
@@ -914,7 +916,8 @@ async function openUploadModal() {
       $('uploadStatus').textContent = 'Uploads are disabled. Restart Data Mind with --enable-uploads to use this feature.';
       $('uploadStatus').classList.add('error'); $('fileDropzone').hidden = true;
     } else {
-      $('uploadStatus').textContent = `CSV or Parquet · up to ${Math.round(status.max_file_size_bytes / 1048576)} MB · ${Number(status.max_rows).toLocaleString()} rows`;
+      $('filePickerInput').accept = (status.supported_extensions || ['.csv', '.parquet']).join(',');
+      $('uploadStatus').textContent = `${status.backend === 'snowflake' ? 'Uploads go directly to Snowflake' : 'Local development storage'} · up to ${Math.round(status.max_file_size_bytes / 1048576)} MB · ${Number(status.max_rows).toLocaleString()} rows`;
     }
   } catch { $('uploadStatus').textContent = 'Could not check upload availability.'; $('uploadStatus').classList.add('error'); }
 }
@@ -922,16 +925,19 @@ async function openUploadModal() {
 async function processUpload(file) {
   $('fileDropzone').hidden = true; $('uploadProgress').hidden = false; $('uploadReview').hidden = true;
   try {
+    if (file.size > 50 * 1048576) throw new Error('Choose a file smaller than 50 MB.');
+    $('uploadProgress').querySelector('p').textContent = state.config?.backend?.toLowerCase().includes('snowflake') ? 'Parsing your file and uploading rows to Snowflake…' : 'Parsing and profiling your file…';
     const sessionResponse = await fetch('/api/uploads/session/create', { method: 'POST' });
     const session = await sessionResponse.json();
     if (!sessionResponse.ok) throw new Error(session.error || 'Could not create an upload session');
-    state.activeUploadSession = session.session_id;
+    state.pendingUploadSession = session.session_id;
     const contentBase64 = await fileToBase64(file);
     const response = await fetch(`/api/uploads/${session.session_id}/upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, content_base64: contentBase64 }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Upload failed');
     state.uploadTable = data.table;
     renderUploadReview(data.table);
+    $('uploadStatus').textContent = `${data.table.backend === 'snowflake' ? 'Loaded into Snowflake. Review the columns to activate.' : 'Local dataset ready for review.'} ${(data.encoding_notices || []).join(' ')}`;
     $('uploadProgress').hidden = true; $('uploadReview').hidden = false;
   } catch (error) {
     $('uploadProgress').hidden = true; $('fileDropzone').hidden = false;
@@ -949,12 +955,12 @@ function fileToBase64(file) {
 
 function renderUploadReview(table) {
   $('reviewTableName').textContent = table.table_name;
-  $('reviewTableStats').textContent = `${Number(table.total_rows).toLocaleString()} rows · ${table.total_columns} columns · ${table.original_filename}`;
+  $('reviewTableStats').textContent = `${table.backend === 'snowflake' ? 'Snowflake' : 'Local'} · ${Number(table.total_rows).toLocaleString()} rows · ${table.total_columns} columns · ${table.original_filename}${table.storage?.query_id ? ` · Load check ${table.storage.query_id}` : ''}`;
   $('uploadColumnsTbody').innerHTML = (table.columns || []).map((column) => `<tr><td><input type="checkbox" data-upload-use="${escapeHtml(column.name)}" checked></td><td><strong>${escapeHtml(column.name)}</strong>${column.pii_warning ? `<br><small>${escapeHtml(column.pii_warning)}</small>` : ''}</td><td><code>${escapeHtml(column.inferred_type)}</code></td><td><input class="review-description" data-upload-description="${escapeHtml(column.name)}" value="${escapeHtml(column.original_name || column.name)} column"></td></tr>`).join('');
 }
 
 async function confirmUpload() {
-  if (!state.activeUploadSession || !state.uploadTable) return;
+  if (!state.pendingUploadSession || !state.uploadTable) return;
   const button = $('confirmUploadBtn'); button.disabled = true; button.textContent = 'Activating…';
   try {
     const columns = {};
@@ -967,11 +973,13 @@ async function confirmUpload() {
       };
     });
     const reviewConfig = { default_currency: 'USD', tables: { [state.uploadTable.table_name]: { description: `Uploaded dataset: ${state.uploadTable.original_filename}`, columns } } };
-    const response = await fetch(`/api/uploads/${state.activeUploadSession}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_config: reviewConfig }) });
+    const response = await fetch(`/api/uploads/${state.pendingUploadSession}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_config: reviewConfig }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Dataset activation failed');
+    state.activeUploadSession = state.pendingUploadSession;
+    state.pendingUploadSession = null;
     $('activeDatasetName').textContent = `${state.uploadTable.original_filename} · ${Number(state.uploadTable.total_rows).toLocaleString()} rows`;
-    $('activeDatasetBanner').hidden = false; $('backendName').textContent = 'DUCKDB · UPLOAD';
+    $('activeDatasetBanner').hidden = false; $('backendName').textContent = `${state.uploadTable.backend === 'snowflake' ? 'SNOWFLAKE' : 'DUCKDB'} · UPLOAD`;
     if (data.sample_questions?.length) renderSuggestions(data.sample_questions);
     closeModal($('uploadModal')); startNewAnalysis(); showToast('Dataset activated');
   } catch (error) { $('uploadStatus').textContent = error.message; $('uploadStatus').classList.add('error'); }
@@ -982,7 +990,8 @@ async function deleteDataset() {
   if (!state.activeUploadSession) return;
   if (!window.confirm('Remove this isolated upload and return to the default dataset?')) return;
   try {
-    await fetch(`/api/uploads/${state.activeUploadSession}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const response = await fetch(`/api/uploads/${state.activeUploadSession}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!response.ok) { const data = await response.json(); throw new Error(data.error || 'Deletion failed'); }
     state.activeUploadSession = null; state.uploadTable = null; $('activeDatasetBanner').hidden = true;
     await loadConfig(); startNewAnalysis(); showToast('Uploaded dataset removed');
   } catch (error) { showToast(`Could not remove dataset: ${error.message}`); }
@@ -993,43 +1002,83 @@ function renderChart(spec, refs = null, onCitation = showCitation) {
   body.innerHTML = ''; note.hidden = true;
   if (!spec || spec.type === 'table' || (!spec.points?.length && spec.type !== 'kpi')) { card.hidden = true; return; }
   card.hidden = false; (refs?.title || $('chartTitle')).textContent = spec.title || 'Visual summary';
+  if (spec.alternatives?.length > 1) {
+    const picker = document.createElement('select'); picker.className = 'chart-picker'; picker.setAttribute('aria-label', 'Choose query visualization');
+    spec.alternatives.forEach(item => picker.add(new Option(`${item.source_query} · ${item.title}`, item.source_query)));
+    picker.value = spec.source_query;
+    picker.addEventListener('change', () => renderChart({ ...spec.alternatives.find(item => item.source_query === picker.value), alternatives: spec.alternatives }, refs, onCitation));
+    body.appendChild(picker);
+  }
+  const visual = document.createElement('div'); body.appendChild(visual);
   if (spec.alt_text) body.setAttribute('aria-label', spec.alt_text);
   if (spec.note) { note.textContent = spec.note; note.hidden = false; }
   if (spec.type === 'kpi') {
-    body.innerHTML = `<div class="kpi-chart"><div><strong>${escapeHtml(spec.kpi_value ?? spec.points?.[0]?.y ?? '—')}</strong><span>${escapeHtml(spec.kpi_label || spec.title || '')}</span></div></div>`;
+    const metrics = spec.metrics?.length ? spec.metrics : [{value: spec.kpi_value ?? '—', label: spec.kpi_label || spec.title, row_id: spec.points?.[0]?.row_id}];
+    visual.innerHTML = `<div class="metric-grid">${metrics.map(metric => `<button type="button" class="metric-tile" data-row-id="${escapeHtml(metric.row_id || '')}"><span>${escapeHtml(metric.label || '')}</span><strong>${escapeHtml(metric.value)}</strong><small>${escapeHtml(spec.source_query || '')} · View source row ↗</small></button>`).join('')}</div>`;
+    bindChartRows(visual, onCitation);
     return;
   }
   const points = spec.points || [];
-  if (spec.type === 'line') renderLineChart(body, points, onCitation);
-  else renderBarChart(body, points, spec.type === 'diverging_bar', onCitation);
+  if (spec.type === 'line') renderLineChart(visual, points, onCitation, spec);
+  else renderBarChart(visual, points, spec.type === 'diverging_bar', onCitation, spec);
+  const exportButton = document.createElement('button'); exportButton.className = 'text-button chart-export'; exportButton.type = 'button'; exportButton.textContent = 'Download chart SVG';
+  exportButton.addEventListener('click', () => {
+    const svg = visual.querySelector('svg')?.cloneNode(true); if (!svg) return;
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    style.textContent = 'text{font:12px sans-serif;fill:#b8c5d6}.chart-grid{stroke:#29354a}.chart-line{fill:none;stroke-width:2.5}.chart-point{stroke-width:2}.chart-bar{fill:#6d9bff}'; svg.prepend(style);
+    const url = URL.createObjectURL(new Blob([svg.outerHTML], {type: 'image/svg+xml'}));
+    const link = document.createElement('a'); link.href = url; link.download = `${spec.source_query || 'chart'}.svg`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }); body.appendChild(exportButton);
 }
 
-function renderBarChart(container, points, diverging, onCitation = showCitation) {
+function chartValue(value, spec, series = 0) {
+  if (value == null || !Number.isFinite(Number(value))) return 'No data';
+  const fmt = spec?.y?.[series]?.format;
+  const formatted = Number(value).toLocaleString(undefined, {maximumFractionDigits: 2});
+  return fmt === 'currency' ? `${spec.currency_symbol || '$'}${formatted}` : fmt === 'percent' ? `${formatted}%` : formatted;
+}
+
+function renderBarChart(container, points, diverging, onCitation = showCitation, spec = {}) {
   const width = 840, rowHeight = 42, left = 180, right = 100, height = Math.max(170, points.length * rowHeight + 35);
   const values = points.map((point) => Number(Array.isArray(point.y) ? point.y[0] : point.y) || 0);
   const max = Math.max(...values.map(Math.abs), 1); const plotWidth = width - left - right; const mid = diverging ? left + plotWidth / 2 : left;
-  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">`;
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img"><title>${escapeHtml(spec.alt_text || spec.title || 'Result chart')}</title><line class="chart-grid" x1="${mid}" y1="0" x2="${mid}" y2="${height}"></line>`;
   points.forEach((point, index) => {
     const value = values[index]; const y = 15 + index * rowHeight; const available = diverging ? plotWidth / 2 : plotWidth;
-    const barWidth = Math.max(3, Math.abs(value) / max * available); const x = diverging && value < 0 ? mid - barWidth : mid;
-    svg += `<g data-row-id="${escapeHtml(point.row_id || '')}"><text class="chart-label" x="${left - 12}" y="${y + 15}" text-anchor="end">${escapeHtml(String(point.x || '').slice(0, 26))}</text><rect class="chart-bar" x="${x}" y="${y}" width="${barWidth}" height="22" rx="5"></rect><text class="chart-value" x="${diverging && value < 0 ? x - 8 : x + barWidth + 8}" y="${y + 15}" text-anchor="${diverging && value < 0 ? 'end' : 'start'}">${escapeHtml(value.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</text></g>`;
+    const barWidth = Math.abs(value) / max * available; const x = diverging && value < 0 ? mid - barWidth : mid;
+    svg += `<g data-row-id="${escapeHtml(point.row_id || '')}" tabindex="0" role="button" aria-label="${escapeHtml(`${point.x}: ${chartValue(value, spec)}; inspect source`)}"><title>${escapeHtml(`${point.x}: ${chartValue(value, spec)} · ${point.row_id}`)}</title><text class="chart-label" x="${left - 12}" y="${y + 15}" text-anchor="end">${escapeHtml(String(point.x ?? '').slice(0, 26))}</text><rect class="chart-bar" style="fill:${value < 0 ? '#ed8c92' : '#78a7ff'}" x="${x}" y="${y}" width="${barWidth}" height="22" rx="5"></rect><text class="chart-value" x="${diverging && value < 0 ? x - 8 : x + barWidth + 8}" y="${y + 15}" text-anchor="${diverging && value < 0 ? 'end' : 'start'}">${escapeHtml(chartValue(value, spec))}</text></g>`;
   });
   container.innerHTML = `${svg}</svg>`;
   bindChartRows(container, onCitation);
 }
 
-function renderLineChart(container, points, onCitation = showCitation) {
-  const width = 840, height = 300, left = 60, right = 35, top = 20, bottom = 50;
-  const values = points.map((point) => Number(Array.isArray(point.y) ? point.y[0] : point.y) || 0); const min = Math.min(0, ...values), max = Math.max(1, ...values), range = max - min || 1;
-  const coords = points.map((point, index) => ({ point, value: values[index], x: left + (points.length > 1 ? index * (width - left - right) / (points.length - 1) : (width - left - right) / 2), y: top + (height - top - bottom) * (1 - (values[index] - min) / range) }));
-  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">`;
-  for (let index = 0; index <= 4; index += 1) { const y = top + index * (height - top - bottom) / 4; svg += `<line class="chart-grid" x1="${left}" y1="${y}" x2="${width - right}" y2="${y}"></line>`; }
-  svg += `<path class="chart-line" d="${coords.map((coord, index) => `${index ? 'L' : 'M'} ${coord.x} ${coord.y}`).join(' ')}"></path>`;
-  coords.forEach(({ point, value, x, y }, index) => { svg += `<g data-row-id="${escapeHtml(point.row_id || '')}"><circle class="chart-point" cx="${x}" cy="${y}" r="5"></circle><text class="chart-label" x="${x}" y="${height - 20}" text-anchor="middle">${escapeHtml(String(point.x || '').slice(0, 15))}</text>${index === coords.length - 1 ? `<text class="chart-value" x="${x - 6}" y="${y - 12}" text-anchor="end">${escapeHtml(value.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</text>` : ''}</g>`; });
-  container.innerHTML = `${svg}</svg>`; bindChartRows(container, onCitation);
+function renderLineChart(container, points, onCitation = showCitation, spec = {}) {
+  const width = 840, height = 330, left = 105, right = 35, top = 25, bottom = 55;
+  const colors = ['#78a7ff', '#6dd4bb', '#e7b576', '#c49bf0'];
+  const count = Math.min(4, spec.y?.length || 1);
+  const valueAt = (point, series) => { const value = Array.isArray(point.y) ? point.y[series] : point.y; return value == null || !Number.isFinite(Number(value)) ? null : Number(value); };
+  const values = points.flatMap(p => Array.from({length: count}, (_, s) => valueAt(p, s))).filter(v => v != null);
+  const min = Math.min(0, ...values), max = Math.max(1, ...values), range = max - min || 1;
+  const x = i => left + (points.length > 1 ? i * (width - left - right) / (points.length - 1) : (width - left - right) / 2);
+  const y = value => top + (height - top - bottom) * (1 - (value - min) / range);
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img"><title>${escapeHtml(spec.alt_text || spec.title || 'Trend')}</title>`;
+  for (let i = 0; i <= 4; i++) { const value = max - range * i / 4; svg += `<line class="chart-grid" x1="${left}" y1="${y(value)}" x2="${width - right}" y2="${y(value)}"></line><text class="chart-label" x="${left - 10}" y="${y(value) + 4}" text-anchor="end">${escapeHtml(chartValue(value, spec))}</text>`; }
+  for (let series = 0; series < count; series++) {
+    let path = '', connected = false;
+    points.forEach((point, i) => { const value = valueAt(point, series); if (value == null) { connected = false; return; } path += `${connected ? 'L' : 'M'} ${x(i)} ${y(value)} `; connected = true; });
+    svg += `<path class="chart-line" style="stroke:${colors[series]}" d="${path}"></path>`;
+    points.forEach((point, i) => { const value = valueAt(point, series); if (value == null) return; const label = `${point.x} · ${spec.y?.[series]?.label || 'Value'}: ${chartValue(value, spec, series)}`;
+      const rowId = point.row_ids?.[series] || point.row_id || '';
+      svg += `<g tabindex="0" role="button" aria-label="${escapeHtml(label)}" data-row-id="${escapeHtml(rowId)}"><title>${escapeHtml(`${label} · ${rowId}`)}</title><circle class="chart-point" style="fill:${colors[series]};stroke:${colors[series]}" cx="${x(i)}" cy="${y(value)}" r="4"></circle></g>`;
+    });
+  }
+  points.forEach((point, i) => { if (i % Math.max(1, Math.ceil(points.length / 7)) === 0 || i === points.length - 1) svg += `<text class="chart-label" x="${x(i)}" y="${height - 22}" text-anchor="middle">${escapeHtml(String(point.x).slice(0, 10))}</text>`; });
+  container.innerHTML = `<div class="chart-legend">${Array.from({length: count}, (_, s) => `<span><i style="background:${colors[s]}"></i>${escapeHtml(spec.y?.[s]?.label || 'Value')}</span>`).join('')}</div>${svg}</svg>`;
+  bindChartRows(container, onCitation);
 }
 
 function bindChartRows(container, onCitation = showCitation) {
-  container.querySelectorAll('[data-row-id]').forEach((element) => { element.style.cursor = element.dataset.rowId ? 'pointer' : 'default'; element.addEventListener('click', () => element.dataset.rowId && onCitation(element.dataset.rowId)); });
+  container.querySelectorAll('[data-row-id]').forEach((element) => { element.style.cursor = element.dataset.rowId ? 'pointer' : 'default'; element.addEventListener('click', () => element.dataset.rowId && onCitation(element.dataset.rowId)); element.addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && element.dataset.rowId) { event.preventDefault(); onCitation(element.dataset.rowId); } }); });
 }
 

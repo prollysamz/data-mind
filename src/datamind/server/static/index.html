@@ -157,7 +157,7 @@
   <div class="modal" id="uploadModal" hidden role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
     <div class="modal-card modal-wide">
       <div class="modal-header"><div><span class="label">Private workspace</span><h2 id="uploadTitle">Add your own dataset</h2></div><button class="icon-button" data-modal-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-      <div class="modal-body"><div class="upload-status" id="uploadStatus"></div><div class="dropzone" id="fileDropzone" tabindex="0"><input id="filePickerInput" type="file" accept=".csv,.parquet" hidden><strong>Drop a CSV or Parquet file here</strong><p>Your file stays in an isolated local session and can be deleted at any time.</p><button class="primary-btn" type="button" id="browseFilesBtn">Choose a file</button></div><div class="upload-progress" id="uploadProgress" hidden><span></span><p>Profiling columns and preparing a safe semantic model…</p></div><div class="upload-review" id="uploadReview" hidden><div class="upload-review-heading"><div><span class="label">Ready to review</span><h3 id="reviewTableName">Dataset</h3></div><span id="reviewTableStats"></span></div><div class="review-table-wrap"><table><thead><tr><th>Use</th><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody id="uploadColumnsTbody"></tbody></table></div><div class="modal-actions"><button class="ghost-btn" data-modal-close type="button">Cancel</button><button class="primary-btn" type="button" id="confirmUploadBtn">Activate dataset</button></div></div></div>
+      <div class="modal-body"><div class="upload-status" id="uploadStatus"></div><div class="dropzone" id="fileDropzone" tabindex="0"><input id="filePickerInput" type="file" accept=".csv,.tsv,.parquet,.xlsx,.json,.jsonl,.ndjson,.pdf,.docx,.txt,.md" hidden><strong>Add a dataset or document</strong><p>CSV, Excel, JSON, Parquet, PDF, Word and text. Files load into your active database in an isolated session.</p><button class="primary-btn" type="button" id="browseFilesBtn">Choose a file</button></div><div class="upload-progress" id="uploadProgress" hidden><span></span><p>Profiling columns and preparing a safe semantic model…</p></div><div class="upload-review" id="uploadReview" hidden><div class="upload-review-heading"><div><span class="label">Ready to review</span><h3 id="reviewTableName">Dataset</h3></div><span id="reviewTableStats"></span></div><div class="review-table-wrap"><table><thead><tr><th>Use</th><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody id="uploadColumnsTbody"></tbody></table></div><div class="modal-actions"><button class="ghost-btn" data-modal-close type="button">Cancel</button><button class="primary-btn" type="button" id="confirmUploadBtn">Activate dataset</button></div></div></div>
     </div>
   </div>
   <div class="modal" id="settingsModal" hidden role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -165,9 +165,10 @@
       <div class="modal-header"><div><span class="label">Settings</span><h2 id="settingsTitle">Model provider</h2></div><button class="icon-button" data-modal-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
       <form class="modal-body settings-body" id="settingsForm" autocomplete="off">
         <div class="provider-options" role="radiogroup" aria-label="Model provider">
-          <label class="provider-option"><input type="radio" name="provider" value="local" checked><span><strong>Local model</strong><small>Runs on this machine through Ollama. Nothing leaves it.</small></span></label>
+          <label class="provider-option"><input type="radio" name="provider" value="local" checked><span><strong>Local model</strong><small>Gemma inference runs on this machine. Snowflake data still lives in the cloud.</small></span></label>
           <label class="provider-option"><input type="radio" name="provider" value="openrouter"><span><strong>OpenRouter</strong><small>Use a free model through your OpenRouter key.</small></span></label>
           <label class="provider-option"><input type="radio" name="provider" value="google"><span><strong>Google AI Studio</strong><small>Use Gemini directly with a Gemini API key.</small></span></label>
+          <label class="provider-option"><input type="radio" name="provider" value="bedrock"><span><strong>Amazon Bedrock Mantle</strong><small>Use Gemma with your AWS API key and region.</small></span></label>
         </div>
         <div class="settings-panel" id="localPanel">
           <p class="settings-note private-note">Data stays on this computer. Data Mind asks Ollama which models are installed and lets you choose one here.</p>
@@ -199,6 +200,16 @@
             <select id="googleModelSelect"><option value="">Enter a key, then load models…</option></select>
           </label>
           <p class="field-help">Data Mind fetches the compatible Gemini models available to this key. If you only add a key, the first available model is selected automatically.</p>
+        </div>
+        <div class="settings-panel" id="bedrockPanel" hidden>
+          <p class="settings-note">Gemma receives your question, schema and required result rows through AWS. Snowflake remains the data source. AWS inference and warehouse usage may incur charges.</p>
+          <label class="field" for="bedrockKeyInput"><span>Bedrock API key</span><input id="bedrockKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Enter an Amazon Bedrock API key"></label>
+          <p class="key-state" id="bedrockKeyState" hidden><span id="bedrockKeyStateText"></span></p>
+          <label class="field" for="bedrockBearerTokenInput"><span>AWS bearer token</span><input id="bedrockBearerTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="Enter AWS_BEARER_TOKEN_BEDROCK"></label>
+          <p class="key-state" id="bedrockBearerState" hidden><span id="bedrockBearerStateText"></span><button class="text-button danger" type="button" id="removeBedrockKeyBtn">Remove Bedrock credentials</button></p>
+          <label class="field" for="bedrockBaseUrlInput"><span>Bedrock base URL</span><input id="bedrockBaseUrlInput" value="https://bedrock-mantle.us-east-1.api.aws/openai/v1" autocomplete="off" spellcheck="false"></label>
+          <label class="field" for="bedrockModelSelect"><span>Gemma model <button type="button" class="text-button" id="loadBedrockModelsBtn">Load models</button></span><select id="bedrockModelSelect"><option value="">Enter a key and load models…</option></select></label>
+          <p class="field-help">All three connection values are required. They are stored locally in the gitignored settings file and are never returned to this page. The base URL must be an official Bedrock Mantle or Runtime OpenAI-compatible endpoint ending in <code>/v1</code> or <code>/openai/v1</code>.</p>
         </div>
         <p class="settings-status" id="settingsStatus" role="status" hidden></p>
         <div class="modal-actions">

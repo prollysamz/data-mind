@@ -77,6 +77,10 @@ class SnowflakeAdapter(DBAdapter):
                 database=db or None,
                 schema=sch or None,
                 network_timeout=int(timeout_seconds),
+                session_parameters={
+                    "QUERY_TAG": cfg.query_tag,
+                    "STATEMENT_TIMEOUT_IN_SECONDS": max(1, int(timeout_seconds)),
+                },
             )
             # Enforce strict role isolation: disable secondary roles to prevent write privilege inheritance
             cur = self._conn.cursor()

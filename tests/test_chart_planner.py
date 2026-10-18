@@ -45,6 +45,45 @@ def test_chart_empty_or_all_nulls():
     assert spec_nulls.type == "table"
 
 
+def test_multiple_kpis_keep_raw_values_and_nulls():
+    spec = plan_chart(_make_query_record(["total_revenue", "orders", "average"], [[120.5, 4, None]]))
+    assert spec.type == "kpi"
+    assert [m["raw_value"] for m in spec.metrics] == [120.5, 4, None]
+    assert spec.metrics[2]["value"] == "N/A"
+    assert all(m["row_id"] == "Q1:R1" for m in spec.metrics)
+
+
+def test_line_sorts_dates_preserves_null_gap_and_source_row_ids():
+    spec = plan_chart(_make_query_record(["month", "revenue"], [["2026-03", 30], ["2026-01", 10], ["2026-02", None]]))
+    assert spec.type == "line"
+    assert [p["x"] for p in spec.points] == ["2026-01", "2026-02", "2026-03"]
+    assert spec.points[1]["y"] is None
+    assert [p["row_id"] for p in spec.points] == ["Q1:R2", "Q1:R3", "Q1:R1"]
+
+
+def test_duplicate_time_labels_are_not_drawn_as_one_series():
+    spec = plan_chart(_make_query_record(["month", "product", "revenue"], [["2026-01", "A", 10], ["2026-01", "A", 20]]))
+    assert spec.type == "table"
+    assert "Multiple rows" in spec.note
+
+
+def test_long_format_groups_series_without_aggregation_or_invented_zeroes():
+    spec = plan_chart(_make_query_record(["month", "product", "revenue"], [["2026-02", "A", 30], ["2026-01", "B", 20], ["2026-01", "A", 10]]))
+    assert spec.type == "line"
+    assert [axis.label for axis in spec.y] == ["A", "B"]
+    assert spec.points[0]["y"] == [10, 20]
+    assert spec.points[0]["row_ids"] == ["Q1:R3", "Q1:R2"]
+    assert spec.points[1]["y"] == [30, None]
+    assert spec.points[1]["row_ids"] == ["Q1:R1", None]
+
+
+def test_mixed_units_are_not_plotted_on_one_axis():
+    spec = plan_chart(_make_query_record(["month", "revenue", "quantity"], [["2026-01", 1000, 10], ["2026-02", 2000, 20]]))
+    assert len(spec.y) == 1
+    assert spec.y[0].column == "revenue"
+    assert "compatible units" in spec.note
+
+
 def test_chart_single_value_kpi():
     """Single scalar or single row with metric produces KPI card."""
     # 1. Scalar

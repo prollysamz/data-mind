@@ -11,6 +11,7 @@ import sys
 from typing import Any
 
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
+from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.config import load_config
 from datamind.guardrails.sql_guard import SQLGuard
@@ -67,11 +68,20 @@ class DataMindMCPServer:
     def __init__(self, config_path: str = "datamind.yaml") -> None:
         self.config = load_config(config_path)
         self.semantic_model = load_semantic_model(self.config.semantic_model)
-        self.adapter = DuckDBAdapter(
-            db_path=self.config.backend.duckdb_path,
-            read_only=True,
-            max_rows=self.config.guardrails.max_rows,
-        )
+        if self.config.backend.type == "snowflake":
+            self.adapter = SnowflakeAdapter(
+                config=self.config.backend.snowflake,
+                max_rows=self.config.guardrails.max_rows,
+                timeout_seconds=self.config.guardrails.statement_timeout_seconds,
+            )
+        elif self.config.backend.type == "duckdb":
+            self.adapter = DuckDBAdapter(
+                db_path=self.config.backend.duckdb_path,
+                read_only=True,
+                max_rows=self.config.guardrails.max_rows,
+            )
+        else:
+            raise ValueError(f"Unknown database backend: {self.config.backend.type}")
         self.retriever = SQLiteFTSRetriever(
             index_path=self.config.retrieval.index_path,
             source_db_path=self.config.retrieval_source_path(),
@@ -87,6 +97,7 @@ class DataMindMCPServer:
             retriever=self.retriever,
             semantic_model=self.semantic_model,
             sql_guard=self.guard,
+            config=self.config.agent,
         )
 
     def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -133,6 +144,7 @@ class DataMindMCPServer:
                     f"({res.citation_report.verified_numbers_count} numbers verified, "
                     f"{res.citation_report.discrepancy_count} discrepancies) ---"
                 )
+                content_text += "\n\nEvidence:\n" + json.dumps(res.evidence_store.to_json(), default=str)
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,

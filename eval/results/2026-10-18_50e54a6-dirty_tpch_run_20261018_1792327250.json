@@ -1,0 +1,556 @@
+{
+  "timestamp": "2026-10-18T18:10:14.984578",
+  "date": "2026-10-18",
+  "commit": "50e54a6-dirty",
+  "suite": "tpch",
+  "model_used": "gemma4-e2b-16k",
+  "dataset": "Snowflake (SNOWFLAKE_SAMPLE_DATA.TPCH_SF1, warehouse DATAMIND_XS, role DATAMIND_READONLY)",
+  "total": 10,
+  "passed": 8,
+  "failed": 2,
+  "not_run": 0,
+  "pass_rate_pct": 80,
+  "median_latency_ms": 2066.8,
+  "p90_latency_ms": 11778.5,
+  "items": [
+    {
+      "id": "TPCH_REGION_COUNT",
+      "suite": "tpch",
+      "question": "How many geographic regions are there?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 5000.9,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "There are 5 geographic regions in the database [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(DISTINCT R_REGIONKEY) FROM REGION"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-16b8-0002-b6f2000180c6"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS region_count FROM REGION;",
+      "ground_truth_query_id": "01c7cff8-000e-16b8-0002-b6f2000180ca",
+      "ground_truth_rows": [
+        [
+          5
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(DISTINCT R_REGIONKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_CUSTOMER_COUNT",
+      "suite": "tpch",
+      "question": "How many customers are in the CUSTOMER table?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1324.4,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "There are 150,000 customers in the CUSTOMER table [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(C_CUSTKEY) FROM CUSTOMER"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-16d0-0002-b6f20001a0a2"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS customer_count FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7cff8-000e-1619-0000-0002b6f2c3f1",
+      "ground_truth_rows": [
+        [
+          150000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(C_CUSTKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_AVG_BALANCE",
+      "suite": "tpch",
+      "question": "What is the average customer account balance?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1956.7,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The average customer account balance is $4,495.51 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT AVG(T1.C_ACCTBAL) FROM CUSTOMER AS T1"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-1673-0002-b6f20001f016"
+      ],
+      "ground_truth_sql": "SELECT ROUND(AVG(C_ACCTBAL), 2) AS avg_balance FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7cff8-000e-1673-0002-b6f20001f01a",
+      "ground_truth_rows": [
+        [
+          "4495.51"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "AVG(T1.C_ACCTBAL)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_SEGMENT_BREAKDOWN",
+      "suite": "tpch",
+      "question": "How many customers are in each market segment?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1855,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "Based on the data, here is the count of customers in each market segment:\n\n*   **AUTOMOBILE**: 29,752 customers [[Q1:R1]]\n*   **FURNITURE**: 29,968 customers [[Q1:R2]]\n*   **BUILDING**: 30,142 customers [[Q1:R3]]\n*   **MACHINERY**: 29,949 customers [[Q1:R4]]\n*   **HOUSEHOLD**: 30,189 customers [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT T1.C_MKTSEGMENT, COUNT(T1.C_CUSTKEY) FROM CUSTOMER AS T1 GROUP BY T1.C_MKTSEGMENT"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-16b8-0002-b6f2000180ce"
+      ],
+      "ground_truth_sql": "SELECT C_MKTSEGMENT, COUNT(*) AS customer_count\nFROM CUSTOMER\nGROUP BY C_MKTSEGMENT\nORDER BY customer_count DESC;\n",
+      "ground_truth_query_id": "01c7cff8-000e-16d0-0002-b6f20001a0a6",
+      "ground_truth_rows": [
+        [
+          "HOUSEHOLD",
+          30189
+        ],
+        [
+          "BUILDING",
+          30142
+        ],
+        [
+          "FURNITURE",
+          29968
+        ],
+        [
+          "MACHINERY",
+          29949
+        ],
+        [
+          "AUTOMOBILE",
+          29752
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "C_MKTSEGMENT",
+            "COUNT(T1.C_CUSTKEY)"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_URGENT_ORDERS",
+      "suite": "tpch",
+      "question": "How many orders have urgent priority?",
+      "passed": false,
+      "reason": "Failures: Result-set mismatch (expected 1 rows matching ground truth SQL)",
+      "elapsed_ms": 1299.7,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "Based on the data retrieved, there are **0** orders with an 'Urgent' priority. [[Q1:R1]]",
+      "executed_sql": [
+        "SELECT COUNT(O_ORDERKEY) FROM ORDERS WHERE O_ORDERPRIORITY = 'Urgent'"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-1619-0000-0002b6f2c3f5"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS urgent_orders FROM ORDERS WHERE O_ORDERPRIORITY = '1-URGENT';",
+      "ground_truth_query_id": "01c7cff8-000e-1673-0002-b6f20001f01e",
+      "ground_truth_rows": [
+        [
+          300343
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(O_ORDERKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_REVENUE_BY_YEAR",
+      "suite": "tpch",
+      "question": "What was the total order value for each year?",
+      "passed": false,
+      "reason": "Failures: Result-set mismatch (expected 7 rows matching ground truth SQL)",
+      "elapsed_ms": 11778.5,
+      "citations_valid": 0,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "",
+      "executed_sql": [
+        "SELECT * FROM CUSTOMER WHERE LOWER(C_NAME) LIKE '%total%' OR LOWER(C_NAME) LIKE '%order%' OR LOWER(C_NAME) LIKE '%value%' OR LOWER(C_NAME) LIKE '%by%' OR LOWER(C_NAME) LIKE '%year%' OR LOWER(C_ADDRESS) LIKE '%total%' OR LOWER(C_ADDRESS) LIKE '%order%' OR LOWER(C_ADDRESS) LIKE '%value%' OR LOWER(C_ADDRESS) LIKE '%by%' OR LOWER(C_ADDRESS) LIKE '%year%' OR LOWER(C_PHONE) LIKE '%total%' OR LOWER(C_PHONE) LIKE '%order%' OR LOWER(C_PHONE) LIKE '%value%' OR LOWER(C_PHONE) LIKE '%by%' OR LOWER(C_PHONE) LIKE '%year%' OR LOWER(C_MKTSEGMENT) LIKE '%total%' OR LOWER(C_MKTSEGMENT) LIKE '%order%' OR LOWER(C_MKTSEGMENT) LIKE '%value%' OR LOWER(C_MKTSEGMENT) LIKE '%by%' OR LOWER(C_MKTSEGMENT) LIKE '%year%' OR LOWER(C_COMMENT) LIKE '%total%' OR LOWER(C_COMMENT) LIKE '%order%' OR LOWER(C_COMMENT) LIKE '%value%' OR LOWER(C_COMMENT) LIKE '%by%' OR LOWER(C_COMMENT) LIKE '%year%' ORDER BY C_CUSTKEY LIMIT 5",
+        "SELECT * FROM LINEITEM WHERE LOWER(L_RETURNFLAG) LIKE '%total%' OR LOWER(L_RETURNFLAG) LIKE '%order%' OR LOWER(L_RETURNFLAG) LIKE '%value%' OR LOWER(L_RETURNFLAG) LIKE '%by%' OR LOWER(L_RETURNFLAG) LIKE '%year%' OR LOWER(L_LINESTATUS) LIKE '%total%' OR LOWER(L_LINESTATUS) LIKE '%order%' OR LOWER(L_LINESTATUS) LIKE '%value%' OR LOWER(L_LINESTATUS) LIKE '%by%' OR LOWER(L_LINESTATUS) LIKE '%year%' OR LOWER(L_SHIPINSTRUCT) LIKE '%total%' OR LOWER(L_SHIPINSTRUCT) LIKE '%order%' OR LOWER(L_SHIPINSTRUCT) LIKE '%value%' OR LOWER(L_SHIPINSTRUCT) LIKE '%by%' OR LOWER(L_SHIPINSTRUCT) LIKE '%year%' OR LOWER(L_SHIPMODE) LIKE '%total%' OR LOWER(L_SHIPMODE) LIKE '%order%' OR LOWER(L_SHIPMODE) LIKE '%value%' OR LOWER(L_SHIPMODE) LIKE '%by%' OR LOWER(L_SHIPMODE) LIKE '%year%' OR LOWER(L_COMMENT) LIKE '%total%' OR LOWER(L_COMMENT) LIKE '%order%' OR LOWER(L_COMMENT) LIKE '%value%' OR LOWER(L_COMMENT) LIKE '%by%' OR LOWER(L_COMMENT) LIKE '%year%' ORDER BY L_ORDERKEY, L_LINENUMBER LIMIT 5",
+        "SELECT * FROM NATION WHERE LOWER(N_NAME) LIKE '%total%' OR LOWER(N_NAME) LIKE '%order%' OR LOWER(N_NAME) LIKE '%value%' OR LOWER(N_NAME) LIKE '%by%' OR LOWER(N_NAME) LIKE '%year%' OR LOWER(N_COMMENT) LIKE '%total%' OR LOWER(N_COMMENT) LIKE '%order%' OR LOWER(N_COMMENT) LIKE '%value%' OR LOWER(N_COMMENT) LIKE '%by%' OR LOWER(N_COMMENT) LIKE '%year%' ORDER BY N_NATIONKEY LIMIT 5",
+        "SELECT * FROM ORDERS WHERE LOWER(O_ORDERSTATUS) LIKE '%total%' OR LOWER(O_ORDERSTATUS) LIKE '%order%' OR LOWER(O_ORDERSTATUS) LIKE '%value%' OR LOWER(O_ORDERSTATUS) LIKE '%by%' OR LOWER(O_ORDERSTATUS) LIKE '%year%' OR LOWER(O_ORDERPRIORITY) LIKE '%total%' OR LOWER(O_ORDERPRIORITY) LIKE '%order%' OR LOWER(O_ORDERPRIORITY) LIKE '%value%' OR LOWER(O_ORDERPRIORITY) LIKE '%by%' OR LOWER(O_ORDERPRIORITY) LIKE '%year%' OR LOWER(O_CLERK) LIKE '%total%' OR LOWER(O_CLERK) LIKE '%order%' OR LOWER(O_CLERK) LIKE '%value%' OR LOWER(O_CLERK) LIKE '%by%' OR LOWER(O_CLERK) LIKE '%year%' OR LOWER(O_COMMENT) LIKE '%total%' OR LOWER(O_COMMENT) LIKE '%order%' OR LOWER(O_COMMENT) LIKE '%value%' OR LOWER(O_COMMENT) LIKE '%by%' OR LOWER(O_COMMENT) LIKE '%year%' ORDER BY O_ORDERKEY LIMIT 5",
+        "SELECT * FROM PART WHERE LOWER(P_NAME) LIKE '%total%' OR LOWER(P_NAME) LIKE '%order%' OR LOWER(P_NAME) LIKE '%value%' OR LOWER(P_NAME) LIKE '%by%' OR LOWER(P_NAME) LIKE '%year%' OR LOWER(P_MFGR) LIKE '%total%' OR LOWER(P_MFGR) LIKE '%order%' OR LOWER(P_MFGR) LIKE '%value%' OR LOWER(P_MFGR) LIKE '%by%' OR LOWER(P_MFGR) LIKE '%year%' OR LOWER(P_BRAND) LIKE '%total%' OR LOWER(P_BRAND) LIKE '%order%' OR LOWER(P_BRAND) LIKE '%value%' OR LOWER(P_BRAND) LIKE '%by%' OR LOWER(P_BRAND) LIKE '%year%' OR LOWER(P_TYPE) LIKE '%total%' OR LOWER(P_TYPE) LIKE '%order%' OR LOWER(P_TYPE) LIKE '%value%' OR LOWER(P_TYPE) LIKE '%by%' OR LOWER(P_TYPE) LIKE '%year%' OR LOWER(P_CONTAINER) LIKE '%total%' OR LOWER(P_CONTAINER) LIKE '%order%' OR LOWER(P_CONTAINER) LIKE '%value%' OR LOWER(P_CONTAINER) LIKE '%by%' OR LOWER(P_CONTAINER) LIKE '%year%' OR LOWER(P_COMMENT) LIKE '%total%' OR LOWER(P_COMMENT) LIKE '%order%' OR LOWER(P_COMMENT) LIKE '%value%' OR LOWER(P_COMMENT) LIKE '%by%' OR LOWER(P_COMMENT) LIKE '%year%' ORDER BY P_PARTKEY LIMIT 5",
+        "SELECT * FROM PARTSUPP WHERE LOWER(PS_COMMENT) LIKE '%total%' OR LOWER(PS_COMMENT) LIKE '%order%' OR LOWER(PS_COMMENT) LIKE '%value%' OR LOWER(PS_COMMENT) LIKE '%by%' OR LOWER(PS_COMMENT) LIKE '%year%' ORDER BY PS_PARTKEY, PS_SUPPKEY LIMIT 5",
+        "SELECT * FROM REGION WHERE LOWER(R_NAME) LIKE '%total%' OR LOWER(R_NAME) LIKE '%order%' OR LOWER(R_NAME) LIKE '%value%' OR LOWER(R_NAME) LIKE '%by%' OR LOWER(R_NAME) LIKE '%year%' OR LOWER(R_COMMENT) LIKE '%total%' OR LOWER(R_COMMENT) LIKE '%order%' OR LOWER(R_COMMENT) LIKE '%value%' OR LOWER(R_COMMENT) LIKE '%by%' OR LOWER(R_COMMENT) LIKE '%year%' ORDER BY R_REGIONKEY LIMIT 5",
+        "SELECT * FROM SUPPLIER WHERE LOWER(S_NAME) LIKE '%total%' OR LOWER(S_NAME) LIKE '%order%' OR LOWER(S_NAME) LIKE '%value%' OR LOWER(S_NAME) LIKE '%by%' OR LOWER(S_NAME) LIKE '%year%' OR LOWER(S_ADDRESS) LIKE '%total%' OR LOWER(S_ADDRESS) LIKE '%order%' OR LOWER(S_ADDRESS) LIKE '%value%' OR LOWER(S_ADDRESS) LIKE '%by%' OR LOWER(S_ADDRESS) LIKE '%year%' OR LOWER(S_PHONE) LIKE '%total%' OR LOWER(S_PHONE) LIKE '%order%' OR LOWER(S_PHONE) LIKE '%value%' OR LOWER(S_PHONE) LIKE '%by%' OR LOWER(S_PHONE) LIKE '%year%' OR LOWER(S_COMMENT) LIKE '%total%' OR LOWER(S_COMMENT) LIKE '%order%' OR LOWER(S_COMMENT) LIKE '%value%' OR LOWER(S_COMMENT) LIKE '%by%' OR LOWER(S_COMMENT) LIKE '%year%' ORDER BY S_SUPPKEY LIMIT 5"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-16cf-0002-b6f20001b0d6",
+        "01c7cff8-000e-16f2-0002-b6f20001e012",
+        "01c7cff8-000e-16f2-0002-b6f20001e016",
+        "01c7cff8-000e-16b8-0002-b6f2000180d2",
+        "01c7cff8-000e-16d0-0002-b6f20001a0aa",
+        "01c7cff8-000e-1619-0000-0002b6f2c3f9",
+        "01c7cff8-000e-16b8-0002-b6f2000180d6",
+        "01c7cff8-000e-1673-0002-b6f20001f022"
+      ],
+      "ground_truth_sql": "SELECT YEAR(O_ORDERDATE) AS order_year, ROUND(SUM(O_TOTALPRICE), 2) AS total_value\nFROM ORDERS\nGROUP BY order_year\nORDER BY order_year;\n",
+      "ground_truth_query_id": "01c7cff8-000e-1619-0000-0002b6f2c3fd",
+      "ground_truth_rows": [
+        [
+          1992,
+          "34330674052.43"
+        ],
+        [
+          1993,
+          "34340410079.03"
+        ],
+        [
+          1994,
+          "34416369052.97"
+        ],
+        [
+          1995,
+          "34546133183.60"
+        ],
+        [
+          1996,
+          "34609364760.86"
+        ],
+        [
+          1997,
+          "34373633413.04"
+        ],
+        [
+          1998,
+          "20212721905.53"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "C_CUSTKEY",
+            "C_NAME",
+            "C_ADDRESS",
+            "C_NATIONKEY",
+            "C_PHONE",
+            "C_ACCTBAL",
+            "C_MKTSEGMENT",
+            "C_COMMENT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "L_ORDERKEY",
+            "L_PARTKEY",
+            "L_SUPPKEY",
+            "L_LINENUMBER",
+            "L_QUANTITY",
+            "L_EXTENDEDPRICE",
+            "L_DISCOUNT",
+            "L_TAX",
+            "L_RETURNFLAG",
+            "L_LINESTATUS",
+            "L_SHIPDATE",
+            "L_COMMITDATE",
+            "L_RECEIPTDATE",
+            "L_SHIPINSTRUCT",
+            "L_SHIPMODE",
+            "L_COMMENT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "N_NATIONKEY",
+            "N_NAME",
+            "N_REGIONKEY",
+            "N_COMMENT"
+          ],
+          "row_count": 0,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "O_ORDERKEY",
+            "O_CUSTKEY",
+            "O_ORDERSTATUS",
+            "O_TOTALPRICE",
+            "O_ORDERDATE",
+            "O_ORDERPRIORITY",
+            "O_CLERK",
+            "O_SHIPPRIORITY",
+            "O_COMMENT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "P_PARTKEY",
+            "P_NAME",
+            "P_MFGR",
+            "P_BRAND",
+            "P_TYPE",
+            "P_SIZE",
+            "P_CONTAINER",
+            "P_RETAILPRICE",
+            "P_COMMENT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "PS_PARTKEY",
+            "PS_SUPPKEY",
+            "PS_AVAILQTY",
+            "PS_SUPPLYCOST",
+            "PS_COMMENT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "R_REGIONKEY",
+            "R_NAME",
+            "R_COMMENT"
+          ],
+          "row_count": 0,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "S_SUPPKEY",
+            "S_NAME",
+            "S_ADDRESS",
+            "S_NATIONKEY",
+            "S_PHONE",
+            "S_ACCTBAL",
+            "S_COMMENT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_NATIONS_IN_AMERICA",
+      "suite": "tpch",
+      "question": "Which nations belong to the AMERICA region?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 2066.8,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "The nations that belong to the AMERICA region are: ARGENTINA [[Q1:R1]], BRAZIL [[Q1:R2]], CANADA [[Q1:R3]], PERU [[Q1:R4]], and UNITED STATES [[Q1:R5]].",
+      "executed_sql": [
+        "SELECT T1.N_NAME FROM NATION AS T1 INNER JOIN REGION AS T2 ON T1.N_REGIONKEY = T2.R_REGIONKEY WHERE T2.R_NAME = 'AMERICA'"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-16b8-0002-b6f2000180da"
+      ],
+      "ground_truth_sql": "SELECT N_NAME\nFROM NATION\nJOIN REGION ON N_REGIONKEY = R_REGIONKEY\nWHERE R_NAME = 'AMERICA'\nORDER BY N_NAME;\n",
+      "ground_truth_query_id": "01c7cff8-000e-16d0-0002-b6f20001a0ae",
+      "ground_truth_rows": [
+        [
+          "ARGENTINA"
+        ],
+        [
+          "BRAZIL"
+        ],
+        [
+          "CANADA"
+        ],
+        [
+          "PERU"
+        ],
+        [
+          "UNITED STATES"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "N_NAME"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_TOP_NATIONS_BY_CUSTOMERS",
+      "suite": "tpch",
+      "question": "Which five nations have the most customers?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 2933.1,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "The five nations with the most customers are:\n\n1.  **INDONESIA** with 6,161 customers [[Q1:R1]].\n2.  **ROMANIA** with 6,100 customers [[Q1:R2]].\n3.  **FRANCE** with 6,100 customers [[Q1:R3]].\n4.  **RUSSIA** with 6,078 customers [[Q1:R4]].\n5.  **INDIA** with 6,042 customers [[Q1:R5]].",
+      "executed_sql": [
+        "SELECT T1.N_NAME, COUNT(T2.C_CUSTKEY) AS CustomerCount FROM NATION AS T1 INNER JOIN CUSTOMER AS T2 ON T1.N_NATIONKEY = T2.C_NATIONKEY GROUP BY T1.N_NAME ORDER BY CustomerCount DESC LIMIT 5"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-16d0-0002-b6f20001a0b2"
+      ],
+      "ground_truth_sql": "SELECT N_NAME, COUNT(*) AS customer_count\nFROM CUSTOMER\nJOIN NATION ON C_NATIONKEY = N_NATIONKEY\nGROUP BY N_NAME\nORDER BY customer_count DESC\nLIMIT 5;\n",
+      "ground_truth_query_id": "01c7cff8-000e-16cf-0002-b6f20001b0da",
+      "ground_truth_rows": [
+        [
+          "INDONESIA",
+          6161
+        ],
+        [
+          "ROMANIA",
+          6100
+        ],
+        [
+          "FRANCE",
+          6100
+        ],
+        [
+          "RUSSIA",
+          6078
+        ],
+        [
+          "INDIA",
+          6042
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "N_NAME",
+            "CUSTOMERCOUNT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_REVENUE_AFTER_DISCOUNT",
+      "suite": "tpch",
+      "question": "What is the total revenue from line items after discounts?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 3883.6,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total revenue from line items after discounts is $218,102,223,885.00 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)) FROM LINEITEM"
+      ],
+      "query_ids": [
+        "01c7cff8-000e-16d0-0002-b6f20001a0b6"
+      ],
+      "ground_truth_sql": "SELECT ROUND(SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)), 2) AS net_revenue\nFROM LINEITEM;\n",
+      "ground_truth_query_id": "01c7cff8-000e-1619-0000-0002b6f2c401",
+      "ground_truth_rows": [
+        [
+          "218102223885.00"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT))"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_ORDERS_WITH_LINE_ITEMS",
+      "suite": "tpch",
+      "question": "How many distinct orders have at least one line item?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1354.1,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total number of distinct orders that have at least one line item is 1,500,000 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(DISTINCT T1.L_ORDERKEY) FROM LINEITEM AS T1"
+      ],
+      "query_ids": [
+        "01c7cff9-000e-16f2-0002-b6f20001e01a"
+      ],
+      "ground_truth_sql": "SELECT COUNT(DISTINCT O_ORDERKEY) AS order_count\nFROM ORDERS\nJOIN LINEITEM ON O_ORDERKEY = L_ORDERKEY;\n",
+      "ground_truth_query_id": "01c7cff9-000e-16b8-0002-b6f2000180de",
+      "ground_truth_rows": [
+        [
+          1500000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(DISTINCT T1.L_ORDERKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    }
+  ]
+}

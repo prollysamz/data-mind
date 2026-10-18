@@ -23,6 +23,9 @@ guardrails:
 agent:
   max_steps: 6
 
+uploads:
+  loader_role: DATAMIND_LOADER
+
 llm:
   base_url: ${LLM_BASE_URL:-http://localhost:11434/v1}
   orchestrator_model: ${LLM_ORCHESTRATOR_MODEL:-gemma4:e2b}
@@ -30,3 +33,10 @@ llm:
   token_param: max_tokens
   max_tokens: 8192
   temperature: 0.0
+  budget:
+    max_usd_total: ${DATAMIND_BUDGET_MAX_USD:-}
+    price_per_million_input_usd: ${DATAMIND_PRICE_INPUT_M:-}
+    price_per_million_output_usd: ${DATAMIND_PRICE_OUTPUT_M:-}
+    max_calls_per_run: 30
+    max_calls_per_minute: 30
+    max_tokens_per_call: 32768

@@ -17,28 +17,31 @@ _STOP_WORDS = {
 }
 
 
+def _tokens(text: str) -> set[str]:
+    return {word[:-1] if len(word) > 3 and word.endswith("s") else word
+            for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in _STOP_WORDS}
+
+
 def prune_semantic_model(model: SemanticModel, question: str, max_tables: int = 3) -> SemanticModel:
     """Filter tables in semantic model to only those relevant to user question."""
-    q_tokens = {
-        t for t in re.findall(r"\b[a-z0-9_]+\b", question.lower())
-        if t not in _STOP_WORDS
-    }
+    q_tokens = _tokens(question)
 
     # Score each table
     table_scores: dict[str, float] = {}
     for table in model.tables:
         score = 0.0
         # Table name match
-        t_tokens = set(re.findall(r"\b[a-z0-9_]+\b", table.name.lower()))
+        t_tokens = _tokens(table.name)
         score += len(q_tokens & t_tokens) * 3.0
 
         # Column names match (strong signal)
         for col in table.columns:
-            c_tokens = set(re.findall(r"\b[a-z0-9_]+\b", col.name.lower()))
+            c_tokens = _tokens(col.name)
             score += len(q_tokens & c_tokens) * 2.0
+            score += len(q_tokens & _tokens(col.description)) * 0.5
 
         # Description match (weak signal)
-        d_tokens = set(re.findall(r"\b[a-z0-9_]+\b", table.description.lower()))
+        d_tokens = _tokens(table.description)
         score += len(q_tokens & d_tokens) * 0.5
 
         table_scores[table.name] = score

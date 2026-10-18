@@ -1,9 +1,8 @@
-# TPC-H reusability suite: a schema DataMind was never built or tuned for.
+# TPC-H development suite: see eval/HISTORY.md section M for both live runs.
 #
-# Runs against SNOWFLAKE_SAMPLE_DATA.TPCH_SF1, which every Snowflake account already has,
-# so there is nothing to download or load. The semantic model in examples/tpch/ was
-# produced by `datamind init` introspecting the schema; no question, table or column
-# below appears anywhere in DataMind's code or prompts.
+# Runs against SNOWFLAKE_SAMPLE_DATA.TPCH_SF1 when available to the configured role.
+# The semantic model started with datamind init and now has reviewed business
+# descriptions and joins. Gold queries below are not included in agent prompts.
 #
 # Each question carries ground_truth_sql. The runner executes it against the same
 # database and compares, so a pass means the agent's own SQL reproduced the real answer

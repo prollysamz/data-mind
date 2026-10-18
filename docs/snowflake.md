@@ -22,10 +22,15 @@ Both roles are granted to your user.
 
 ## 3. Load data
 
+For browser uploads (CSV/TSV, Parquet, XLSX, JSON/JSONL, PDF, DOCX and text), start with
+`datamind serve --enable-uploads`. The loader login needs `DATAMIND_LOADER`; the updated
+bootstrap grants that role schema-creation privileges. See [snowflake-first.md](snowflake-first.md)
+for separate loader credentials, document extraction limits and failure handling.
+
 Pick one or both:
 
 - **Synthetic demo tables** (`SALES`, `PRODUCTS`, `SUPPORT_TICKETS`, the same data as `examples/primary/demo.duckdb`): run [`scripts/setup_snowflake_demo.sql`](../scripts/setup_snowflake_demo.sql) in a worksheet.
-- **Olist e-commerce data**: download the Olist CSVs from Kaggle into `data/olist/` (see [datasets.md](datasets.md)), then run `python scripts/load_olist_snowflake.py`. Build the local copy too (`python scripts/build_olist_duckdb.py`): review text for document search is indexed from `data/olist/olist.duckdb` (`retrieval.source_duckdb_path` in `datamind_olist_snowflake.yaml`).
+- **Olist e-commerce data**: download the Olist CSVs from Kaggle into `data/olist/` (see [datasets.md](datasets.md)), then run `python scripts/load_olist_snowflake.py`. In Snowflake mode, document search executes SQL against the live text columns and returns query IDs and row citations. A local DuckDB copy is optional for local development and is not used to answer Snowflake questions.
 
 ## 4. Credentials
 
@@ -62,10 +67,62 @@ ORDER BY start_time DESC
 LIMIT 50;
 ```
 
-Export that result (CSV) with the run's output and keep it in the repository, so the evaluation path still works after the trial ends.
+Keep a sanitized run output and query-history export only where dataset terms permit redistribution. For Snowflake sample data, commit the SQL, query IDs and setup instructions; inspect the result rows inside the account instead of copying sample data into the repository. Recorded evidence supports inspection but does not replace a runnable evaluation path after a trial expires. See [judging.md](judging.md) for the required live evaluation procedure.
 
 ## 7. Cost control
 
 - The warehouse auto-suspends after 60 seconds idle; `datamind warehouse-suspend` suspends it immediately.
 - The resource monitor suspends it at 5 credits per month.
 - DataMind does not call Snowflake Cortex; all model inference is Gemma, outside Snowflake.
+
+## 8. Query tags, Time Travel and optional masking
+
+Snowflake connections set `QUERY_TAG` (default `datamind`, configurable under
+`backend.snowflake.query_tag`) and a server-side statement timeout. The TPC-H
+configuration tags queries `datamind:eval:tpch`. Do not put user questions or secrets
+in query tags. [Snowflake parameter reference](https://docs.snowflake.com/en/sql-reference/parameters#query-tag).
+
+Run `python scripts/verify_snowflake_depth.py` to record a tagged query in session
+history, a historical read, and loader availability. The saved
+[receipt](../eval/evidence/snowflake_depth.json) has live query IDs. Historical reads
+use [BEFORE (STATEMENT => ...)](https://docs.snowflake.com/en/sql-reference/constructs/at-before).
+
+`python scripts/demo_data_change.py datamind_snowflake.yaml` requires the loader
+role. It creates a randomly named schema and zero-copy SALES clone, runs the same
+Gemma question before and after insertion, compares against live aggregate SQL,
+then checks the original value with Time Travel. Cleanup drops only the generated
+schema. The writer needs source-table SELECT and schema creation privileges; readers
+retain SELECT only. Current login: loader unavailable (390186), so this mutation
+path has not yet been demonstrated live.
+
+For the current missing-role blocker, an administrator can run
+[`scripts/snowflake_enable_ingestion.sql`](../scripts/snowflake_enable_ingestion.sql)
+after setting the ingestion login. It grants the loader role, schema creation,
+warehouse usage and source SALES read access for cloning. The agent continues to
+connect as `DATAMIND_READONLY`. For a separate ingestion login, configure both
+`SNOWFLAKE_LOADER_USER` and `SNOWFLAKE_LOADER_PASSWORD`; do not place them in the
+semantic model or prompts.
+
+At question time the SQL tool checks direct string equality and IN filters against
+live distinct values. A complete domain of at most 25 non-null values permits
+validation; domains with 26 or more values, truncated domains, expressions and
+derived columns are not exhaustively validated. The pass is bounded to eight
+distinct columns per SQL call and does not cache across questions. Unique case or
+numeric-code-prefix variants can be resolved and disclosed; ambiguous or unknown
+values return a repair/clarification error rather than a confident measured zero.
+Validation SQL, Snowflake query IDs and normalization records are exposed separately
+from answer query receipts under `validation_queries` in the API and evaluation files.
+
+Quantitative requests must execute structured SQL before document search. Generated
+answers with failed numeric/citation verification receive one rewrite attempt. If
+the rewrite still fails and the last result is one numeric cell, the answer shows
+that exact value and its row citation with a fallback disclosure. This does not
+prove that the SQL itself interpreted the question correctly; independent ground
+truth evaluation remains necessary.
+
+`scripts/snowflake_governance_demo.sql` is an optional admin-run example on a
+fictional contact table in `DATAMIND.GOVERNANCE_DEMO`. It compares admin-visible and
+read-only masked values using a Snowflake masking policy. Do not run it against
+user data. [Dynamic Data Masking](https://docs.snowflake.com/en/user-guide/security-column-ddm-intro)
+requires Enterprise edition. Setup and actual masking remain unverified in this
+account; the script's presence is not evidence of deployed governance.

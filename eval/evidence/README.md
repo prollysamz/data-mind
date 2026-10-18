@@ -1,5 +1,10 @@
 # Evidence files
 
+`snowflake_depth.json` records live query tags in Snowflake session history and a
+Time Travel historical read with query IDs. It explicitly records the missing loader
+role and unverified masking. It is not a before/after mutation run. Live TPC-H results
+and their independent SQL receipts are in `eval/results/*tpch_run*.json`; see HISTORY §M.
+
 | File | What it shows | Limits |
 |---|---|---|
 | `data_change_duckdb.txt` | `scripts/demo_data_change.py` on DuckDB: the same question answered before and after a data change, with query IDs. | DuckDB only; no Snowflake run of the data-change demo is recorded yet. |

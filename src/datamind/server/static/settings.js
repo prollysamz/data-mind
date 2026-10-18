@@ -5,8 +5,8 @@
 (() => {
   const view = {
     settings: null,
-    models: { local: null, openrouter: null, google: null },
-    loading: { local: false, openrouter: false, google: false },
+    models: { local: null, openrouter: null, google: null, bedrock: null },
+    loading: { local: false, openrouter: false, google: false, bedrock: false },
     saving: false,
   };
 
@@ -37,7 +37,7 @@
 
   function syncPanels() {
     const provider = selectedProvider();
-    ['local', 'openrouter', 'google'].forEach((name) => {
+    ['local', 'openrouter', 'google', 'bedrock'].forEach((name) => {
       el(`${name}Panel`).hidden = provider !== name;
     });
     updateTestButton();
@@ -46,8 +46,8 @@
     if (provider === 'google' && view.settings.google.configured) loadGoogleModels();
   }
 
-  function renderKeyState(provider, inputId, stateId, textId, envName) {
-    const setting = view.settings[provider];
+  function renderKeyState(provider, inputId, stateId, textId, envName, credential = null) {
+    const setting = credential ? view.settings[provider][credential] : view.settings[provider];
     const input = el(inputId);
     input.value = '';
     input.placeholder = setting.configured
@@ -169,13 +169,19 @@
     if (!select || !view.settings) return;
     const provider = view.settings.provider;
     const model = view.settings[provider].model;
-    const label = { local: 'Local', openrouter: 'OpenRouter', google: 'Google AI' }[provider];
+    const label = { local: 'Local', openrouter: 'OpenRouter', google: 'Google AI', bedrock: 'Bedrock Mantle' }[provider];
     select.innerHTML = `<option value="local">${escapeHtml(label)} · ${escapeHtml(model)}</option>`;
     select.disabled = true;
     select.title = 'Change the provider or model in Settings';
   }
 
   function renderSettings() {
+    renderKeyState('bedrock', 'bedrockKeyInput', 'bedrockKeyState', 'bedrockKeyStateText', 'BEDROCK_API_KEY');
+    renderKeyState('bedrock', 'bedrockBearerTokenInput', 'bedrockBearerState', 'bedrockBearerStateText', 'AWS_BEARER_TOKEN_BEDROCK', 'bearer');
+    el('bedrockKeyInput').placeholder = view.settings.bedrock.configured ? 'Enter a replacement Bedrock key' : 'Enter an Amazon Bedrock API key';
+    el('bedrockBearerTokenInput').placeholder = view.settings.bedrock.bearer.configured ? 'Enter a replacement AWS bearer token' : 'Enter AWS_BEARER_TOKEN_BEDROCK';
+    el('bedrockBaseUrlInput').value = view.settings.bedrock.base_url;
+    replaceOptions('bedrockModelSelect', view.models.bedrock || [{id: view.settings.bedrock.model}], view.settings.bedrock.model, m => m.id);
     renderKeyState('openrouter', 'openrouterKeyInput', 'openrouterKeyState', 'openrouterKeyStateText', 'OPENROUTER_API_KEY');
     renderKeyState('google', 'googleKeyInput', 'googleKeyState', 'googleKeyStateText', 'GOOGLE_API_KEY or GEMINI_API_KEY');
     if (view.models.local) renderLocalModels();
@@ -204,6 +210,15 @@
     const body = { provider };
     const openrouterKey = el('openrouterKeyInput').value.trim();
     const googleKey = el('googleKeyInput').value.trim();
+    const bedrockKey = el('bedrockKeyInput').value.trim();
+    const bedrockBearerToken = el('bedrockBearerTokenInput').value.trim();
+    if (bedrockKey) body.bedrock_api_key = bedrockKey;
+    if (bedrockBearerToken) body.bedrock_bearer_token = bedrockBearerToken;
+    if (provider === 'bedrock') {
+      body.bedrock_model = el('bedrockModelSelect').value;
+      body.bedrock_base_url = el('bedrockBaseUrlInput').value.trim();
+      if (!body.bedrock_model || (!bedrockKey && !view.settings.bedrock.configured) || (!bedrockBearerToken && !view.settings.bedrock.bearer.configured) || !body.bedrock_base_url) return setStatus('Enter the Bedrock API key, AWS bearer token, base URL, and load a Gemma model.', 'error');
+    }
     if (openrouterKey) body.openrouter_api_key = openrouterKey;
     if (googleKey) body.google_api_key = googleKey;
     if (provider === 'local') body.local_model = el('localModelSelect').value;
@@ -222,7 +237,7 @@
     const button = el('saveSettingsBtn');
     view.saving = true;
     button.disabled = true;
-    setStatus((openrouterKey || googleKey) ? 'Checking the key and available models…' : 'Saving…');
+    setStatus((openrouterKey || googleKey || bedrockKey || bedrockBearerToken) ? 'Checking credentials and available models…' : 'Saving…');
     try {
       view.settings = await api('/api/settings', {
         method: 'POST',
@@ -232,7 +247,7 @@
       applyToComposer();
       renderSettings();
       closeModal(el('settingsModal'));
-      showToast(`Using ${provider === 'google' ? 'Google AI Studio' : provider === 'openrouter' ? 'OpenRouter' : 'the local model'}`);
+      showToast(`Using ${provider === 'bedrock' ? 'Bedrock Mantle' : provider === 'google' ? 'Google AI Studio' : provider === 'openrouter' ? 'OpenRouter' : 'the local model'}`);
       if (typeof loadConfig === 'function') loadConfig();
     } catch (error) {
       setStatus(error.message, 'error');
@@ -243,9 +258,11 @@
   }
 
   async function removeKey(provider) {
-    const providerName = provider === 'google' ? 'Gemini' : 'OpenRouter';
+    const providerName = provider === 'bedrock' ? 'Bedrock Mantle' : provider === 'google' ? 'Gemini' : 'OpenRouter';
     if (!window.confirm(`Remove the saved ${providerName} key? Data Mind will switch to the local model if it is active.`)) return;
-    const body = { [`${provider}_api_key`]: '' };
+    const body = provider === 'bedrock'
+      ? { bedrock_api_key: '', bedrock_bearer_token: '' }
+      : { [`${provider}_api_key`]: '' };
     if (view.settings.provider === provider) body.provider = 'local';
     try {
       view.settings = await api('/api/settings', {
@@ -278,10 +295,32 @@
     }
   }
 
+  async function loadBedrockModels() {
+    const button = el('loadBedrockModelsBtn');
+    button.disabled = true;
+    setStatus('Loading Gemma models from Bedrock Mantle…');
+    try {
+      const result = await api('/api/bedrock/models', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bedrock_api_key: el('bedrockKeyInput').value.trim() || undefined,
+          bedrock_bearer_token: el('bedrockBearerTokenInput').value.trim() || undefined,
+          bedrock_base_url: el('bedrockBaseUrlInput').value.trim(),
+        }),
+      });
+      view.models.bedrock = result.models;
+      replaceOptions('bedrockModelSelect', result.models, view.settings.bedrock.model, m => m.id);
+      setStatus(`${result.models.length} Gemma models available.`, 'ok');
+    } catch (error) { setStatus(error.message, 'error'); }
+    finally { button.disabled = false; }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     el('settingsBtn').addEventListener('click', open);
     el('removeOpenrouterKeyBtn').addEventListener('click', () => removeKey('openrouter'));
     el('removeGoogleKeyBtn').addEventListener('click', () => removeKey('google'));
+    el('removeBedrockKeyBtn').addEventListener('click', () => removeKey('bedrock'));
+    el('loadBedrockModelsBtn').addEventListener('click', loadBedrockModels);
     el('testBtn').addEventListener('click', test);
     el('refreshLocalModelsBtn').addEventListener('click', () => loadLocalModels(true));
     el('refreshOpenrouterModelsBtn').addEventListener('click', () => loadOpenrouterModels(true));

@@ -105,6 +105,7 @@ def test_snowflake_adapter_resolves_config_and_environment(monkeypatch):
         database="ENV_DB",
         schema="ENV_SCHEMA",
         network_timeout=30,
+        session_parameters={"QUERY_TAG": "datamind", "STATEMENT_TIMEOUT_IN_SECONDS": 30},
     )
     mock_conn.cursor.return_value.execute.assert_called_once_with("USE SECONDARY ROLES NONE")
     adapter.close()

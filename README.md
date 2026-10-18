@@ -1,6 +1,11 @@
 # DataMind: Verifiable Enterprise AI Data Agent
 
-> An open-source, verifiable AI data agent powered by **Google Gemma** and **Snowflake / DuckDB**. Natural language questions answered with executable SQL, interactive provenance citations, deterministic numeric verification, and automated data uploads.
+> An open-source, verifiable AI data agent powered by **Google Gemma and Snowflake**. Natural language questions answered with executable SQL, inspectable result rows, source citations, charts and KPIs. DuckDB is an explicit local development option.
+
+**Snowflake is the default for `serve`, `ask` and `mcp`.** Uploaded datasets and document
+text load into isolated Snowflake schemas; questions query Snowflake at runtime. Bedrock
+Mantle is available in Settings alongside local inference. See the
+[Snowflake-first setup, formats, security and verification notes](docs/snowflake-first.md).
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
@@ -17,7 +22,7 @@ Most "talk to your data" systems suffer from hallucinations, non-reproducible an
 **DataMind wins on three core principles:**
 1. **Trust:** Every claim carries its generated SQL, query ID, result rows, and document citations. A deterministic code verifier (not another LLM) parses every number, currency value, date semantic, and direction word in the answer and reconciles it against cited cells down to the exact cent.
 2. **Proof:** Published, empirical evaluation metrics with complete provenance (git commit `5fc44b2`, date, model, backend, latency) and 100% transparent reporting of failures.
-3. **Reusability:** Point DataMind at any schema in minutes, drag-and-drop CSV datasets with automated profiling and session isolation, or connect to other AI agents via the Model Context Protocol (MCP). A TPC-H suite (`eval/questions/tpch.yaml`) runs this claim against a schema the project was never tuned for, using Snowflake's own sample data; it is committed but has not been executed yet.
+3. **Reusability:** Configure a semantic model for another schema, upload datasets with profiling and session isolation, or connect through MCP. Live TPC-H evaluation progressed from 3/10 to 10/10 after schema review, live category validation, SQL routing and verified narration. All intermediate runs are retained. This is a development result, not an unseen-data accuracy claim.
 
 ---
 
@@ -48,7 +53,7 @@ User Question (Browser UI / CLI / MCP)
 
 ---
 
-## Quickstart (Under 5 Minutes)
+## Quickstart
 
 ### 1. Clone & Setup Virtual Environment
 ```bash
@@ -66,7 +71,7 @@ python -m venv .venv
 
 ### 2. Install Package
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,snowflake,uploads]"
 
 # Generate the deterministic local DuckDB fixture required by the app and tests
 python examples/primary/build_demo_data.py
@@ -83,10 +88,17 @@ datamind doctor
 Checks Python version, core dependencies, configuration, DuckDB, local Ollama (verifies a >=8k context window is configured), client-side budget guard, and Snowflake connectivity.
 
 ### 4. Start the Interactive Web UI
+Complete the [Snowflake account/role setup](docs/snowflake.md) and configure the Snowflake
+credentials before starting. Uploads also require a login granted `DATAMIND_LOADER`;
+see [separate ingestion credentials](docs/snowflake-first.md).
+
 ```bash
 datamind serve --enable-uploads --port 8080
 ```
 Open **`http://localhost:8080`** in your browser.
+
+For local development without a Snowflake account, explicitly use
+`datamind serve --config datamind.yaml --enable-uploads --port 8080`.
 
 ### 5. Run on Snowflake (required for the hackathon track)
 Follow [docs/snowflake.md](docs/snowflake.md): one bootstrap script creates the warehouse, database, read-only and loader roles, and a credit cap; then `datamind serve --config datamind_snowflake.yaml` runs every query in Snowflake and shows its Snowflake query ID.
@@ -96,13 +108,13 @@ Follow [docs/snowflake.md](docs/snowflake.md): one bootstrap script creates the 
 python scripts/demo_data_change.py                          # DuckDB, on a temporary copy
 python scripts/demo_data_change.py datamind_snowflake.yaml  # Snowflake
 ```
-Asks the same question before and after inserting one sales row, then removes it. A recorded DuckDB run is in [eval/evidence/data_change_duckdb.txt](eval/evidence/data_change_duckdb.txt).
+Asks the same question before and after inserting one sales row. Snowflake uses an isolated clone, checks both answers against live aggregates, compares the original value using Time Travel, and drops only its generated schema. The source tables remain untouched. A recorded DuckDB run is in [eval/evidence/data_change_duckdb.txt](eval/evidence/data_change_duckdb.txt). The Snowflake mutation run is still blocked: the current login lacks `DATAMIND_LOADER` (390186). Query tags and a read-only Time Travel check have passed live: [receipts](eval/evidence/snowflake_depth.json).
 
-### 7. Point it at a schema it has never seen
+### 7. Evaluate on Snowflake TPC-H
 ```bash
 datamind eval --suite tpch --config datamind_tpch.yaml
 ```
-Runs 10 analytical questions against `SNOWFLAKE_SAMPLE_DATA.TPCH_SF1`, the sample data shared into every Snowflake account, so there is nothing to download or load. The semantic model in [examples/tpch/](examples/tpch/semantic_model.yaml) was generated by introspecting the schema, and no question, table or column in the suite appears in DataMind's code or prompts. Each question carries ground-truth SQL that the runner executes against the same database and compares. **This suite has not been run yet**; it has no recorded result (see [eval/HISTORY.md](eval/HISTORY.md) §L).
+Runs 10 analytical questions against `SNOWFLAKE_SAMPLE_DATA.TPCH_SF1` (the sample database must be available to the configured role). The semantic model started from introspection and now includes reviewed business descriptions and foreign keys. Each question carries separately authored ground-truth SQL, executed after the agent answers; that SQL is not supplied to the agent. The comparator checks all rows, columns and duplicates at cents precision, rejecting truncated results. All runs and query IDs are saved in [eval/results/](eval/results/) and the append-only ledger: **3/10 → 8/10 → 7/10 → 9/10 → 10/10**. The final run fixes the invalid priority code, yearly routing, and a scalar narration error; its discounted-revenue answer transparently uses the exact database-value fallback. This is a small development suite, not an official TPC benchmark or externally validated score. See [eval/HISTORY.md](eval/HISTORY.md) §N.
 
 ---
 
@@ -132,7 +144,7 @@ All benchmark evaluations are deterministic, execute live against configured bac
 |---|:---:|:---:|:---:|:---:|---|
 | **Olist Development Benchmark (`olist_dev.yaml`)** | **30** | — | — | **Under re-run** | Earlier 100% figure came from a hard-coded SQL lane that bypassed Gemma and has been removed (see [eval/HISTORY.md](eval/HISTORY.md) §E). To be re-run through Gemma on DuckDB and Snowflake. |
 | **Business Suite (`business.yaml`)** | **21** | **19-21** | **0-2** | **90.5-100%** | Synthetic DuckDB data, local `gemma4:e2b` with a 16k context window, five runs on 2026-10-18 after removing dev-set answers from the prompt (20, 20, 19, 21, 20 of 21). Development tuning set, not a generalisation figure. `Q_MONTHLY_REVENUE_TREND` usually fails (groups by product as well as month; now flagged PARTIALLY_VERIFIED); `Q_MIXED_REVENUE_SUPPORT` fails intermittently. |
-| **TPC-H Reusability Suite (`tpch.yaml`)** | **10** | — | — | **Not yet run** | Committed, never executed: no result file and no ledger entry exist. Runs against `SNOWFLAKE_SAMPLE_DATA.TPCH_SF1` (shared into every Snowflake account, nothing to download) with an introspected semantic model. Every question carries `ground_truth_sql` executed against the same database, so a pass means the agent's SQL reproduced the live answer. |
+| **TPC-H Development Suite (`tpch.yaml`)** | **10** | **10** | **0** | **100.0%** | Live Snowflake + local Gemma `gemma4-e2b-16k`, no LLM response cache. All five development runs retained (3, 8, 7, 9, 10 passes). Complete result comparison vs separately authored live SQL; agent, filter-validation and gold query IDs saved. One scalar answer uses disclosed exact-value fallback after failed narration. |
 | **Trust & Guardrails Suite (`trust.yaml`)** | **6** | **6** | **0** | **100.0%** | Planted numbers, DROP injections, Cartesian joins. |
 | **Automated Security Suite (`tests/test_security.py`)** | **50** | **50** | **0** | **100.0%** | Destructive SQL, CTE writes, file functions, Unicode, injection defenses. |
 | **Deterministic Verifier Mutation Suite** | **73** | **73** | **0** | **100.0%** | Comprehensive mutation suite (12 failure classes caught 100%). |
@@ -215,12 +227,12 @@ Tested using `datamind eval --suite verifier` against 73 automated adversarial m
 
 ## User-Uploaded Datasets & Security
 
-Upload any custom CSV dataset live via drag-and-drop or the REST API:
-1. **Session Isolation:** Uploaded datasets are stored in dedicated directories (`.datamind/uploads/<session_id>/data.duckdb`).
+Upload CSV/TSV, Parquet, XLSX, JSON/JSONL, PDF, DOCX or text via drag-and-drop or the REST API:
+1. **Session Isolation:** Snowflake uploads use a dedicated `DATAMIND_UPLOAD_<session_id>` schema. Local development mode uses a separate DuckDB file. Profiles and small previews are retained in local session metadata.
 2. **Automated Profiling:** Detects column types, null percentages, distinct counts, min/max bounds, sample values, and flags potential PII (emails, phone numbers).
 3. **Deterministic Semantic Drafting:** Automatically drafts descriptions, metric definitions, and verified candidate queries.
-4. **FTS5 Document Indexing:** Text columns are indexed into SQLite FTS5 with chunk IDs `D:<table>:<pk>`.
-5. **Instant Data Purge:** Click "Delete My Data" to immediately delete the session folder, DuckDB database, and search index.
+4. **Document Search:** Snowflake mode queries live text columns with SQL row citations and source filenames/page or paragraph locations. Local mode uses SQLite FTS5.
+5. **Session Deletion:** Removing a Snowflake upload drops its isolated schema; failures retain the session for retry. Local mode removes its database and index.
 
 ---
 
@@ -261,6 +273,8 @@ datamind mcp
 ## Documentation & Work Package Reports
 
 ### Core Documentation:
+- [Snowflake-First Uploads, File Formats, Bedrock Mantle & Security](docs/snowflake-first.md)
+- [Judging Requirements, Compliance Gates & Reproducible Evaluation](docs/judging.md)
 - [Quickstart Guide](docs/quickstart.md)
 - [Local-Only Air-Gapped Mode](docs/local-only.md)
 - [Configuration Reference](docs/configuration.md)

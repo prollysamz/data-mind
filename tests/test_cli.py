@@ -40,7 +40,7 @@ def test_cli_serve_command(capsys: pytest.CaptureFixture):
         exit_code = main(["serve", "--port", "8088"])
         assert exit_code == 0
         mock_start.assert_called_once_with(
-            config_path="datamind.yaml",
+            config_path="datamind_snowflake.yaml",
             backend=None,
             host="127.0.0.1",
             port=8088,
@@ -82,7 +82,7 @@ def test_cli_ask_with_mock_orchestrator(capsys: pytest.CaptureFixture):
         mock_instance.run.return_value = mock_result
         mock_orch_cls.return_value = mock_instance
 
-        exit_code = main(["ask", "Which products declined most month over month?"])
+        exit_code = main(["ask", "--config", "datamind.yaml", "Which products declined most month over month?"])
         assert exit_code == 0
         captured = capsys.readouterr()
         assert "DATAMIND ANSWER" in captured.out
@@ -106,7 +106,7 @@ def test_cli_ask_json_output(capsys: pytest.CaptureFixture):
         mock_instance.run.return_value = mock_result
         mock_orch_cls.return_value = mock_instance
 
-        exit_code = main(["ask", "Test Q", "--json"])
+        exit_code = main(["ask", "--config", "datamind.yaml", "Test Q", "--json"])
         assert exit_code == 0
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -147,11 +147,11 @@ def test_cli_ask_strict_fails_on_discrepancy():
         mock_orch_cls.return_value = mock_instance
 
         # Strict by default: fails on discrepancy
-        exit_code = main(["ask", "Test Q"])
+        exit_code = main(["ask", "--config", "datamind.yaml", "Test Q"])
         assert exit_code == 1
 
         # Permissive flag: passes
-        exit_code_permissive = main(["ask", "Test Q", "--permissive"])
+        exit_code_permissive = main(["ask", "--config", "datamind.yaml", "Test Q", "--permissive"])
         assert exit_code_permissive == 0
 
 
@@ -188,7 +188,7 @@ def test_cli_ask_reports_budget_exceeded_cleanly(capsys: pytest.CaptureFixture):
 
     with patch("datamind.cli.AgentOrchestrator") as mock_orch_cls:
         mock_orch_cls.return_value.run.side_effect = BudgetExceeded("Token limit exceeded: test")
-        exit_code = main(["ask", "How many products are there?"])
+        exit_code = main(["ask", "--config", "datamind.yaml", "How many products are there?"])
 
     assert exit_code == 2
     err = capsys.readouterr().err

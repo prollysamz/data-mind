@@ -6,6 +6,7 @@ import datetime
 import decimal
 import json
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,56 +24,32 @@ from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
 
 
-def _compare_result_sets(gt_rows: list[tuple], agent_queries: list[Any]) -> tuple[bool, str]:
+def _compare_result_sets(gt_rows: list[tuple], agent_queries: list[Any], *, ordered: bool = False) -> tuple[bool, str]:
     """Perform strict value-based result-set comparison between ground truth SQL and executed agent queries."""
-    if not gt_rows:
-        return True, ""
     if not agent_queries:
         return False, "Agent executed no SQL queries"
 
     def norm_cell(val: Any) -> Any:
         if val is None:
             return None
-        if isinstance(val, (int, float)):
-            return round(float(val), 2)
-        if isinstance(val, decimal.Decimal):
-            return round(float(val), 2)
-        s = str(val).strip()
-        try:
-            return round(float(s.replace("$", "").replace(",", "")), 2)
-        except ValueError:
-            return s.lower()
+        if isinstance(val, bool):
+            return ("boolean", val)
+        if isinstance(val, (int, float, decimal.Decimal)):
+            return ("number", decimal.Decimal(str(val)).quantize(decimal.Decimal("0.01")))
+        return ("text", str(val))
 
     norm_gt_rows = [tuple(norm_cell(c) for c in r) for r in gt_rows]
 
     for q in agent_queries:
+        if getattr(q.result, "truncated", False):
+            continue
         agent_rows = q.result.rows if hasattr(q, "result") and hasattr(q.result, "rows") else []
         norm_agent_rows = [tuple(norm_cell(c) for c in r) for r in agent_rows]
 
-        # 1. Exact match on rows
-        if norm_agent_rows == norm_gt_rows:
-            return True, "Exact result-set match"
-
-        # 2. Scalar aggregate match
-        if len(norm_gt_rows) == 1 and len(norm_agent_rows) == 1:
-            gt_val = norm_gt_rows[0][-1]
-            agent_val = norm_agent_rows[0][-1]
-            if isinstance(gt_val, (int, float)) and isinstance(agent_val, (int, float)):
-                if abs(gt_val - agent_val) < 0.05:
-                    return True, f"Scalar aggregate match ({gt_val} == {agent_val})"
-
-        # 3. Key-value containment
-        if len(norm_gt_rows) > 1 and len(norm_agent_rows) >= len(norm_gt_rows):
-            gt_dict = {r[0]: r[-1] for r in norm_gt_rows if len(r) >= 2}
-            agent_dict = {r[0]: r[-1] for r in norm_agent_rows if len(r) >= 2}
-            if gt_dict and all(
-                k in agent_dict and (
-                    abs(gt_dict[k] - agent_dict[k]) < 0.05 if isinstance(gt_dict[k], (int, float)) and isinstance(agent_dict[k], (int, float))
-                    else gt_dict[k] == agent_dict[k]
-                )
-                for k in gt_dict
-            ):
-                return True, "Tabular key-value result-set match"
+        # Compare every cell, row and duplicate. Ordering is opt-in; numeric values
+        # use cents precision. Extra columns/rows and truncated results never pass.
+        if (norm_agent_rows == norm_gt_rows if ordered else Counter(norm_agent_rows) == Counter(norm_gt_rows)):
+            return True, "Complete result-set match (numeric precision 0.01)"
 
     return False, f"Result-set mismatch (expected {len(norm_gt_rows)} rows matching ground truth SQL)"
 
@@ -95,6 +72,12 @@ class EvalItemResult:
     answer: str = ""
     executed_sql: list[str] = field(default_factory=list)
     query_ids: list[str] = field(default_factory=list)
+    ground_truth_sql: str = ""
+    ground_truth_query_id: str = ""
+    ground_truth_rows: list = field(default_factory=list)
+    agent_results: list = field(default_factory=list)
+    validation_queries: list = field(default_factory=list)
+    tool_failures: list = field(default_factory=list)
 
 
 @dataclass
@@ -277,10 +260,13 @@ def _evaluate_item(
         gt_sql = item.get("ground_truth_sql")
         gt_matched = True
         gt_detail = ""
+        gt_result = None
         if gt_sql:
             try:
                 gt_result = adapter.execute(gt_sql.strip())
-                gt_matched, gt_detail = _compare_result_sets(gt_result.rows, agent_res.evidence_store.queries)
+                gt_matched, gt_detail = _compare_result_sets(gt_result.rows, agent_res.evidence_store.queries, ordered=item.get("ordered", False))
+                if gt_result.truncated:
+                    gt_matched, gt_detail = False, "Ground truth result truncated"
             except Exception as e:
                 gt_matched = False
                 gt_detail = f"Ground truth execution error: {e}"
@@ -320,6 +306,14 @@ def _evaluate_item(
             answer=agent_res.answer,
             executed_sql=[q.sql for q in agent_res.evidence_store.queries],
             query_ids=[q.result.query_id for q in agent_res.evidence_store.queries if q.result],
+            ground_truth_sql=gt_sql or "",
+            validation_queries=agent_res.evidence_store.validation_queries,
+            tool_failures=[m.get("content", "")[:2000] for m in agent_res.messages if m.get("role") == "tool" and '"error"' in (m.get("content") or "")],
+            ground_truth_query_id=gt_result.query_id if gt_result else "",
+            ground_truth_rows=gt_result.rows if gt_result else [],
+            # Save execution receipts, not original benchmark records. The SQL and
+            # sfqid reproduce results inside the evaluator's Snowflake account.
+            agent_results=[{"columns": q.result.columns, "row_count": len(q.result.rows), "truncated": q.result.truncated} for q in agent_res.evidence_store.queries],
         )
 
 
@@ -481,7 +475,8 @@ def _save_eval_results(
 
     # Record in append-only run ledger
     ledger = RunLedger()
-    q_hash = compute_file_sha256("eval/questions/olist_dev.yaml") if report.suite == "olist_dev" else ""
+    suite_path = Path(f"eval/questions/{report.suite}.yaml")
+    q_hash = compute_file_sha256(suite_path) if suite_path.exists() else ""
     cfg_hash = compute_file_sha256(config_path) if config_path else ""
     run_id = f"run_{date_str.replace('-', '')}_{int(time.time())}"
 
@@ -544,6 +539,12 @@ def _save_eval_results(
                 "answer": i.answer,
                 "executed_sql": i.executed_sql,
                 "query_ids": i.query_ids,
+                "ground_truth_sql": i.ground_truth_sql,
+                "ground_truth_query_id": i.ground_truth_query_id,
+                "ground_truth_rows": i.ground_truth_rows,
+                "agent_results": i.agent_results,
+                "validation_queries": i.validation_queries,
+                "tool_failures": i.tool_failures,
             }
             for i in report.items
         ],
@@ -552,11 +553,11 @@ def _save_eval_results(
     # Write combined and per-suite JSON
     latest_path = results_dir / "latest_results.json"
     with open(latest_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(data, f, indent=2, default=str)
 
-    versioned_path = results_dir / f"{date_str}_{commit_hash}_{report.suite}.json"
+    versioned_path = results_dir / f"{date_str}_{commit_hash}_{report.suite}_{run_id}.json"
     with open(versioned_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(data, f, indent=2, default=str)
 
     # Generate / update eval/results/RESULTS.md
     md_path = results_dir / "RESULTS.md"

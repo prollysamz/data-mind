@@ -2,6 +2,59 @@
 
 This document records the official provenance, source URLs, licenses, row counts, and verification notes for all primary and secondary datasets supported in DataMind.
 
+## PS1 reference datasets (suggestions only; any suitable dataset is allowed)
+
+These are sourcing suggestions, not datasets bundled with DataMind or claims of tested
+integrations. Catalogue counts in the supplied reference brief (14,087 OWID charts across
+126 topics; 689 UCI datasets) are historical snapshots, not current inventory guarantees.
+
+### Resource 1 — Snowflake sample data sets
+
+- **Link:** [Snowflake sample data documentation](https://docs.snowflake.com/en/user-guide/sample-data).
+- **What it is:** `SNOWFLAKE_SAMPLE_DATA`, shared into a Snowflake account, contains
+  TPC-DS and TPC-H benchmark tables. If absent, follow the documented database setup.
+  OpenWeatherMap sample data is deprecated; do not use it.
+- **Access:** Requires a Snowflake account and a running warehouse. Queries consume
+  credits; the shared database itself incurs no account storage charges.
+- **Licence:** The referenced overview does not state an open redistribution licence.
+  Use the data inside your account; reference it rather than copying it into the repository.
+- **Use and caveats:** Useful for joins, aggregates and rankings, with checkable SQL
+  ground truth. It is benchmark data rather than real records and contains little free text.
+  DataMind provides a TPC-H configuration and suite; their presence does not prove execution.
+
+### Resource 2 — Our World in Data
+
+- **Link:** [Our World in Data](https://ourworldindata.org/).
+- **What it is:** Indicators covering health, energy, poverty, education and other topics.
+- **Access:** Browsing requires no account. Inspect each indicator's download options;
+  downloading the suggested indicators was not tested here. The
+  [FAQs](https://ourworldindata.org/faqs) also describe CSV and metadata access.
+- **Licence:** OWID-produced material generally uses CC BY with attribution unless
+  otherwise stated. Much of the underlying data is third-party data with its own terms;
+  check each indicator and credit its original provider. Website code has separate terms.
+- **Use and caveats:** Country/year series can be joined across indicators in Snowflake.
+  Preserve units, country identifiers, coverage and projection flags. Missing years and
+  projections are useful tests of missing-data handling; do not silently fill gaps or
+  describe projections as observations.
+
+### Resource 3 — UCI Machine Learning Repository
+
+- **Link:** [UCI Machine Learning Repository](https://archive.ics.uci.edu/).
+- **What it is:** A collection of largely tabular datasets, including Bank Marketing
+  and Student Performance; some entries are non-tabular.
+- **Access:** Public dataset downloads generally require no sign-in. The Python
+  `ucimlrepo` loader is another access option; verify availability for the selected dataset.
+- **Licence:** Terms are set per dataset. For example,
+  [Wine Quality](https://archive.ics.uci.edu/dataset/186/wine+quality) is CC BY 4.0.
+  Read and attribute the specific dataset page before use or redistribution.
+- **Use and caveats:** Small business-style tables often have documented variables.
+  Many were designed for ML and may lack join keys, dates or narrative text. Validate
+  schema suitability before promising multi-table or document-retrieval demonstrations.
+
+Organizers do not distribute datasets, create Snowflake accounts or supply API keys.
+You are responsible for sourcing, preparing and licensing your data. Record the selected
+dataset version, source, transformations and licence separately from the code licence.
+
 ---
 
 ## 1. Primary Demo Dataset: SaaS Enterprise Operations (SYNTHETIC)

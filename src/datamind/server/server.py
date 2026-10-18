@@ -21,6 +21,7 @@ from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
 from datamind.server.settings import SettingsStore
 from datamind.trust.chart_planner import plan_chart
+from datamind.uploads.formats import SUPPORTED_EXTENSIONS
 from datamind.uploads.manager import UploadError, UploadManager
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,20 @@ def format_orchestrator_result(
         }
         for c in result.evidence_store.chunks
     ]
+    # Document searches in Snowflake have SQL row receipts rather than local FTS chunks.
+    # Expose their verbatim text in the Documents view without inventing D citations.
+    for query in result.evidence_store.queries:
+        if not query.purpose.startswith("Live document keyword search:"):
+            continue
+        for row_index, row in enumerate(query.result.rows, 1):
+            cells = {column.lower(): value for column, value in zip(query.result.columns, row, strict=False)}
+            body = next((value for column, value in cells.items() if column in {"body", "text", "content", "review_comment_message", "description", "notes"} and value is not None), None)
+            if body is not None:
+                chunks_data.append({
+                    "chunk_id": f"{query.query_label}:R{row_index}", "doc_name": cells.get("source_name") or "Snowflake document row",
+                    "text": str(body), "score": None,
+                    "metadata": {"query_id": query.result.query_id, "source_location": cells.get("source_location"), "evidence_type": "query_row"},
+                })
 
     citations_data = [
         {
@@ -94,11 +109,16 @@ def format_orchestrator_result(
     finish_reason = getattr(result, "finish_reason", None)
 
     # 1. Deterministic Chart Planning
-    chart_data = None
-    if result.evidence_store.queries:
-        primary_query = result.evidence_store.queries[0]
-        chart_spec = plan_chart(primary_query, semantic_model=orchestrator.semantic_model)
-        chart_data = chart_spec.model_dump()
+    charts = []
+    for query in result.evidence_store.queries:
+        spec = plan_chart(query, semantic_model=orchestrator.semantic_model).model_dump()
+        spec["currency_symbol"] = orchestrator.semantic_model.currency_symbol
+        if query.result.truncated:
+            spec["truncated"] = True
+            spec["note"] = (spec.get("note") or "") + " Database row limit reached; this is a partial result."
+        if spec["type"] != "table":
+            charts.append(spec)
+    chart_data = {**charts[-1], "alternatives": charts} if charts else None
 
     # 2. Three-State Trust Badge Computation
     discrepancies = result.citation_report.discrepancy_count
@@ -175,7 +195,9 @@ def format_orchestrator_result(
 
     # Egress Ledger Manifest
     from datamind.llm.budget import CostGuard
-    is_local = CostGuard.is_local_endpoint(orchestrator.llm_client.config.base_url)
+    local_inference = CostGuard.is_local_endpoint(orchestrator.llm_client.config.base_url)
+    cloud_database = orchestrator.db_adapter.dialect == "snowflake"
+    is_local = local_inference and not cloud_database
     egress_ledger = {
         "privacy_mode": "LOCAL_PRIVATE" if is_local else "CLOUD_HOSTED",
         "is_air_gapped": is_local,
@@ -185,6 +207,13 @@ def format_orchestrator_result(
         "details": ("Planner, retrieval, and narration ran locally. 0 result rows or document chunks were sent outbound."
                     if is_local else "Questions, schema, retrieved rows and documents may be sent to the model provider. Outbound counts are not measured."),
     }
+
+    if cloud_database and local_inference:
+        egress_ledger.update({
+            "privacy_mode": "SNOWFLAKE_LOCAL_INFERENCE", "is_air_gapped": False,
+            "summary": "Snowflake cloud storage and queries; model inference runs locally.",
+            "details": "Data is stored and queried in Snowflake. Questions and returned rows are processed by the local model. Network byte counts are not measured.",
+        })
 
     # Cryptographic Receipt Generation
     from datamind.trust.receipts import ReceiptGenerator
@@ -218,6 +247,8 @@ def format_orchestrator_result(
         "egress_ledger": egress_ledger,
         "receipt": receipt_data,
         "chart": chart_data,
+        "charts": charts,
+        "validation_queries": result.evidence_store.validation_queries,
         "under_the_hood": under_the_hood,
         "citation_report": {
             "is_clean": is_clean and not is_truncated,
@@ -261,6 +292,9 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
 
     def _send_provider_error(self, exc: Exception) -> bool:
         """Turn model-provider failures into messages the user can act on."""
+        if isinstance(exc, BudgetConfigError):
+            self._send_json(400, {"error_type": "budget_configuration", "error": str(exc)})
+            return True
         from openai import (
             APIConnectionError,
             APIStatusError,
@@ -269,15 +303,16 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             RateLimitError,
         )
 
+        from datamind.llm.bedrock import BedrockError
         from datamind.llm.google_ai import GoogleAIError
         from datamind.llm.local_models import LocalModelError
         from datamind.llm.openrouter import OpenRouterError
 
         provider = self.settings.provider
-        provider_name = {"google": "Google AI", "openrouter": "OpenRouter", "local": "Ollama"}.get(
+        provider_name = {"google": "Google AI", "openrouter": "OpenRouter", "local": "Ollama", "bedrock": "Bedrock Mantle"}.get(
             provider, "The model provider"
         )
-        if isinstance(exc, OpenRouterError | GoogleAIError | LocalModelError):
+        if isinstance(exc, OpenRouterError | GoogleAIError | LocalModelError | BedrockError):
             self._send_json(exc.status, {"error_type": "provider_error", "error": str(exc)})
         elif isinstance(exc, AuthenticationError | PermissionDeniedError):
             self._send_json(401, {
@@ -324,6 +359,12 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         local_model_override: str | None = None,
     ) -> LLMClient:
         provider = provider_override or self.settings.provider
+        if provider == "bedrock":
+            from datamind.llm.bedrock import build_client
+            return build_client(
+                self.settings.bedrock_api_key, self.settings.bedrock_bearer_token,
+                self.settings.bedrock_model, self.settings.bedrock_base_url, self.config.llm,
+            )
         if provider == "openrouter":
             from datamind.llm.openrouter import OpenRouterError
 
@@ -445,6 +486,9 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             is_local = provider == "local"
             model_name = self.settings.local_model or self.orchestrator.llm_client.config.orchestrator_model
             privacy_indicator = "Local Only (Private)"
+            if self.config.backend.type == "snowflake":
+                is_local = False
+                privacy_indicator = "Snowflake cloud data · local inference"
             if provider == "openrouter":
                 is_local = False
                 model_name = self.settings.openrouter_model
@@ -453,6 +497,10 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 is_local = False
                 model_name = self.settings.google_model
                 privacy_indicator = "Google AI Studio (cloud)"
+            elif provider == "bedrock":
+                model_name = self.settings.bedrock_model
+                is_local = False
+                privacy_indicator = "Bedrock Mantle (cloud)"
 
             self._send_json(200, {
                 "backend": self.backend_name,
@@ -477,6 +525,8 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 "max_rows": mgr.max_rows if mgr else 2_000_000,
                 "max_columns": mgr.max_columns if mgr else 200,
                 "max_files_per_session": mgr.max_files_per_session if mgr else 5,
+                "backend": mgr.config.backend.type if mgr else self.config.backend.type,
+                "supported_extensions": list(SUPPORTED_EXTENSIONS),
             })
             return
 
@@ -530,12 +580,30 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def _handle_settings(self, path: str, payload: dict[str, Any]) -> None:
+        from datamind.llm.bedrock import BedrockError, validate_base_url
+        from datamind.llm.bedrock import list_models as list_bedrock_models
         from datamind.llm.google_ai import GoogleAIError
         from datamind.llm.google_ai import list_models as list_google_models
         from datamind.llm.local_models import LocalModelError
         from datamind.llm.local_models import list_models as list_local_models
         from datamind.llm.openrouter import OpenRouterError, list_free_models, validate_key
         from datamind.server.settings import PROVIDERS
+
+        if path == "/api/bedrock/models":
+            fields = {name: payload.get(name) for name in ("bedrock_api_key", "bedrock_bearer_token", "bedrock_base_url")}
+            if any(value is not None and not isinstance(value, str) for value in fields.values()):
+                self._send_json(400, {"error": "Bedrock settings must be strings"})
+                return
+            try:
+                models = list_bedrock_models(
+                    fields["bedrock_api_key"] or self.settings.bedrock_api_key,
+                    fields["bedrock_bearer_token"] or self.settings.bedrock_bearer_token,
+                    fields["bedrock_base_url"] or self.settings.bedrock_base_url,
+                )
+                self._send_json(200, {"models": models})
+            except BedrockError as exc:
+                self._send_json(exc.status, {"error": str(exc)})
+            return
 
         if path == "/api/google/models":
             api_key = payload.get("google_api_key")
@@ -575,6 +643,12 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             "openrouter_api_key": payload.get("openrouter_api_key"),
             "google_model": payload.get("google_model"),
             "google_api_key": payload.get("google_api_key"),
+            "bedrock_api_key": payload.get("bedrock_api_key"),
+            "bedrock_bearer_token": payload.get("bedrock_bearer_token"),
+            "bedrock_base_url": payload.get("bedrock_base_url"),
+            "bedrock_model": payload.get("bedrock_model"),
+            "bedrock_region": payload.get("bedrock_region"),
+            "bedrock_route": payload.get("bedrock_route"),
         }
         for name, value in fields.items():
             if value is not None and not isinstance(value, str):
@@ -584,6 +658,20 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 fields[name] = value.strip()
 
         resulting_provider = provider or self.settings.provider
+        if resulting_provider == "bedrock":
+            key = fields["bedrock_api_key"] if fields["bedrock_api_key"] is not None else self.settings.bedrock_api_key
+            bearer_token = fields["bedrock_bearer_token"] if fields["bedrock_bearer_token"] is not None else self.settings.bedrock_bearer_token
+            model = fields["bedrock_model"] if fields["bedrock_model"] is not None else self.settings.bedrock_model
+            endpoint = fields["bedrock_base_url"] or self.settings.bedrock_base_url
+            try:
+                validate_base_url(endpoint)
+                if not key or not bearer_token or not model or "gemma" not in model.lower():
+                    raise BedrockError("Bedrock requires an API key, AWS bearer token, base URL, and a Gemma model. Load available models first.", 400)
+                if model not in {m["id"] for m in list_bedrock_models(key, bearer_token, endpoint)}:
+                    raise BedrockError("Choose a Gemma model returned by this Bedrock endpoint and credentials.", 400)
+            except BedrockError as exc:
+                self._send_json(exc.status, {"error": str(exc)})
+                return
         local_model = fields["local_model"] if fields["local_model"] is not None else self.settings.local_model
         openrouter_model = (
             fields["openrouter_model"]
@@ -644,6 +732,9 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self._reject_untrusted_host():
             return
+        if not self._is_same_origin():
+            self._send_json(403, {"error": "Cross-origin requests are not allowed"})
+            return
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -661,6 +752,9 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         if content_length <= 0 and path != "/api/uploads/session/create":
             self._send_json(400, {"error": "Missing request body"})
             return
+        if content_length > 0 and self.headers.get_content_type() != "application/json":
+            self._send_json(403 if path.startswith("/api/settings") else 415, {"error": "Use application/json for API requests"})
+            return
 
         body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
         try:
@@ -672,10 +766,13 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             self._send_json(400, {"error": "Request body must be a JSON object"})
             return
+        if "question" in payload and (not isinstance(payload["question"], str) or len(payload["question"]) > 20000):
+            self._send_json(400, {"error": "Question must be text under 20,001 characters"})
+            return
 
         # Settings and provider discovery are same-origin only: these requests can contain
         # credentials and change where prompts are sent.
-        if path in ("/api/settings", "/api/settings/test", "/api/google/models"):
+        if path in ("/api/settings", "/api/settings/test", "/api/google/models", "/api/bedrock/models"):
             if not self._is_same_origin() or self.headers.get_content_type() != "application/json":
                 self._send_json(403, {"error": "Cross-origin settings changes are not allowed"})
                 return
@@ -990,10 +1087,13 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 filename = payload.get("filename", "uploaded_file.csv")
                 content_b64 = payload.get("content_base64")
                 content_text = payload.get("content_text")
+                if not isinstance(filename, str) or (content_text is not None and not isinstance(content_text, str)):
+                    self._send_json(400, {"error": "Filename and text content must be strings"})
+                    return
 
                 if content_b64:
                     try:
-                        file_bytes = base64.b64decode(content_b64)
+                        file_bytes = base64.b64decode(content_b64, validate=True)
                     except Exception as e:
                         self._send_json(400, {"error": f"Malformed base64 content: {e}"})
                         return
@@ -1029,6 +1129,9 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                     return
 
                 review_config = payload.get("review_config", {})
+                if not isinstance(review_config, dict) or not isinstance(review_config.get("tables", {}), dict):
+                    self._send_json(400, {"error": "review_config and its tables field must be objects"})
+                    return
                 try:
                     confirmed_model = self.upload_manager.confirm_model(session, review_config)
                     sample_questions = [
@@ -1091,7 +1194,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                     response_data = format_orchestrator_result(
                         result=result,
                         orchestrator=orchestrator,
-                        backend_name="DuckDB (User Upload)",
+                        backend_name=f"{adapter.dialect.title()} (User Upload)",
                         is_permissive=is_permissive,
                     )
                     self._send_json(200, response_data)
@@ -1113,7 +1216,11 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             parts = path.strip("/").split("/")
             if len(parts) == 4:
                 session_id = parts[2]
-                deleted = self.upload_manager.delete_session(session_id)
+                try:
+                    deleted = self.upload_manager.delete_session(session_id)
+                except UploadError as exc:
+                    self._send_json(exc.status_code, {"error": exc.message})
+                    return
                 if not deleted:
                     self._send_json(404, {"error": "Session not found or invalid session ID"})
                     return
@@ -1138,6 +1245,7 @@ def create_server(
     """Instantiate and configure ThreadingHTTPServer with initialized Agent and UploadManager."""
     semantic_model = load_semantic_model(config.semantic_model)
     backend_type = backend or config.backend.type
+    config = config.model_copy(update={"backend": config.backend.model_copy(update={"type": backend_type})})
 
     if backend_type == "duckdb":
         adapter = DuckDBAdapter(
@@ -1166,9 +1274,10 @@ def create_server(
         db_adapter=adapter,
         retriever=retriever,
         semantic_model=semantic_model,
+        config=config.agent,
     )
 
-    upload_manager = UploadManager(enabled=enable_uploads)
+    upload_manager = UploadManager(enabled=enable_uploads, config=config)
 
     class CustomHandler(DataMindRequestHandler):
         pass

@@ -135,9 +135,9 @@ def test_llm_refusal_overridden_when_question_mostly_matches_schema():
     assert a.verdict == UNANSWERABLE
 
 
-def test_llm_ambiguity_only_applies_when_nothing_is_grounded():
+def test_llm_ambiguity_applies_even_when_an_entity_is_grounded():
     llm = StubClassifier({"verdict": "ambiguous", "missing": [], "reason": "rank by what?"})
-    assert assess_question("Which authors are trending?", _library_model(), llm).verdict == ANSWERABLE
+    assert assess_question("Which authors are popular?", _library_model(), llm).verdict == AMBIGUOUS
     assert assess_question("Anything noteworthy?", _library_model(), llm).verdict == AMBIGUOUS
 
 

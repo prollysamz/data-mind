@@ -1,0 +1,376 @@
+{
+  "timestamp": "2026-10-18T18:08:22.139162",
+  "date": "2026-10-18",
+  "commit": "50e54a6-dirty",
+  "suite": "tpch",
+  "model_used": "gemma4-e2b-16k",
+  "dataset": "Snowflake (SNOWFLAKE_SAMPLE_DATA.TPCH_SF1, warehouse DATAMIND_XS, role DATAMIND_READONLY)",
+  "total": 10,
+  "passed": 3,
+  "failed": 7,
+  "not_run": 0,
+  "pass_rate_pct": 30,
+  "median_latency_ms": 1933.7,
+  "p90_latency_ms": 14127.7,
+  "items": [
+    {
+      "id": "TPCH_REGION_COUNT",
+      "suite": "tpch",
+      "question": "How many geographic regions are there?",
+      "passed": false,
+      "reason": "Failures: no_evidence, Agent executed no SQL queries",
+      "elapsed_ms": 14127.7,
+      "citations_valid": 0,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "This dataset does not contain geographic region information, so I can't answer that without guessing. The data available covers these tables: CUSTOMER, LINEITEM, NATION, ORDERS, PART, PARTSUPP, REGION, SUPPLIER.",
+      "executed_sql": [],
+      "query_ids": [],
+      "ground_truth_sql": "SELECT COUNT(*) AS region_count FROM REGION;",
+      "ground_truth_query_id": "01c7cff6-000e-16d0-0002-b6f20001a092",
+      "ground_truth_rows": [
+        [
+          5
+        ]
+      ],
+      "agent_results": []
+    },
+    {
+      "id": "TPCH_CUSTOMER_COUNT",
+      "suite": "tpch",
+      "question": "How many customers are in the CUSTOMER table?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1352.1,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "There are 150,000 customers in the CUSTOMER table [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(C_CUSTKEY) FROM CUSTOMER"
+      ],
+      "query_ids": [
+        "01c7cff6-000e-16b8-0002-b6f2000180b6"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS customer_count FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7cff6-000e-16b8-0002-b6f2000180ba",
+      "ground_truth_rows": [
+        [
+          150000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(C_CUSTKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_AVG_BALANCE",
+      "suite": "tpch",
+      "question": "What is the average customer account balance?",
+      "passed": false,
+      "reason": "Failures: no_evidence, Agent executed no SQL queries",
+      "elapsed_ms": 407.7,
+      "citations_valid": 0,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "This dataset does not contain account balance, so I can't answer that without guessing. The data available covers these tables: CUSTOMER, LINEITEM, NATION, ORDERS, PART, PARTSUPP, REGION, SUPPLIER.",
+      "executed_sql": [],
+      "query_ids": [],
+      "ground_truth_sql": "SELECT ROUND(AVG(C_ACCTBAL), 2) AS avg_balance FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7cff6-000e-1673-0002-b6f20001f00a",
+      "ground_truth_rows": [
+        [
+          "4495.51"
+        ]
+      ],
+      "agent_results": []
+    },
+    {
+      "id": "TPCH_SEGMENT_BREAKDOWN",
+      "suite": "tpch",
+      "question": "How many customers are in each market segment?",
+      "passed": false,
+      "reason": "Failures: no_evidence, Agent executed no SQL queries",
+      "elapsed_ms": 698.7,
+      "citations_valid": 0,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "This dataset does not contain market segment information, so I can't answer that without guessing. The data available covers these tables: CUSTOMER, LINEITEM, NATION, ORDERS, PART, PARTSUPP, REGION, SUPPLIER.",
+      "executed_sql": [],
+      "query_ids": [],
+      "ground_truth_sql": "SELECT C_MKTSEGMENT, COUNT(*) AS customer_count\nFROM CUSTOMER\nGROUP BY C_MKTSEGMENT\nORDER BY customer_count DESC;\n",
+      "ground_truth_query_id": "01c7cff6-000e-1673-0002-b6f20001f00e",
+      "ground_truth_rows": [
+        [
+          "HOUSEHOLD",
+          30189
+        ],
+        [
+          "BUILDING",
+          30142
+        ],
+        [
+          "FURNITURE",
+          29968
+        ],
+        [
+          "MACHINERY",
+          29949
+        ],
+        [
+          "AUTOMOBILE",
+          29752
+        ]
+      ],
+      "agent_results": []
+    },
+    {
+      "id": "TPCH_URGENT_ORDERS",
+      "suite": "tpch",
+      "question": "How many orders have urgent priority?",
+      "passed": false,
+      "reason": "Failures: no_evidence, Agent executed no SQL queries",
+      "elapsed_ms": 218.3,
+      "citations_valid": 0,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "This dataset does not contain priority, so I can't answer that without guessing. The data available covers these tables: CUSTOMER, LINEITEM, NATION, ORDERS, PART, PARTSUPP, REGION, SUPPLIER.",
+      "executed_sql": [],
+      "query_ids": [],
+      "ground_truth_sql": "SELECT COUNT(*) AS urgent_orders FROM ORDERS WHERE O_ORDERPRIORITY = '1-URGENT';",
+      "ground_truth_query_id": "01c7cff6-000e-16cf-0002-b6f20001b0ca",
+      "ground_truth_rows": [
+        [
+          300343
+        ]
+      ],
+      "agent_results": []
+    },
+    {
+      "id": "TPCH_REVENUE_BY_YEAR",
+      "suite": "tpch",
+      "question": "What was the total order value for each year?",
+      "passed": false,
+      "reason": "Failures: no_evidence, Agent executed no SQL queries",
+      "elapsed_ms": 3091,
+      "citations_valid": 0,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "I am unable to retrieve the total order value for each year due to repeated execution errors related to unapproved functions in the SQL environment. I cannot provide the requested data at this time.",
+      "executed_sql": [],
+      "query_ids": [],
+      "ground_truth_sql": "SELECT YEAR(O_ORDERDATE) AS order_year, ROUND(SUM(O_TOTALPRICE), 2) AS total_value\nFROM ORDERS\nGROUP BY order_year\nORDER BY order_year;\n",
+      "ground_truth_query_id": "01c7cff6-000e-16d0-0002-b6f20001a096",
+      "ground_truth_rows": [
+        [
+          1992,
+          "34330674052.43"
+        ],
+        [
+          1993,
+          "34340410079.03"
+        ],
+        [
+          1994,
+          "34416369052.97"
+        ],
+        [
+          1995,
+          "34546133183.60"
+        ],
+        [
+          1996,
+          "34609364760.86"
+        ],
+        [
+          1997,
+          "34373633413.04"
+        ],
+        [
+          1998,
+          "20212721905.53"
+        ]
+      ],
+      "agent_results": []
+    },
+    {
+      "id": "TPCH_NATIONS_IN_AMERICA",
+      "suite": "tpch",
+      "question": "Which nations belong to the AMERICA region?",
+      "passed": false,
+      "reason": "Failures: Result-set mismatch (expected 5 rows matching ground truth SQL)",
+      "elapsed_ms": 3246.2,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "Based on the executed queries, the only information retrieved for the 'AMERICA' region is the comment: \"hs use ironic, even requests. s\" [[Q2:R1]]. This comment does not explicitly list the nations belonging to the AMERICA region.\n\nTherefore, I cannot definitively state which nations belong to the AMERICA region based on the available data.",
+      "executed_sql": [
+        "SELECT R.R_NAME FROM REGION AS R WHERE R.R_REGIONKEY = (SELECT R_REGIONKEY FROM REGION WHERE R_NAME = 'AMERICA')",
+        "SELECT R.R_COMMENT FROM REGION AS R WHERE R.R_NAME = 'AMERICA'"
+      ],
+      "query_ids": [
+        "01c7cff6-000e-16d0-0002-b6f20001a09a",
+        "01c7cff6-000e-16cf-0002-b6f20001b0ce"
+      ],
+      "ground_truth_sql": "SELECT N_NAME\nFROM NATION\nJOIN REGION ON N_REGIONKEY = R_REGIONKEY\nWHERE R_NAME = 'AMERICA'\nORDER BY N_NAME;\n",
+      "ground_truth_query_id": "01c7cff6-000e-1619-0000-0002b6f2c3e9",
+      "ground_truth_rows": [
+        [
+          "ARGENTINA"
+        ],
+        [
+          "BRAZIL"
+        ],
+        [
+          "CANADA"
+        ],
+        [
+          "PERU"
+        ],
+        [
+          "UNITED STATES"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "R_NAME"
+          ],
+          "row_count": 1,
+          "truncated": false
+        },
+        {
+          "columns": [
+            "R_COMMENT"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_TOP_NATIONS_BY_CUSTOMERS",
+      "suite": "tpch",
+      "question": "Which five nations have the most customers?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 2924.6,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "The five nations with the most customers are:\n\n1.  **INDONESIA** with 6,161 customers [[Q1:R1]]\n2.  **FRANCE** with 6,100 customers [[Q1:R2]]\n3.  **ROMANIA** with 6,100 customers [[Q1:R3]]\n4.  **RUSSIA** with 6,078 customers [[Q1:R4]]\n5.  **INDIA** with 6,042 customers [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT n.N_NAME, COUNT(c.C_CUSTKEY) AS customer_count FROM CUSTOMER AS c JOIN NATION AS n ON c.C_NATIONKEY = n.N_NATIONKEY GROUP BY n.N_NAME ORDER BY customer_count DESC LIMIT 5"
+      ],
+      "query_ids": [
+        "01c7cff7-000e-1619-0000-0002b6f2c3ed"
+      ],
+      "ground_truth_sql": "SELECT N_NAME, COUNT(*) AS customer_count\nFROM CUSTOMER\nJOIN NATION ON C_NATIONKEY = N_NATIONKEY\nGROUP BY N_NAME\nORDER BY customer_count DESC\nLIMIT 5;\n",
+      "ground_truth_query_id": "01c7cff7-000e-16b8-0002-b6f2000180be",
+      "ground_truth_rows": [
+        [
+          "INDONESIA",
+          6161
+        ],
+        [
+          "ROMANIA",
+          6100
+        ],
+        [
+          "FRANCE",
+          6100
+        ],
+        [
+          "RUSSIA",
+          6078
+        ],
+        [
+          "INDIA",
+          6042
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "N_NAME",
+            "CUSTOMER_COUNT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "id": "TPCH_REVENUE_AFTER_DISCOUNT",
+      "suite": "tpch",
+      "question": "What is the total revenue from line items after discounts?",
+      "passed": false,
+      "reason": "Failures: no_evidence, Agent executed no SQL queries",
+      "elapsed_ms": 317,
+      "citations_valid": 0,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "This dataset does not contain revenue, line or items, so I can't answer that without guessing. The data available covers these tables: CUSTOMER, LINEITEM, NATION, ORDERS, PART, PARTSUPP, REGION, SUPPLIER.",
+      "executed_sql": [],
+      "query_ids": [],
+      "ground_truth_sql": "SELECT ROUND(SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)), 2) AS net_revenue\nFROM LINEITEM;\n",
+      "ground_truth_query_id": "01c7cff7-000e-16b8-0002-b6f2000180c2",
+      "ground_truth_rows": [
+        [
+          "218102223885.00"
+        ]
+      ],
+      "agent_results": []
+    },
+    {
+      "id": "TPCH_ORDERS_WITH_LINE_ITEMS",
+      "suite": "tpch",
+      "question": "How many distinct orders have at least one line item?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1933.7,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total number of distinct orders with at least one line item is 1,500,000 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(DISTINCT O_ORDERKEY) FROM ORDERS"
+      ],
+      "query_ids": [
+        "01c7cff7-000e-1673-0002-b6f20001f012"
+      ],
+      "ground_truth_sql": "SELECT COUNT(DISTINCT O_ORDERKEY) AS order_count\nFROM ORDERS\nJOIN LINEITEM ON O_ORDERKEY = L_ORDERKEY;\n",
+      "ground_truth_query_id": "01c7cff7-000e-16d0-0002-b6f20001a09e",
+      "ground_truth_rows": [
+        [
+          1500000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(DISTINCT O_ORDERKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,11 +1,12 @@
 name: snowflake_sample_data_tpch_sf1
-description: Auto-generated semantic model for Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
-  created via datamind init.
+description: TPC-H benchmark customer orders, line items, parts, suppliers, nations and geographic regions.
+  Schema introspected via datamind init; business descriptions and foreign keys reviewed after the first live evaluation.
 default_currency: USD
 currency_symbol: $
 tables:
 - name: CUSTOMER
-  description: Table CUSTOMER containing 8 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Customers with account balances, market segments and home nations.
+  primary_key: [C_CUSTKEY]
   columns:
   - name: C_CUSTKEY
     type: NUMBER(38,0)
@@ -24,15 +25,16 @@ tables:
     description: C_PHONE (VARCHAR(15)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
   - name: C_ACCTBAL
     type: NUMBER(12,2)
-    description: C_ACCTBAL (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+    description: Customer account balance in dollars.
   - name: C_MKTSEGMENT
     type: VARCHAR(10)
-    description: C_MKTSEGMENT (VARCHAR(10)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+    description: Customer market segment category.
   - name: C_COMMENT
     type: VARCHAR(117)
     description: C_COMMENT (VARCHAR(117)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
 - name: LINEITEM
-  description: Table LINEITEM containing 16 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Order line items with quantity, extended price, discount fraction, tax and shipping dates. Net revenue is extended price multiplied by one minus discount. Many line items can belong to one order.
+  primary_key: [L_ORDERKEY, L_LINENUMBER]
   columns:
   - name: L_ORDERKEY
     type: NUMBER(38,0)
@@ -51,10 +53,10 @@ tables:
     description: L_QUANTITY (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
   - name: L_EXTENDEDPRICE
     type: NUMBER(12,2)
-    description: L_EXTENDEDPRICE (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+    description: Line extended price before discount and tax, in dollars.
   - name: L_DISCOUNT
     type: NUMBER(12,2)
-    description: L_DISCOUNT (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+    description: Discount fraction on the line extended price, from zero to one.
   - name: L_TAX
     type: NUMBER(12,2)
     description: L_TAX (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
@@ -83,7 +85,8 @@ tables:
     type: VARCHAR(44)
     description: L_COMMENT (VARCHAR(44)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
 - name: NATION
-  description: Table NATION containing 4 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Nations and the geographic region each nation belongs to.
+  primary_key: [N_NATIONKEY]
   columns:
   - name: N_NATIONKEY
     type: NUMBER(38,0)
@@ -98,7 +101,8 @@ tables:
     type: VARCHAR(152)
     description: N_COMMENT (VARCHAR(152)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
 - name: ORDERS
-  description: Table ORDERS containing 9 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Customer orders with total order value, order date, status and priority. One row per order.
+  primary_key: [O_ORDERKEY]
   columns:
   - name: O_ORDERKEY
     type: NUMBER(38,0)
@@ -111,13 +115,13 @@ tables:
     description: O_ORDERSTATUS (VARCHAR(1)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
   - name: O_TOTALPRICE
     type: NUMBER(12,2)
-    description: O_TOTALPRICE (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+    description: Total order value or price in dollars; differs from discounted line item revenue.
   - name: O_ORDERDATE
     type: DATE
-    description: O_ORDERDATE (DATE) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+    description: Date the order was placed.
   - name: O_ORDERPRIORITY
     type: VARCHAR(15)
-    description: O_ORDERPRIORITY (VARCHAR(15)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+    description: Order priority coded as 1-URGENT, 2-HIGH, 3-MEDIUM, 4-NOT SPECIFIED or 5-LOW.
   - name: O_CLERK
     type: VARCHAR(15)
     description: O_CLERK (VARCHAR(15)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
@@ -128,7 +132,8 @@ tables:
     type: VARCHAR(79)
     description: O_COMMENT (VARCHAR(79)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
 - name: PART
-  description: Table PART containing 9 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Part catalogue with brands, manufacturers and retail prices.
+  primary_key: [P_PARTKEY]
   columns:
   - name: P_PARTKEY
     type: NUMBER(38,0)
@@ -158,7 +163,8 @@ tables:
     type: VARCHAR(23)
     description: P_COMMENT (VARCHAR(23)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
 - name: PARTSUPP
-  description: Table PARTSUPP containing 5 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Part supplier inventory with available quantity and supply cost.
+  primary_key: [PS_PARTKEY, PS_SUPPKEY]
   columns:
   - name: PS_PARTKEY
     type: NUMBER(38,0)
@@ -176,7 +182,8 @@ tables:
     type: VARCHAR(199)
     description: PS_COMMENT (VARCHAR(199)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
 - name: REGION
-  description: Table REGION containing 3 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Geographic regions containing nations.
+  primary_key: [R_REGIONKEY]
   columns:
   - name: R_REGIONKEY
     type: NUMBER(38,0)
@@ -188,7 +195,8 @@ tables:
     type: VARCHAR(152)
     description: R_COMMENT (VARCHAR(152)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
 - name: SUPPLIER
-  description: Table SUPPLIER containing 7 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  description: Suppliers with home nations, phone numbers and account balances.
+  primary_key: [S_SUPPKEY]
   columns:
   - name: S_SUPPKEY
     type: NUMBER(38,0)
@@ -211,3 +219,40 @@ tables:
   - name: S_COMMENT
     type: VARCHAR(101)
     description: S_COMMENT (VARCHAR(101)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+joins:
+- from_table: CUSTOMER
+  to_table: NATION
+  on_condition: CUSTOMER.C_NATIONKEY = NATION.N_NATIONKEY
+  relationship: many_to_one
+- from_table: NATION
+  to_table: REGION
+  on_condition: NATION.N_REGIONKEY = REGION.R_REGIONKEY
+  relationship: many_to_one
+- from_table: ORDERS
+  to_table: CUSTOMER
+  on_condition: ORDERS.O_CUSTKEY = CUSTOMER.C_CUSTKEY
+  relationship: many_to_one
+- from_table: LINEITEM
+  to_table: ORDERS
+  on_condition: LINEITEM.L_ORDERKEY = ORDERS.O_ORDERKEY
+  relationship: many_to_one
+- from_table: LINEITEM
+  to_table: PART
+  on_condition: LINEITEM.L_PARTKEY = PART.P_PARTKEY
+  relationship: many_to_one
+- from_table: LINEITEM
+  to_table: SUPPLIER
+  on_condition: LINEITEM.L_SUPPKEY = SUPPLIER.S_SUPPKEY
+  relationship: many_to_one
+- from_table: PARTSUPP
+  to_table: PART
+  on_condition: PARTSUPP.PS_PARTKEY = PART.P_PARTKEY
+  relationship: many_to_one
+- from_table: PARTSUPP
+  to_table: SUPPLIER
+  on_condition: PARTSUPP.PS_SUPPKEY = SUPPLIER.S_SUPPKEY
+  relationship: many_to_one
+- from_table: SUPPLIER
+  to_table: NATION
+  on_condition: SUPPLIER.S_NATIONKEY = NATION.N_NATIONKEY
+  relationship: many_to_one

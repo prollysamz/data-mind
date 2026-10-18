@@ -17,6 +17,7 @@ class ColumnDef(BaseModel):
     unit: str = ""
     is_primary_key: bool = False
     nullable: bool = True
+    is_document: bool = False
 
 
 class DefaultFilterDef(BaseModel):

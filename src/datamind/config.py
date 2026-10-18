@@ -116,6 +116,7 @@ class SnowflakeConfig(BaseModel):
     warehouse: str = "DATAMIND_XS"
     database: str = ""
     schema_: str = Field(default="", alias="schema")
+    query_tag: str = Field(default="datamind", max_length=1000)
 
     @property
     def schema(self) -> str:
@@ -172,6 +173,13 @@ class RetrievalConfig(BaseModel):
     source_duckdb_path: str | None = None
 
 
+class UploadConfig(BaseModel):
+    """Ingestion follows the active database; the loader role is never used by the agent."""
+    loader_role: str = "DATAMIND_LOADER"
+    loader_user_env: str = "SNOWFLAKE_LOADER_USER"
+    loader_password_env: str = "SNOWFLAKE_LOADER_PASSWORD"
+
+
 class AppConfig(BaseModel):
     """Root application configuration."""
     llm: LLMConfig = Field(default_factory=LLMConfig)
@@ -180,9 +188,12 @@ class AppConfig(BaseModel):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     semantic_model: str = "examples/primary/semantic_model.yaml"
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+    uploads: UploadConfig = Field(default_factory=UploadConfig)
 
-    def retrieval_source_path(self) -> str:
+    def retrieval_source_path(self) -> str | None:
         """DuckDB file the full-text document index is built from."""
+        if self.backend.type == "snowflake":
+            return None
         return self.retrieval.source_duckdb_path or self.backend.duckdb_path
 
 

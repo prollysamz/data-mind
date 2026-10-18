@@ -97,9 +97,15 @@ def test_planted_wrong_number_detected_and_rejected(setup_env):
     )
 
     result = orchestrator.run("What was Novaship sales?")
-    assert result.citation_report.is_clean is False
-    assert result.citation_report.discrepancy_count >= 1
-    assert any("999,999.00" in d for d in result.citation_report.get_discrepancies())
+    from datamind.agent.verifier import verify_citations
+    rejected_draft = verify_citations(script[1]["content"], evidence_store, semantic_model)
+    assert rejected_draft.is_clean is False
+    assert rejected_draft.discrepancy_count >= 1
+    assert "$999,999.00" not in result.answer
+    assert "The database returned" in result.answer
+    assert result.citation_report.is_clean is True
+    assert result.citation_report.discrepancy_count == 0
+    assert any("999,999.00" in d for d in rejected_draft.get_discrepancies())
 
 
 def test_ambiguous_question_clarification(setup_env):

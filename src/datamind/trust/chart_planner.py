@@ -15,6 +15,7 @@ from stored query rows. Never uses model-generated numbers.
 from __future__ import annotations
 
 import datetime
+import math
 import re
 from decimal import Decimal
 from typing import Any, Literal
@@ -51,31 +52,31 @@ class ChartSpec(BaseModel):
     kpi_label: str | None = None
     kpi_unit: str | None = None
     note: str | None = None
+    metrics: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _is_numeric(val: Any) -> bool:
-    if val is None:
+    if val is None or isinstance(val, bool):
         return False
     if isinstance(val, (int, float, Decimal)):
-        return True
+        return math.isfinite(float(val))
     s = str(val).strip().replace("$", "").replace(",", "").rstrip("%")
     try:
-        float(s)
-        return True
+        return math.isfinite(float(s))
     except ValueError:
         return False
 
 
-def _to_float(val: Any) -> float:
+def _to_float(val: Any) -> float | None:
     if val is None:
-        return 0.0
+        return None
     if isinstance(val, (int, float, Decimal)):
         return float(val)
     s = str(val).strip().replace("$", "").replace(",", "").rstrip("%")
     try:
         return float(s)
     except ValueError:
-        return 0.0
+        return None
 
 
 def _is_date_str(val: Any) -> bool:
@@ -103,7 +104,7 @@ def _classify_column(col_name: str, values: list[Any]) -> str:
 
     # Check numeric
     numeric_count = sum(1 for v in non_nulls if _is_numeric(v))
-    if numeric_count / len(non_nulls) >= 0.8:
+    if numeric_count == len(non_nulls):
         # Check signed change
         float_vals = [_to_float(v) for v in non_nulls]
         has_pos = any(v > 0.001 for v in float_vals)
@@ -149,6 +150,15 @@ def plan_chart(
     # 2. Check for single row or single value -> KPI Card
     if len(rows) == 1:
         row = rows[0]
+        if len(columns) > 1 and all(_is_numeric(value) or value is None for value in row):
+            metrics = [{
+                "column": column, "label": column.replace("_", " ").title(),
+                "value": _format_cell(value, "currency" if any(k in column.lower() for k in ("sales", "revenue", "amount", "price", "cost")) else None, curr_sym),
+                "raw_value": value, "row_id": f"{q_label}:R1",
+            } for column, value in zip(columns, row, strict=True)]
+            return ChartSpec(type="kpi", title="Key metrics", source_query=q_label, metrics=metrics,
+                             points=[{"row_id": f"{q_label}:R1", "x": m["column"], "y": m["raw_value"]} for m in metrics],
+                             alt_text="; ".join(f"{m['label']}: {m['value']}" for m in metrics))
         # Single cell or 2 columns with label + value
         if len(columns) == 1:
             val = row[0]
@@ -201,6 +211,8 @@ def plan_chart(
         # Build points
         points = []
         for r_idx, r in enumerate(rows, start=1):
+            if r[s_idx] is None:
+                continue
             points.append({
                 "row_id": f"{q_label}:R{r_idx}",
                 "x": str(r[c_idx]),
@@ -228,19 +240,62 @@ def plan_chart(
         t_col = temporal_cols[0]
         t_idx = columns.index(t_col)
         selected_num_cols = numeric_cols[:4]
+        formats = {nc: ("currency" if any(k in nc.lower() for k in ("sales", "revenue", "amount", "price", "cost", "cogs", "expense", "profit")) else None) for nc in selected_num_cols}
+        mixed_units = len(set(formats.values())) > 1
+        if mixed_units:
+            selected_num_cols = [nc for nc in selected_num_cols if formats[nc] == formats[selected_num_cols[0]]]
+        # Repeated dates across categories require grouping first; do not draw a
+        # misleading zigzag through unrelated groups on one line.
+        if len({str(r[t_idx]) for r in rows}) != len(rows):
+            if categorical_cols:
+                group_column = categorical_cols[0]
+                group_index = columns.index(group_column)
+                categories = sorted({str(row[group_index]) for row in rows})
+                pairs = {(str(row[t_idx]), str(row[group_index])) for row in rows}
+                if 1 < len(categories) <= 4 and len(pairs) == len(rows):
+                    # Pivot only the display shape: each cell retains its own original
+                    # evidence row. No aggregation or filling missing observations.
+                    value_column = selected_num_cols[0]
+                    value_index = columns.index(value_column)
+                    grouped = {}
+                    for row_index, row in enumerate(rows, 1):
+                        if row[t_idx] is None:
+                            continue
+                        date = str(row[t_idx])
+                        entry = grouped.setdefault(date, {"x": date, "y": [None] * len(categories), "row_ids": [None] * len(categories)})
+                        series_index = categories.index(str(row[group_index]))
+                        entry["y"][series_index] = _to_float(row[value_index])
+                        entry["row_ids"][series_index] = f"{q_label}:R{row_index}"
+                    grouped_points = []
+                    for date in sorted(grouped):
+                        entry = grouped[date]
+                        entry["row_id"] = next((r for r in entry["row_ids"] if r), "")
+                        grouped_points.append(entry)
+                    return ChartSpec(
+                        type="line", title=f"{value_column.replace('_', ' ').title()} by {group_column.replace('_', ' ').title()}",
+                        x=AxisSpec(column=t_col, label=t_col.replace("_", " ").title()),
+                        y=[AxisSpec(column=value_column, label=category, format=formats[value_column]) for category in categories],
+                        source_query=q_label, points=grouped_points,
+                        alt_text=f"{len(categories)} series over time. Missing observations are gaps; points link to their original rows.",
+                    )
+            return ChartSpec(type="table", title="Grouped time results", source_query=q_label,
+                             note="Multiple rows share a time value. Group/filter the series before plotting.")
 
         points = []
         for r_idx, r in enumerate(rows, start=1):
+            if r[t_idx] is None:
+                continue
             y_vals = [_to_float(r[columns.index(nc)]) for nc in selected_num_cols]
             points.append({
                 "row_id": f"{q_label}:R{r_idx}",
                 "x": str(r[t_idx]),
                 "y": y_vals if len(selected_num_cols) > 1 else y_vals[0],
             })
+        points.sort(key=lambda p: p["x"])
 
         y_specs = []
         for nc in selected_num_cols:
-            fmt = "currency" if any(k in nc.lower() for k in ("sales", "revenue", "amount", "price")) else None
+            fmt = formats[nc]
             y_specs.append(AxisSpec(column=nc, label=nc.replace("_", " ").title(), format=fmt))
 
         time_range = f"from {points[0]['x']} to {points[-1]['x']}" if len(points) >= 2 else f"at {points[0]['x']}"
@@ -254,6 +309,7 @@ def plan_chart(
             source_query=q_label,
             points=points,
             alt_text=alt_text,
+            note="Only metrics with compatible units are plotted together; other metrics remain in the result table." if mixed_units else None,
         )
 
     # 5. 1 Categorical Column (distinct <= 30) + 1 Numeric Column -> Horizontal Bar Chart
@@ -264,10 +320,13 @@ def plan_chart(
         n_idx = columns.index(n_col)
 
         distinct_cats = len(set(col_values[c_col]))
+        if distinct_cats != len(rows):
+            return ChartSpec(type="table", title="Grouped results", source_query=q_label,
+                             note="Repeated category labels require aggregation or a more specific grouping.")
         if distinct_cats <= 30:
             # Sort descending by numeric value
             sorted_rows = sorted(
-                enumerate(rows, start=1),
+                ((i, row) for i, row in enumerate(rows, start=1) if row[n_idx] is not None),
                 key=lambda item: _to_float(item[1][n_idx]),
                 reverse=True,
             )

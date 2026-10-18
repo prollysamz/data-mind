@@ -80,6 +80,18 @@ DANGEROUS_FUNCTIONS = {
     "list",
 }
 
+# Unknown UDFs can have network/privileged side effects despite appearing in SELECT.
+# sqlglot models ordinary built-ins as dedicated nodes; these additional dialect
+# built-ins are allowed when represented as anonymous functions.
+SAFE_ANONYMOUS_FUNCTIONS = {
+    "dateadd", "datediff", "date_trunc", "to_date", "try_to_date", "to_timestamp",
+    "try_to_timestamp", "to_timestamp_ntz", "try_to_timestamp_ntz", "to_char",
+    "to_varchar", "to_decimal", "try_to_decimal", "to_number", "try_to_number",
+    "iff", "nvl", "nvl2", "count_if", "div0", "div0null", "zeroifnull", "nullifzero",
+    "ratio_to_report", "convert_timezone", "regexp_substr", "regexp_like", "regexp_replace",
+    "listagg", "median", "mode", "min_by", "max_by", "hash", "md5", "sha2",
+}
+
 
 class SQLGuard:
     """Validates SQL queries against semantic model rules and security invariants."""
@@ -90,11 +102,13 @@ class SQLGuard:
         dialect: str = "duckdb",
         max_rows: int = 1000,
         enforce_limit: bool = True,
+        approved_columns: dict[str, dict[str, str]] | None = None,
     ) -> None:
         self.approved_tables = {t.strip().lower() for t in approved_tables}
         self.dialect = dialect
         self.max_rows = max_rows
         self.enforce_limit = enforce_limit
+        self.approved_columns = approved_columns
 
     def validate(self, sql: str) -> str:
         """Parse, validate, and return sanitized SQL or raise SQLSecurityError.
@@ -133,6 +147,13 @@ class SQLGuard:
 
         ast = valid_stmts[0]
 
+        if self.approved_columns:
+            from sqlglot.optimizer.qualify import qualify
+            try:
+                ast = qualify(ast, dialect=self.dialect, schema=self.approved_columns, validate_qualify_columns=True)
+            except Exception as exc:
+                raise SQLSecurityError("Query references a column outside the reviewed upload schema.", "unauthorized_column") from exc
+
         # 3. Whitelist root statement type
         if not isinstance(ast, (exp.Select, exp.Union)):
             raise SQLSecurityError(
@@ -149,6 +170,8 @@ class SQLGuard:
                 )
 
         # 5. Check dangerous functions and system calls
+        if any(dot.find(exp.Func) is not None for dot in ast.find_all(exp.Dot)):
+            raise SQLSecurityError("Namespaced functions are not approved for data queries.", "dangerous_function")
         for func in ast.find_all(exp.Func):
             fn_key = (func.key or "").strip().lower()
             cls_name = type(func).__name__.lower()
@@ -176,6 +199,8 @@ class SQLGuard:
                     f"Function '{fn_key or fn_name or cls_name}' is prohibited for security reasons.",
                     "dangerous_function",
                 )
+            if isinstance(func, exp.Anonymous) and func.name.lower() not in SAFE_ANONYMOUS_FUNCTIONS:
+                raise SQLSecurityError(f"Function '{func.name}' is not approved; use native supported SQL functions. UDFs are not allowed.", "dangerous_function")
 
         # 6. Join safety
         for join in ast.find_all(exp.Join):
@@ -203,6 +228,15 @@ class SQLGuard:
                 elif isinstance(cte.this, exp.Table):
                     cte_aliases.add(cte.this.name.strip().lower())
 
+        from sqlglot.optimizer.scope import traverse_scope
+        try:
+            physical_tables = {
+                id(node) for scope in traverse_scope(ast)
+                for node, source in scope.selected_sources.values() if isinstance(source, exp.Table)
+            }
+        except Exception as exc:
+            raise SQLSecurityError("Could not resolve SQL table scopes safely.", "invalid_scope") from exc
+
         # 8. Check all referenced physical tables against whitelist & check stage references
         for tbl in ast.find_all(exp.Table):
             tbl_raw = tbl.sql(dialect=self.dialect).strip()
@@ -228,7 +262,7 @@ class SQLGuard:
                 continue
 
             # If table is a declared CTE alias, it's valid
-            if tbl_name in cte_aliases:
+            if tbl_name in cte_aliases and id(tbl) not in physical_tables:
                 continue
 
             # Check schema/database qualifier bypass (e.g., other_db.sales or schema.sales)

@@ -21,10 +21,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+uploads = ["openpyxl>=3.1.5", "pypdf>=6.0.0"]
 snowflake = [
     "snowflake-connector-python>=3.0.0",
 ]
 dev = [
+    "openpyxl>=3.1.5",
+    "pypdf>=6.0.0",
     "pytest>=7.0.0",
     "detect-secrets>=1.4.0",
     "ruff==0.17.1",

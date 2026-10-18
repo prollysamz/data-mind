@@ -62,6 +62,7 @@ def handle_ask(args: argparse.Namespace) -> int:
         db_adapter=adapter,
         retriever=retriever,
         semantic_model=semantic_model,
+        config=config.agent,
     )
 
     try:
@@ -654,8 +655,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     serve_parser.add_argument(
         "--config",
-        default="datamind.yaml",
-        help="Path to configuration YAML (default: datamind.yaml)",
+        default="datamind_snowflake.yaml",
+        help="Configuration YAML (default: datamind_snowflake.yaml; use datamind.yaml for local development)",
     )
     serve_parser.add_argument(
         "--port",
@@ -699,8 +700,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ask_parser.add_argument(
         "--config",
-        default="datamind.yaml",
-        help="Path to configuration YAML (default: datamind.yaml)",
+        default="datamind_snowflake.yaml",
+        help="Configuration YAML (default: datamind_snowflake.yaml; use datamind.yaml for local development)",
     )
     ask_parser.add_argument(
         "--backend",
@@ -820,8 +821,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     mcp_parser.add_argument(
         "--config",
-        default="datamind.yaml",
-        help="Path to configuration YAML (default: datamind.yaml)",
+        default="datamind_snowflake.yaml",
+        help="Configuration YAML (default: datamind_snowflake.yaml; use datamind.yaml for local development)",
     )
 
     # demo

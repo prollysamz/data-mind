@@ -31,6 +31,11 @@ DataMind is built to support the **Gemma** family of open models (including Gemm
 
 ## 3. Core Software Dependencies
 
+Document ingestion additionally uses **openpyxl** (MIT) for XLSX, **et-xmlfile**
+(MIT) as its dependency, and **pypdf** (BSD-3-Clause) for PDF text extraction.
+DOCX XML and plain text are read with the Python standard library. These parser
+licences do not grant rights to the documents or datasets uploaded by users.
+
 | Package | Licence | Purpose |
 |---|---|---|
 | **DuckDB** | MIT Licence | In-process analytical database and user upload session engine |

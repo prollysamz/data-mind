@@ -24,6 +24,7 @@ class EvidenceStore:
     """Store and resolve evidence items (cells, rows, documents) by stable ID."""
     queries: list[QueryRecord] = field(default_factory=list)
     chunks: list[Chunk] = field(default_factory=list)
+    validation_queries: list[dict[str, Any]] = field(default_factory=list)
     _rows: dict[str, dict[str, Any]] = field(default_factory=dict)
     _chunks_by_id: dict[str, Chunk] = field(default_factory=dict)
     _query_counter: int = 0
@@ -32,6 +33,7 @@ class EvidenceStore:
         """Reset the evidence store to an empty state."""
         self.queries.clear()
         self.chunks.clear()
+        self.validation_queries.clear()
         self._rows.clear()
         self._chunks_by_id.clear()
         self._query_counter = 0

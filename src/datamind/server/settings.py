@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_PATH = ".datamind/settings.json"
-PROVIDERS = ("local", "openrouter", "google")
+PROVIDERS = ("local", "openrouter", "google", "bedrock")
 
 
 class SettingsStore:
@@ -86,6 +86,33 @@ class SettingsStore:
             or os.environ.get("GEMINI_API_KEY", "")
         )
 
+    @property
+    def bedrock_api_key(self) -> str:
+        return str(self._data.get("bedrock_api_key") or os.environ.get("BEDROCK_API_KEY", ""))
+
+    @property
+    def bedrock_bearer_token(self) -> str:
+        return str(self._data.get("bedrock_bearer_token") or os.environ.get("AWS_BEARER_TOKEN_BEDROCK", ""))
+
+    @property
+    def bedrock_base_url(self) -> str:
+        return str(self._data.get("bedrock_base_url") or os.environ.get("BEDROCK_BASE_URL") or self._derived_bedrock_base_url())
+
+    @property
+    def bedrock_model(self) -> str:
+        return str(self._data.get("bedrock_model") or os.environ.get("BEDROCK_MODEL", "google.gemma-4-26b-a4b"))
+
+    @property
+    def bedrock_region(self) -> str:
+        return str(self._data.get("bedrock_region") or os.environ.get("AWS_REGION", "us-east-1"))
+
+    @property
+    def bedrock_route(self) -> str:
+        return str(self._data.get("bedrock_route") or os.environ.get("BEDROCK_MANTLE_ROUTE", "/openai/v1"))
+
+    def _derived_bedrock_base_url(self) -> str:
+        return f"https://bedrock-mantle.{self.bedrock_region}.api.aws{self.bedrock_route}"
+
     # Backward-compatible aliases for the first settings implementation.
     @property
     def model(self) -> str:
@@ -125,6 +152,12 @@ class SettingsStore:
         openrouter_api_key: str | None = None,
         google_model: str | None = None,
         google_api_key: str | None = None,
+        bedrock_api_key: str | None = None,
+        bedrock_bearer_token: str | None = None,
+        bedrock_base_url: str | None = None,
+        bedrock_model: str | None = None,
+        bedrock_region: str | None = None,
+        bedrock_route: str | None = None,
         # Legacy keyword names remain supported for callers and older tests.
         model: str | None = None,
         api_key: str | None = None,
@@ -140,6 +173,10 @@ class SettingsStore:
                 "local_model": local_model,
                 "openrouter_model": openrouter_model,
                 "google_model": google_model,
+                "bedrock_model": bedrock_model,
+                "bedrock_region": bedrock_region,
+                "bedrock_route": bedrock_route,
+                "bedrock_base_url": bedrock_base_url,
             }
             for field, value in values.items():
                 if value is not None:
@@ -147,6 +184,8 @@ class SettingsStore:
             for field, value in (
                 ("openrouter_api_key", openrouter_api_key),
                 ("google_api_key", google_api_key),
+                ("bedrock_api_key", bedrock_api_key),
+                ("bedrock_bearer_token", bedrock_bearer_token),
             ):
                 if value is not None:
                     if value:
@@ -193,5 +232,12 @@ class SettingsStore:
                 ),
                 "model": self.google_model,
                 "active": self.google_active(),
+            },
+            "bedrock": {
+                **self._key_public(self.bedrock_api_key, self._key_source("bedrock_api_key", ("BEDROCK_API_KEY",))),
+                "bearer": self._key_public(self.bedrock_bearer_token, self._key_source("bedrock_bearer_token", ("AWS_BEARER_TOKEN_BEDROCK",))),
+                "base_url": self.bedrock_base_url,
+                "model": self.bedrock_model, "region": self.bedrock_region, "route": self.bedrock_route,
+                "active": self.provider == "bedrock" and bool(self.bedrock_api_key and self.bedrock_bearer_token and self.bedrock_model),
             },
         }

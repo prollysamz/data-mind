@@ -1,0 +1,488 @@
+{
+  "timestamp": "2026-10-18T18:21:35.030960",
+  "date": "2026-10-18",
+  "commit": "50e54a6-dirty",
+  "suite": "tpch",
+  "model_used": "gemma4-e2b-16k",
+  "dataset": "Snowflake (SNOWFLAKE_SAMPLE_DATA.TPCH_SF1, warehouse DATAMIND_XS, role DATAMIND_READONLY)",
+  "total": 10,
+  "passed": 9,
+  "failed": 1,
+  "not_run": 0,
+  "pass_rate_pct": 90.0,
+  "median_latency_ms": 1728.0,
+  "p90_latency_ms": 3391.3,
+  "items": [
+    {
+      "id": "TPCH_REGION_COUNT",
+      "suite": "tpch",
+      "question": "How many geographic regions are there?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 3391.3,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "There are 5 geographic regions in the database [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(DISTINCT R_REGIONKEY) FROM REGION"
+      ],
+      "query_ids": [
+        "01c7d003-000e-16d0-0002-b6f20001a0ce"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS region_count FROM REGION;",
+      "ground_truth_query_id": "01c7d003-000e-16cf-0002-b6f20001b0e6",
+      "ground_truth_rows": [
+        [
+          5
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(DISTINCT R_REGIONKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_CUSTOMER_COUNT",
+      "suite": "tpch",
+      "question": "How many customers are in the CUSTOMER table?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 978.0,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "There are 150,000 customers in the CUSTOMER table [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(C_CUSTKEY) FROM CUSTOMER"
+      ],
+      "query_ids": [
+        "01c7d003-000e-1619-0000-0002b6f2c419"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS customer_count FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7d003-000e-16b8-0002-b6f2000180fe",
+      "ground_truth_rows": [
+        [
+          150000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(C_CUSTKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_AVG_BALANCE",
+      "suite": "tpch",
+      "question": "What is the average customer account balance?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1167.6,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The average customer account balance is $4,495.51 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT AVG(T1.C_ACCTBAL) FROM CUSTOMER AS T1"
+      ],
+      "query_ids": [
+        "01c7d003-000e-16f2-0002-b6f20001e02a"
+      ],
+      "ground_truth_sql": "SELECT ROUND(AVG(C_ACCTBAL), 2) AS avg_balance FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7d003-000e-16d0-0002-b6f20001a0d2",
+      "ground_truth_rows": [
+        [
+          "4495.51"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "AVG(T1.C_ACCTBAL)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_SEGMENT_BREAKDOWN",
+      "suite": "tpch",
+      "question": "How many customers are in each market segment?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1581.4,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "Based on the data, here is the count of customers in each market segment:\n\n*   **AUTOMOBILE**: 29,752 customers [[Q1:R1]]\n*   **FURNITURE**: 29,968 customers [[Q1:R2]]\n*   **BUILDING**: 30,142 customers [[Q1:R3]]\n*   **MACHINERY**: 29,949 customers [[Q1:R4]]\n*   **HOUSEHOLD**: 30,189 customers [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT T1.C_MKTSEGMENT, COUNT(T1.C_CUSTKEY) FROM CUSTOMER AS T1 GROUP BY T1.C_MKTSEGMENT"
+      ],
+      "query_ids": [
+        "01c7d003-000e-1673-0002-b6f20001f046"
+      ],
+      "ground_truth_sql": "SELECT C_MKTSEGMENT, COUNT(*) AS customer_count\nFROM CUSTOMER\nGROUP BY C_MKTSEGMENT\nORDER BY customer_count DESC;\n",
+      "ground_truth_query_id": "01c7d003-000e-1619-0000-0002b6f2c41d",
+      "ground_truth_rows": [
+        [
+          "HOUSEHOLD",
+          30189
+        ],
+        [
+          "BUILDING",
+          30142
+        ],
+        [
+          "FURNITURE",
+          29968
+        ],
+        [
+          "MACHINERY",
+          29949
+        ],
+        [
+          "AUTOMOBILE",
+          29752
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "C_MKTSEGMENT",
+            "COUNT(T1.C_CUSTKEY)"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_URGENT_ORDERS",
+      "suite": "tpch",
+      "question": "How many orders have urgent priority?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1728.0,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "Based on the database query, there are 300,343 orders with an 'Urgent' priority. [[Q1:R1]]",
+      "executed_sql": [
+        "SELECT COUNT(O_ORDERKEY) FROM ORDERS WHERE O_ORDERPRIORITY = '1-URGENT'"
+      ],
+      "query_ids": [
+        "01c7d003-000e-16d0-0002-b6f20001a0d6"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS urgent_orders FROM ORDERS WHERE O_ORDERPRIORITY = '1-URGENT';",
+      "ground_truth_query_id": "01c7d003-000e-16cf-0002-b6f20001b0ea",
+      "ground_truth_rows": [
+        [
+          300343
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(O_ORDERKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [
+        {
+          "sql": "SELECT DISTINCT \"O_ORDERPRIORITY\" FROM ORDERS WHERE NOT \"O_ORDERPRIORITY\" IS NULL LIMIT 26",
+          "query_id": "01c7d003-000e-1619-0000-0002b6f2c421",
+          "purpose": "Live categorical filter validation",
+          "column": "ORDERS.O_ORDERPRIORITY",
+          "row_count": 5,
+          "truncated": false
+        },
+        {
+          "purpose": "Unique live category normalization",
+          "column": "ORDERS.O_ORDERPRIORITY",
+          "proposed_value": "Urgent",
+          "stored_value": "1-URGENT",
+          "query_id": "01c7d003-000e-1619-0000-0002b6f2c421"
+        }
+      ],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_REVENUE_BY_YEAR",
+      "suite": "tpch",
+      "question": "What was the total order value for each year?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 3172.8,
+      "citations_valid": 7,
+      "citations_invalid": 0,
+      "verified_numbers": 7,
+      "discrepancies": 0,
+      "answer": "The total order value for each year is as follows:\n\n| Year | Total Order Value (USD) |\n| :--- | :--- |\n| 1992 | $34,330,674,052.43 |\n| 1993 | $34,340,410,079.03 |\n| 1994 | $34,416,369,052.97 |\n| 1995 | $34,546,133,183.60 |\n| 1996 | $34,609,364,760.86 |\n| 1997 | $34,373,633,413.04 |\n| 1998 | $20,212,721,905.53 |\n\n[[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]] [[Q1:R6]] [[Q1:R7]]",
+      "executed_sql": [
+        "SELECT DATE_PART(YEAR, O_ORDERDATE) AS order_year, SUM(O_TOTALPRICE) AS total_order_value FROM ORDERS GROUP BY order_year ORDER BY order_year"
+      ],
+      "query_ids": [
+        "01c7d003-000e-16d0-0002-b6f20001a0da"
+      ],
+      "ground_truth_sql": "SELECT YEAR(O_ORDERDATE) AS order_year, ROUND(SUM(O_TOTALPRICE), 2) AS total_value\nFROM ORDERS\nGROUP BY order_year\nORDER BY order_year;\n",
+      "ground_truth_query_id": "01c7d003-000e-16d0-0002-b6f20001a0de",
+      "ground_truth_rows": [
+        [
+          1992,
+          "34330674052.43"
+        ],
+        [
+          1993,
+          "34340410079.03"
+        ],
+        [
+          1994,
+          "34416369052.97"
+        ],
+        [
+          1995,
+          "34546133183.60"
+        ],
+        [
+          1996,
+          "34609364760.86"
+        ],
+        [
+          1997,
+          "34373633413.04"
+        ],
+        [
+          1998,
+          "20212721905.53"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "ORDER_YEAR",
+            "TOTAL_ORDER_VALUE"
+          ],
+          "row_count": 7,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": [
+        "{\"error\": \"SQLSecurityError\", \"message\": \"Function 'STRFTIME' is not approved; use native supported SQL functions. UDFs are not allowed.\", \"violation_type\": \"dangerous_function\"}\n[Execution-Guided Repair Hint]: Please check table names and qualify column names with aliases. Approved tables: CUSTOMER, LINEITEM, NATION, ORDERS, PART. Database dialect: snowflake. For calendar-year grouping use EXTRACT(YEAR FROM <actual date column>); for period grouping use DATE_TRUNC('YEAR', <actual date column>). Do not invent functions, columns or categorical values."
+      ]
+    },
+    {
+      "id": "TPCH_NATIONS_IN_AMERICA",
+      "suite": "tpch",
+      "question": "Which nations belong to the AMERICA region?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1889.1,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "The nations that belong to the AMERICA region are Argentina, Brazil, Canada, Peru, and the United States [[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]].",
+      "executed_sql": [
+        "SELECT T1.N_NAME FROM NATION AS T1 INNER JOIN REGION AS T2 ON T1.N_REGIONKEY = T2.R_REGIONKEY WHERE T2.R_NAME = 'AMERICA'"
+      ],
+      "query_ids": [
+        "01c7d004-000e-16cf-0002-b6f20001b0ee"
+      ],
+      "ground_truth_sql": "SELECT N_NAME\nFROM NATION\nJOIN REGION ON N_REGIONKEY = R_REGIONKEY\nWHERE R_NAME = 'AMERICA'\nORDER BY N_NAME;\n",
+      "ground_truth_query_id": "01c7d004-000e-1619-0000-0002b6f2c425",
+      "ground_truth_rows": [
+        [
+          "ARGENTINA"
+        ],
+        [
+          "BRAZIL"
+        ],
+        [
+          "CANADA"
+        ],
+        [
+          "PERU"
+        ],
+        [
+          "UNITED STATES"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "N_NAME"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [
+        {
+          "sql": "SELECT DISTINCT \"R_NAME\" FROM REGION WHERE NOT \"R_NAME\" IS NULL LIMIT 26",
+          "query_id": "01c7d004-000e-1673-0002-b6f20001f04a",
+          "purpose": "Live categorical filter validation",
+          "column": "REGION.R_NAME",
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_TOP_NATIONS_BY_CUSTOMERS",
+      "suite": "tpch",
+      "question": "Which five nations have the most customers?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 2218.0,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "The five nations with the most customers are:\n\n1.  **INDONESIA** with 6,161 customers [[Q1:R1]]\n2.  **ROMANIA** with 6,100 customers [[Q1:R2]]\n3.  **FRANCE** with 6,100 customers [[Q1:R3]]\n4.  **RUSSIA** with 6,078 customers [[Q1:R4]]\n5.  **INDIA** with 6,042 customers [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT T1.N_NAME, COUNT(T2.C_CUSTKEY) AS CustomerCount FROM NATION AS T1 INNER JOIN CUSTOMER AS T2 ON T1.N_NATIONKEY = T2.C_NATIONKEY GROUP BY T1.N_NAME ORDER BY CustomerCount DESC LIMIT 5"
+      ],
+      "query_ids": [
+        "01c7d004-000e-16f2-0002-b6f20001e02e"
+      ],
+      "ground_truth_sql": "SELECT N_NAME, COUNT(*) AS customer_count\nFROM CUSTOMER\nJOIN NATION ON C_NATIONKEY = N_NATIONKEY\nGROUP BY N_NAME\nORDER BY customer_count DESC\nLIMIT 5;\n",
+      "ground_truth_query_id": "01c7d004-000e-1619-0000-0002b6f2c429",
+      "ground_truth_rows": [
+        [
+          "INDONESIA",
+          6161
+        ],
+        [
+          "ROMANIA",
+          6100
+        ],
+        [
+          "FRANCE",
+          6100
+        ],
+        [
+          "RUSSIA",
+          6078
+        ],
+        [
+          "INDIA",
+          6042
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "N_NAME",
+            "CUSTOMERCOUNT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_REVENUE_AFTER_DISCOUNT",
+      "suite": "tpch",
+      "question": "What is the total revenue from line items after discounts?",
+      "passed": false,
+      "reason": "Failures: citation_discrepancy",
+      "elapsed_ms": 1000.6,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 1,
+      "answer": "The total revenue from line items after discounts is $21,810,222,388.50 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)) FROM LINEITEM"
+      ],
+      "query_ids": [
+        "01c7d004-000e-1673-0002-b6f20001f04e"
+      ],
+      "ground_truth_sql": "SELECT ROUND(SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)), 2) AS net_revenue\nFROM LINEITEM;\n",
+      "ground_truth_query_id": "01c7d004-000e-16cf-0002-b6f20001b0f2",
+      "ground_truth_rows": [
+        [
+          "218102223885.00"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT))"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_ORDERS_WITH_LINE_ITEMS",
+      "suite": "tpch",
+      "question": "How many distinct orders have at least one line item?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 983.3,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total number of distinct orders that have at least one line item is 1,500,000 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(DISTINCT T1.L_ORDERKEY) FROM LINEITEM AS T1"
+      ],
+      "query_ids": [
+        "01c7d004-000e-16d0-0002-b6f20001a0e2"
+      ],
+      "ground_truth_sql": "SELECT COUNT(DISTINCT O_ORDERKEY) AS order_count\nFROM ORDERS\nJOIN LINEITEM ON O_ORDERKEY = L_ORDERKEY;\n",
+      "ground_truth_query_id": "01c7d004-000e-16f2-0002-b6f20001e032",
+      "ground_truth_rows": [
+        [
+          1500000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(DISTINCT T1.L_ORDERKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    }
+  ]
+}

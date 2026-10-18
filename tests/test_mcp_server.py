@@ -1,6 +1,7 @@
 """Unit tests for DataMind MCP stdio server."""
 
 import json
+from unittest.mock import patch
 
 from datamind.mcp_server import DataMindMCPServer, get_tool_definitions
 
@@ -11,6 +12,24 @@ def test_mcp_tool_definitions():
     assert "datamind_ask" in tool_names
     assert "datamind_list_tables" in tool_names
     assert "datamind_describe_table" in tool_names
+
+
+def test_mcp_honors_snowflake_backend_instead_of_opening_local_database():
+    from datamind.config import load_config
+
+    config = load_config("datamind_snowflake.yaml")
+    with (
+        patch("datamind.mcp_server.load_config", return_value=config),
+        patch("datamind.mcp_server.SnowflakeAdapter") as snowflake,
+        patch("datamind.mcp_server.DuckDBAdapter") as local,
+    ):
+        snowflake.return_value.dialect = "snowflake"
+        server = DataMindMCPServer("datamind_snowflake.yaml")
+    snowflake.assert_called_once()
+    local.assert_not_called()
+    assert server.orchestrator.db_adapter is snowflake.return_value
+    assert server.orchestrator.config == config.agent
+    server.retriever.close()
 
 
 def test_mcp_initialize():

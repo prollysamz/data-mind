@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
 from datamind.adapters.base import DBAdapter
@@ -22,17 +24,27 @@ from datamind.agent.techniques.schema_pruning import prune_semantic_model
 from datamind.agent.techniques.structured_query_lane import try_structured_lane
 from datamind.agent.tools import (
     TOOL_DEFINITIONS,
+    execute_database_search_tool,
     execute_retrieval_tool,
     execute_sql_tool,
 )
 from datamind.agent.verifier import CitationReport, verify_citations
 from datamind.config import AgentConfig
+from datamind.guardrails.prompt_guard import injection_flags
 from datamind.guardrails.sql_guard import SQLGuard
 from datamind.llm.client import LLMClient, build_tool_messages
 from datamind.retrieval.base import Retriever
 from datamind.semantic.model import SemanticModel
 
 logger = logging.getLogger(__name__)
+
+
+def requires_structured_sql(question: str) -> bool:
+    """Conservative routing: quantitative requests need SQL even with text context."""
+    return bool(re.search(
+        r"\b(how many|how much|count|total|sum|average|median|minimum|maximum|percentage|ratio|revenue|trend|ranking|rank|yearly|monthly|quarterly)\b",
+        question, re.I,
+    ))
 
 
 @dataclass
@@ -88,6 +100,14 @@ class AgentOrchestrator:
         # Reset evidence store per question unless continuing an active conversation
         if not conversation_history:
             self.evidence_store.clear()
+
+        if injection_flags(question):
+            message = "I can analyze the approved dataset, but cannot override security rules or disclose credentials. Please ask a question about the available data."
+            return AgentResult(
+                question=question, answer=message, evidence_store=self.evidence_store,
+                citation_report=verify_citations(message, self.evidence_store, self.semantic_model),
+                turns=0, success=True, lane="security_refusal",
+            )
 
         # Section 8.3 Planner: screen the question against the semantic model before any SQL.
         # Ambiguous questions get a clarifying question; questions about attributes the
@@ -158,12 +178,18 @@ class AgentOrchestrator:
         turns_taken = 0
         total_tokens_consumed = 0
         sql_repairs_count = 0
+        narration_repairs = 0
+        empty_response_retries = 0
+        structured_required = requires_structured_sql(question)
         max_sql_repairs = getattr(self, "max_sql_repairs", 2)
         max_question_tokens = self.config.max_tokens_per_question
 
         for turn_idx in range(max_turns):
             turns_taken = turn_idx + 1
-            reply = self.llm_client.chat(messages=messages, tools=TOOL_DEFINITIONS)
+            tools = TOOL_DEFINITIONS
+            if structured_required and not self.evidence_store.queries:
+                tools = [tool for tool in TOOL_DEFINITIONS if tool["function"]["name"] == "run_sql"]
+            reply = self.llm_client.chat(messages=messages, tools=tools)
 
             # Track accumulated tokens
             usage_info = reply.get("usage", {})
@@ -188,6 +214,18 @@ class AgentOrchestrator:
                 # Model produced final answer
                 final_text = reply.get("content") or ""
                 finish_reason = reply.get("finish_reason")
+                if not final_text.strip():
+                    if empty_response_retries < 1 and turn_idx + 1 < max_turns:
+                        empty_response_retries += 1
+                        messages.append({"role": "user", "content": "Your previous response was empty. Complete the request now: use run_sql for a numerical answer, or give a clear limitation. Return an actual answer with evidence; do not return an empty message."})
+                        continue
+                    return AgentResult(
+                        question=question,
+                        answer="The model returned no answer. Please retry or select another model in Settings.",
+                        evidence_store=self.evidence_store, citation_report=CitationReport(is_clean=False),
+                        turns=turns_taken, success=False, error="empty_model_response", messages=messages,
+                        finish_reason=finish_reason,
+                    )
                 is_truncated = (finish_reason == "length")
                 report = verify_citations(final_text, self.evidence_store, self.semantic_model, question=question)
                 if is_truncated:
@@ -204,6 +242,24 @@ class AgentOrchestrator:
                         )
                     )
                     report.discrepancy_count += 1
+
+                narration_invalid = not report.is_clean or (narration_repairs > 0 and report.valid_count == 0)
+                if not is_truncated and narration_invalid and self.evidence_store.queries:
+                    if narration_repairs < 1 and turn_idx + 1 < max_turns:
+                        narration_repairs += 1
+                        messages.extend([
+                            {"role": "assistant", "content": final_text},
+                            {"role": "user", "content": "Your answer failed deterministic citation/number verification. Re-read the returned database cells carefully, including every digit and decimal place. Rewrite the answer using only those values and their exact row citations. Do not run additional queries or calculate new values."},
+                        ])
+                        continue
+                    # A scalar receipt can be rendered exactly without trusting a
+                    # second incorrect narration. Do not generalize this to arbitrary
+                    # tables, prose, units or interpretations.
+                    last = self.evidence_store.queries[-1]
+                    if len(last.result.rows) == 1 and len(last.result.rows[0]) == 1 and isinstance(last.result.rows[0][0], (int, float, Decimal)) and not isinstance(last.result.rows[0][0], bool):
+                        value = last.result.rows[0][0]
+                        final_text = f"The model's explanation did not pass verification. The database returned {value} [[{last.query_label}:R1]]. Inspect the executed SQL for the filters and calculation."
+                        report = verify_citations(final_text, self.evidence_store, self.semantic_model, question=question)
 
                 return AgentResult(
                     question=question,
@@ -228,6 +284,8 @@ class AgentOrchestrator:
 
                 try:
                     args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                    if not isinstance(args, dict):
+                        raise ValueError("Tool arguments must be an object")
                 except Exception as e:
                     args = {}
                     tool_results[call_id] = json.dumps({"error": f"Failed to parse arguments JSON: {e}"})
@@ -248,6 +306,7 @@ class AgentOrchestrator:
                             guard=self.sql_guard,
                             adapter=self.db_adapter,
                             evidence_store=self.evidence_store,
+                            semantic_model=self.semantic_model,
                         )
                         if "error" in out:
                             sql_repairs_count += 1
@@ -255,19 +314,36 @@ class AgentOrchestrator:
                                 approved = ", ".join([t.name for t in self.semantic_model.tables[:5]])
                                 out = (
                                     f"{out}\n[Execution-Guided Repair Hint]: Please check table names and qualify column names with aliases. "
-                                    f"Approved tables: {approved}. If filtering delivered orders, use o.order_status = 'delivered'."
+                                    f"Approved tables: {approved}. Database dialect: {self.db_adapter.dialect}. "
+                                    "For calendar-year grouping use EXTRACT(YEAR FROM <actual date column>); "
+                                    "for period grouping use DATE_TRUNC('YEAR', <actual date column>). "
+                                    "Do not invent functions, columns or categorical values."
                                 )
                         tool_results[call_id] = out
 
                 elif fn_name == "search_documents":
+                    if structured_required and not self.evidence_store.queries:
+                        tool_results[call_id] = json.dumps({"error": "StructuredQueryRequired", "message": "This question needs a database calculation. Use run_sql to compute the requested aggregate first. Document search cannot establish totals or counts."})
+                        continue
                     query_terms = args.get("query", "")
-                    k = int(args.get("k", 5))
-                    out = execute_retrieval_tool(
-                        query=query_terms,
-                        k=k,
-                        retriever=self.retriever,
-                        evidence_store=self.evidence_store,
-                    )
+                    try:
+                        k = max(1, min(int(args.get("k", 5)), 15))
+                        if not isinstance(query_terms, str):
+                            raise ValueError("Search keywords must be text")
+                    except (ValueError, TypeError):
+                        tool_results[call_id] = json.dumps({"error": "Invalid search query or limit"})
+                        continue
+                    if self.db_adapter.dialect == "snowflake":
+                        out = execute_database_search_tool(
+                            query=query_terms, k=k, guard=self.sql_guard,
+                            adapter=self.db_adapter, semantic_model=self.semantic_model,
+                            evidence_store=self.evidence_store,
+                        )
+                    else:
+                        out = execute_retrieval_tool(
+                            query=query_terms, k=k, retriever=self.retriever,
+                            evidence_store=self.evidence_store,
+                        )
                     tool_results[call_id] = out
 
                 else:

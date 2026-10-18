@@ -137,7 +137,10 @@ def test_path_traversal_guards(upload_mgr):
     ]
     for bad_name in malicious_names:
         csv_bytes = b"id,val\n1,10\n"
-        meta = upload_mgr.ingest_file(session, bad_name, csv_bytes)
+        with pytest.raises(UploadError):
+            upload_mgr.ingest_file(session, bad_name, csv_bytes)
+    for name in ("../../safe.csv", "..\\..\\safe.csv"):
+        meta = upload_mgr.ingest_file(session, name, b"id,val\n1,10\n")
         # Verify table name is clean snake case
         assert "/" not in meta["table_name"]
         assert "\\" not in meta["table_name"]

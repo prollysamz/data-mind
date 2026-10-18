@@ -104,4 +104,4 @@ def test_retrieval_source_defaults_to_backend_duckdb_and_can_be_overridden(tmp_p
         "backend:\n  type: snowflake\nretrieval:\n  source_duckdb_path: data/olist/olist.duckdb\n",
         encoding="utf-8",
     )
-    assert load_config(cfg_file, load_env=False).retrieval_source_path() == "data/olist/olist.duckdb"
+    assert load_config(cfg_file, load_env=False).retrieval_source_path() is None

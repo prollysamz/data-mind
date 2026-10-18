@@ -245,8 +245,8 @@ def assess_question(
         if missing and len(ungrounded) >= len(grounded):
             return Assessment(UNANSWERABLE, "llm", grounded, ungrounded, missing=missing, reason=reason)
         return Assessment(ANSWERABLE, "llm", grounded, ungrounded, reason=reason)
-    if verdict == AMBIGUOUS and not grounded:
-        # Only clarify when the question references nothing the data has; otherwise let the agent try.
+    if verdict == AMBIGUOUS:
+        # Naming an entity does not resolve an unspecified metric or ranking criterion.
         return Assessment(AMBIGUOUS, "llm", grounded, ungrounded, reason=reason)
     return Assessment(ANSWERABLE, "llm", grounded, ungrounded, reason=reason)
 

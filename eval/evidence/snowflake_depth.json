@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-10-18T12:42:15.731004+00:00",
+  "query_tag": "datamind:verification:bb6739fffdce",
+  "current": {
+    "count": 1450,
+    "query_id": "01c7cffa-000e-16d0-0002-b6f20001a0be"
+  },
+  "time_travel_read": {
+    "status": "PASS",
+    "count": 1450,
+    "query_id": "01c7cffa-000e-1673-0002-b6f20001f026",
+    "statement_anchor": "01c7cffa-000e-16d0-0002-b6f20001a0be",
+    "limitation": "No mutation performed; this does not prove answer freshness after changes."
+  },
+  "query_tag_history": {
+    "status": "PASS",
+    "query_id": "01c7cffa-000e-1673-0002-b6f20001f02a",
+    "tag_seen": "datamind:verification:bb6739fffdce"
+  },
+  "loader_access": {
+    "status": "BLOCKED",
+    "error_code": 390186,
+    "action": "Grant DATAMIND_LOADER to the ingestion login, or set separate loader credentials."
+  },
+  "data_change_demo": {
+    "status": "NOT_RUN",
+    "requires": "loader_access PASS"
+  },
+  "dynamic_masking": {
+    "status": "NOT_VERIFIED",
+    "setup": "scripts/snowflake_governance_demo.sql (admin and Enterprise edition required)"
+  }
+}

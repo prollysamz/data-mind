@@ -2,6 +2,11 @@
 
 This guide walks you through setting up DataMind from a clean repository.
 
+The CLI defaults to Snowflake for `serve`, `ask` and `mcp`. Follow
+[snowflake-first.md](snowflake-first.md) to set up read-only querying, separate upload
+credentials, supported file formats and Bedrock Mantle. Use `--config datamind.yaml`
+explicitly when following the local development path.
+
 ## Prerequisites
 
 - Python 3.11+
@@ -82,6 +87,11 @@ cp .env.example .env
 ```
 
 Edit `.env` to set your credentials. Never commit `.env` (it is in `.gitignore`).
+
+For the local demo, also run `python examples/primary/build_demo_data.py` if you have
+not generated the fixture yet (including after the Linux/macOS manual installation).
+See [judging.md](judging.md) for the complete PS1 evaluation path, evidence requirements
+and the distinction between a local demo and live Snowflake compliance.
 
 ---
 

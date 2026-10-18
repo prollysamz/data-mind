@@ -15,9 +15,11 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import sqlglot
 import yaml
 
 from datamind.adapters.duckdb_adapter import DuckDBAdapter
+from datamind.adapters.snowflake_adapter import SnowflakeAdapter
 from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.config import AppConfig
 from datamind.guardrails.sql_guard import SQLGuard
@@ -25,6 +27,8 @@ from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
 from datamind.semantic.model import SemanticModel
+from datamind.uploads.formats import normalize_file
+from datamind.uploads.snowflake_store import SnowflakeUploadStore, session_schema
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +96,7 @@ class UploadSession:
         self.tables_meta: dict[str, Any] = {}
         self.reversible_mappings: dict[str, dict[str, str]] = {}  # table -> {sanitized: original}
         self.encoding_notices: list[str] = []
+        self.backend = "duckdb"
 
     def is_expired(self) -> bool:
         return (time.time() - self.created_at) > self.ttl_seconds
@@ -105,6 +110,7 @@ class UploadSession:
             "tables_meta": self.tables_meta,
             "reversible_mappings": self.reversible_mappings,
             "encoding_notices": self.encoding_notices,
+            "backend": self.backend,
         }
         with open(self.meta_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -119,6 +125,7 @@ class UploadSession:
                 self.tables_meta = data.get("tables_meta", {})
                 self.reversible_mappings = data.get("reversible_mappings", {})
                 self.encoding_notices = data.get("encoding_notices", [])
+                self.backend = data.get("backend", "duckdb")
 
 
 class UploadManager:
@@ -134,6 +141,7 @@ class UploadManager:
         max_concurrent_sessions: int = DEFAULT_MAX_CONCURRENT_SESSIONS,
         session_ttl_seconds: int = DEFAULT_SESSION_TTL_SECONDS,
         enabled: bool = False,
+        config: AppConfig | None = None,
     ) -> None:
         self.base_dir = Path(base_dir).resolve()
         self.max_file_size_bytes = max_file_size_bytes
@@ -143,6 +151,8 @@ class UploadManager:
         self.max_concurrent_sessions = max_concurrent_sessions
         self.session_ttl_seconds = session_ttl_seconds
         self.enabled = enabled
+        self.config = config or AppConfig()
+        self.snowflake_store = SnowflakeUploadStore(self.config) if self.config.backend.type == "snowflake" else None
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self._active_sessions: dict[str, UploadSession] = {}
         self.load_existing_sessions()
@@ -157,9 +167,10 @@ class UploadManager:
                     if not session.is_expired() and session.status != "deleted":
                         self._active_sessions[session.session_id] = session
                     else:
-                        shutil.rmtree(child, ignore_errors=True)
+                        self._active_sessions[session.session_id] = session
+                        self.delete_session(session.session_id)
                 except Exception:
-                    shutil.rmtree(child, ignore_errors=True)
+                    logger.warning("Session could not be restored or cleaned up; retaining %s for retry", child.name)
 
     def create_session(self) -> UploadSession:
         """Create new isolated session directory with random UUID."""
@@ -184,6 +195,7 @@ class UploadManager:
             created_at=time.time(),
             ttl_seconds=self.session_ttl_seconds,
         )
+        session.backend = self.config.backend.type
         session.save_metadata()
         self._active_sessions[session_id] = session
         return session
@@ -219,6 +231,15 @@ class UploadManager:
             return False
 
         existed = clean_id in self._active_sessions or sess_dir.exists()
+        session = self._active_sessions.get(clean_id)
+        if session and session.backend == "snowflake":
+            if not self.snowflake_store:
+                raise UploadError("Reconnect using the Snowflake configuration to delete this cloud session.", 409)
+            try:
+                self.snowflake_store.delete_session(clean_id)
+            except Exception as exc:
+                logger.exception("Cloud session cleanup failed")
+                raise UploadError("Snowflake deletion failed. The session was retained so deletion can be retried.", 502) from exc
         if sess_dir.exists():
             try:
                 shutil.rmtree(sess_dir, ignore_errors=True)
@@ -253,6 +274,10 @@ class UploadManager:
         """Ingest raw uploaded file into DuckDB with validation, profiling, and drafting."""
         if not self.enabled:
             raise UploadError("File uploads are disabled.", 403)
+        if session.status != "pending_review":
+            raise UploadError("Create a new session to add files after activation.", 409)
+        if not isinstance(filename, str) or not filename or "\x00" in filename or len(filename) > 255:
+            raise UploadError("Invalid filename: use a name under 256 characters without null bytes.", 400)
 
         if len(session.tables_meta) >= self.max_files_per_session:
             raise UploadError(
@@ -269,6 +294,13 @@ class UploadManager:
             raise UploadError(
                 f"File size ({actual_mb:.1f} MB) exceeds maximum allowed {max_mb:.1f} MB.", 400
             )
+
+        original_filename = filename
+        try:
+            filename, file_bytes, notices = normalize_file(filename, file_bytes, self.max_rows, self.max_columns)
+            session.encoding_notices.extend(notices)
+        except Exception as exc:
+            raise UploadError(f"Could not read this file: {exc}", 400) from exc
 
         # 2. Path traversal guard on filename
         safe_stem = Path(filename.replace("\\", "/")).stem
@@ -319,10 +351,10 @@ class UploadManager:
         if is_parquet:
             temp_input.write_bytes(file_bytes)
         else:
-            temp_input.write_text(text_content or "", encoding="utf-8")
+            temp_input.write_text(text_content or "", encoding="utf-8", newline="")
 
         # 4. Ingest into DuckDB
-        conn = duckdb.connect(str(session.db_path))
+        conn = duckdb.connect(":memory:" if session.backend == "snowflake" else str(session.db_path))
         try:
             input_path_literal = quote_sql_string(temp_input.as_posix())
             # First, check header and sanitize column names
@@ -437,7 +469,8 @@ class UploadManager:
 
             table_meta = {
                 "table_name": sanitized_table,
-                "original_filename": Path(filename).name,
+                "original_filename": Path(original_filename.replace("\\", "/")).name,
+                "backend": session.backend,
                 "total_rows": total_rows,
                 "total_columns": len(sanitized_cols),
                 "columns": col_profiles,
@@ -449,6 +482,16 @@ class UploadManager:
                 "encoding_notice": encoding_notice,
             }
 
+            if session.backend == "snowflake":
+                if not self.snowflake_store:
+                    raise UploadError("Snowflake loader is not configured; no local fallback is allowed.", 503)
+                try:
+                    table_meta["storage"] = self.snowflake_store.load_table(
+                        session.session_id, sanitized_table, conn, col_profiles, total_rows,
+                    )
+                except Exception as exc:
+                    logger.exception("Snowflake ingestion failed")
+                    raise UploadError("Snowflake upload failed. Check loader credentials and privileges. No local dataset was activated.", 502) from exc
             session.tables_meta[sanitized_table] = table_meta
             session.save_metadata()
             return table_meta
@@ -641,10 +684,11 @@ class UploadManager:
                 pk_flag = user_col_cfg.get("is_primary_key", col.get("is_id", False))
 
                 cols_def.append({
-                    "name": c_name,
+                    "name": c_name.upper() if session.backend == "snowflake" else c_name,
                     "type": col["inferred_type"],
                     "description": col_desc,
-                    "primary_key": pk_flag,
+                    "is_primary_key": pk_flag,
+                    "is_document": is_doc,
                 })
 
                 if is_doc:
@@ -656,8 +700,10 @@ class UploadManager:
                         "pk_col": pk_col,
                     })
 
+            if not cols_def:
+                raise UploadError("Keep at least one enabled column in every table.", 400)
             tables_def.append({
-                "name": tbl_name,
+                "name": tbl_name.upper() if session.backend == "snowflake" else tbl_name,
                 "description": tbl_desc,
                 "columns": cols_def,
             })
@@ -681,12 +727,32 @@ class UploadManager:
             "verified_queries": v_queries,
         }
 
+        if session.backend == "snowflake":
+            for candidate in model_dict["verified_queries"]:
+                tree = sqlglot.parse_one(candidate["sql"], read="duckdb")
+                for node in tree.find_all(sqlglot.exp.Identifier):
+                    node.set("this", node.name.upper())
+                candidate["sql"] = tree.sql(dialect="snowflake")
+
+        review_guard = SQLGuard(
+            approved_tables=[t["name"] for t in tables_def], dialect=session.backend,
+            approved_columns={t["name"]: {c["name"]: "UNKNOWN" for c in t["columns"]} for t in tables_def},
+        )
+        safe_candidates = []
+        for candidate in model_dict["verified_queries"]:
+            try:
+                candidate["sql"] = review_guard.validate(candidate["sql"])
+                safe_candidates.append(candidate)
+            except ValueError:
+                continue
+        model_dict["verified_queries"] = safe_candidates
+
         # Write semantic_model.yaml
         with open(session.semantic_path, "w", encoding="utf-8") as f:
             yaml.dump(model_dict, f, sort_keys=False)
 
         # 2. Build FTS5 index if document columns exist
-        if doc_tables and session.db_path.exists():
+        if session.backend == "duckdb" and doc_tables and session.db_path.exists():
             self._build_session_fts(session, doc_tables)
 
         session.status = "active"
@@ -752,7 +818,7 @@ class UploadManager:
         self,
         session_id: str,
         config: AppConfig,
-    ) -> tuple[AgentOrchestrator, DuckDBAdapter, SQLiteFTSRetriever | None]:
+    ) -> tuple[AgentOrchestrator, DuckDBAdapter | SnowflakeAdapter, SQLiteFTSRetriever | None]:
         """Instantiate an isolated read-only AgentOrchestrator for an active upload session."""
         session = self.get_session(session_id)
         if not session or session.status != "active":
@@ -760,12 +826,15 @@ class UploadManager:
 
         semantic_model = load_semantic_model(str(session.semantic_path))
 
-        # Open DuckDB strictly read-only
-        adapter = DuckDBAdapter(
-            db_path=str(session.db_path),
-            read_only=True,
-            max_rows=config.guardrails.max_rows,
-        )
+        if session.backend == "snowflake":
+            if config.backend.type != "snowflake":
+                raise UploadError("This dataset requires the Snowflake backend; no local fallback is allowed.", 409)
+            snowflake_config = config.backend.snowflake.model_copy(update={"schema_": session_schema(session.session_id)})
+            adapter = SnowflakeAdapter(config=snowflake_config, max_rows=config.guardrails.max_rows)
+        else:
+            if config.backend.type == "snowflake":
+                raise UploadError("This is an older local upload. Re-upload it to load it into Snowflake.", 409)
+            adapter = DuckDBAdapter(db_path=str(session.db_path), read_only=True, max_rows=config.guardrails.max_rows)
 
         retriever = None
         if session.fts_path.exists():
@@ -775,10 +844,16 @@ class UploadManager:
             )
 
         llm_client = LLMClient(config.llm)
+        guard = SQLGuard(
+            approved_tables=semantic_model.get_approved_table_names(), dialect=adapter.dialect,
+            approved_columns={t.name: {c.name: "UNKNOWN" for c in t.columns} for t in semantic_model.tables},
+        )
         orchestrator = AgentOrchestrator(
             llm_client=llm_client,
             db_adapter=adapter,
             retriever=retriever,
             semantic_model=semantic_model,
+            config=config.agent,
+            sql_guard=guard,
         )
         return orchestrator, adapter, retriever

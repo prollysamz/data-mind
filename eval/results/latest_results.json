@@ -1,416 +1,488 @@
 {
-  "timestamp": "2026-10-18T12:19:33.946006",
+  "timestamp": "2026-10-18T18:22:52.527011",
   "date": "2026-10-18",
-  "commit": "4b77aad",
-  "suite": "business",
+  "commit": "50e54a6-dirty",
+  "suite": "tpch",
   "model_used": "gemma4-e2b-16k",
-  "dataset": "Snowflake (DATAMIND.PUBLIC, warehouse DATAMIND_XS, role DATAMIND_READONLY)",
-  "total": 21,
-  "passed": 20,
-  "failed": 1,
+  "dataset": "Snowflake (SNOWFLAKE_SAMPLE_DATA.TPCH_SF1, warehouse DATAMIND_XS, role DATAMIND_READONLY)",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
   "not_run": 0,
-  "pass_rate_pct": 95.2,
-  "median_latency_ms": 994.9,
-  "p90_latency_ms": 2988.2,
+  "pass_rate_pct": 100.0,
+  "median_latency_ms": 1663.4,
+  "p90_latency_ms": 3208.9,
   "items": [
     {
-      "id": "Q_MOM_DECLINE",
-      "suite": "business",
-      "question": "Which products experienced the largest month-over-month revenue decline?",
+      "id": "TPCH_REGION_COUNT",
+      "suite": "tpch",
+      "question": "How many geographic regions are there?",
       "passed": true,
       "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 12877.1,
-      "citations_valid": 3,
-      "citations_invalid": 0,
-      "verified_numbers": 3,
-      "discrepancies": 0,
-      "answer": "The products that experienced the largest month-over-month revenue decline are:\n\n1.  **Novaship**: Experienced a month-over-month revenue decline of $53,803.23 in the period starting 2026-03-01 [[Q1:R1]].\n2.  **SecureVault**: Experienced a month-over-month revenue decline of $5,686.56 in the period starting 2026-04-01 [[Q1:R2]].\n3.  **DataFlow**: Experienced a month-over-month revenue decline of $3,482.85 in the period starting 2026-03-01 [[Q1:R3]].",
-      "executed_sql": [
-        "WITH monthly_revenue AS (SELECT product_name, order_month, SUM(amount) AS monthly_sales FROM SALES GROUP BY product_name, order_month), revenue_changes AS (SELECT product_name, order_month, monthly_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline FROM monthly_revenue) SELECT product_name, order_month, prev_month_sales, monthly_sales, mom_revenue_decline FROM revenue_changes WHERE NOT prev_month_sales IS NULL AND mom_revenue_decline > 0 ORDER BY mom_revenue_decline DESC"
-      ],
-      "query_ids": [
-        "01c7ce99-000e-16a4-0000-0002b6f29175"
-      ]
-    },
-    {
-      "id": "Q_MIXED_REVENUE_SUPPORT",
-      "suite": "business",
-      "question": "Which products experienced the largest month-over-month revenue decline and what were customer complaints about that product?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 3140.0,
-      "citations_valid": 6,
-      "citations_invalid": 0,
-      "verified_numbers": 3,
-      "discrepancies": 0,
-      "answer": "The product that experienced the largest month-over-month revenue decline was **Novaship** [[Q1:R1]].\n\nThe month-over-month revenue decline for Novaship was **$53,803.23** for the month of March 2026, comparing the current month's sales of $28,357.22 to the previous month's sales of $82,160.45 [[Q1:R1]].\n\nCustomer complaints regarding Novaship include:\n*   **Churn/Billing Issues**: Customers downgraded their tier due to ongoing March downtime and missed SLAs [[D:SUPPORT_TICKETS:TK-1005]].\n*   **Performance Issues**: Reports included database connection pool exhaustion causing batch shipment requests to fail with error code 503 [[D:SUPPORT_TICKETS:TK-1004]] and severe API latency with 504 gateway timeouts during peak hours [[D:SUPPORT_TICKETS:TK-1001]].\n*   **Outages**: A critical full dashboard outage was reported on March 12 across the North America region [[D:SUPPORT_TICKETS:TK-1003]].\n*   **Billing Errors**: Multiple customers reported duplicate billing charges following the v2.4 upgrade [[D:SUPPORT_TICKETS:TK-1002]].",
-      "executed_sql": [
-        "WITH monthly_revenue AS (SELECT product_name, order_month, SUM(amount) AS monthly_sales FROM SALES GROUP BY product_name, order_month), revenue_changes AS (SELECT product_name, order_month, monthly_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline FROM monthly_revenue) SELECT product_name, order_month, prev_month_sales, monthly_sales, mom_revenue_decline FROM revenue_changes WHERE NOT prev_month_sales IS NULL AND mom_revenue_decline > 0 ORDER BY mom_revenue_decline DESC LIMIT 1"
-      ],
-      "query_ids": [
-        "01c7ce99-000e-1673-0000-0002b6f2b195"
-      ]
-    },
-    {
-      "id": "Q_TOTAL_REVENUE",
-      "suite": "business",
-      "question": "What is the total sales revenue across all products in the database?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 943.9,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The total sales revenue across all products in the database is $1,300,674.43 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT SUM(amount) AS total_revenue FROM SALES"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-16a4-0000-0002b6f2917d"
-      ]
-    },
-    {
-      "id": "Q_PRODUCTS_CATALOG",
-      "suite": "business",
-      "question": "List all product categories and their default base prices from the products catalog.",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 1260.2,
-      "citations_valid": 5,
-      "citations_invalid": 0,
-      "verified_numbers": 5,
-      "discrepancies": 0,
-      "answer": "DataMind has retrieved the product categories and their base prices from the catalog.\n\nThe product categories and their default base prices are:\n*   **Logistics**: $120.00 [[Q1:R1]]\n*   **Infrastructure**: $80.00 [[Q1:R2]]\n*   **Analytics**: $150.00 [[Q1:R3]]\n*   **Security**: $200.00 [[Q1:R4]]\n*   **Communications**: $45.00 [[Q1:R5]]",
-      "executed_sql": [
-        "SELECT category, base_price FROM PRODUCTS"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-1673-0000-0002b6f2b199"
-      ]
-    },
-    {
-      "id": "Q_TOP_SELLING_PRODUCT",
-      "suite": "business",
-      "question": "Which product generated the highest total revenue?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 1069.6,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "DataMind has determined that the product **SecureVault** generated the highest total revenue.\n\nThe total revenue generated by SecureVault is $361,662.14 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT s.product_name, SUM(s.amount) AS total_revenue FROM SALES AS s GROUP BY s.product_name ORDER BY total_revenue DESC LIMIT 1"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-16ab-0000-0002b6f2f1bd"
-      ]
-    },
-    {
-      "id": "Q_TOTAL_UNITS_SOLD",
-      "suite": "business",
-      "question": "How many total units were sold across all orders?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 779.3,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The total number of units sold across all orders is 11,260 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT SUM(quantity) FROM SALES"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-1619-0000-0002b6f2c18d"
-      ]
-    },
-    {
-      "id": "Q_AVG_ORDER_VALUE",
-      "suite": "business",
-      "question": "What is the average order line amount across all sales?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 830.2,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The average order line amount across all sales is $897.02 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT AVG(amount) FROM SALES"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-1673-0000-0002b6f2b19d"
-      ]
-    },
-    {
-      "id": "Q_MONTHLY_REVENUE_TREND",
-      "suite": "business",
-      "question": "What was the total sales revenue for each month?",
-      "passed": false,
-      "reason": "Failures: Result-set mismatch (expected 5 rows matching ground truth SQL)",
-      "elapsed_ms": 2988.2,
-      "citations_valid": 15,
-      "citations_invalid": 0,
-      "verified_numbers": 15,
-      "discrepancies": 0,
-      "answer": "The total sales revenue for each product and month is as follows:\n\n| Product Name | Order Month | Monthly Sales (USD) |\n| :--- | :--- | :--- |\n| CloudSync | 2026-01-01 | 41,273.68 |\n| DataFlow | 2026-01-01 | 60,162.72 |\n| Novaship | 2026-01-01 | 56,915.19 |\n| OmniChat | 2026-01-01 | 25,598.47 |\n| SecureVault | 2026-01-01 | 70,442.29 |\n| CloudSync | 2026-02-01 | 45,343.78 |\n| DataFlow | 2026-02-01 | 63,273.91 |\n| Novaship | 2026-02-01 | 82,160.45 |\n| OmniChat | 2026-02-01 | 28,056.62 |\n| SecureVault | 2026-02-01 | 72,053.67 |\n| CloudSync | 2026-03-01 | 47,955.77 |\n| DataFlow | 2026-03-01 | 59,791.06 |\n| Novaship | 2026-03-01 | 28,357.22 |\n| OmniChat | 2026-03-01 | 28,111.03 |\n| SecureVault | 2026-03-01 | 74,077.77 |\n\n[[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]] [[Q1:R6]] [[Q1:R7]] [[Q1:R8]] [[Q1:R9]] [[Q1:R10]] [[Q1:R11]] [[Q1:R12]] [[Q1:R13]] [[Q1:R14]] [[Q1:R15]]",
-      "executed_sql": [
-        "SELECT product_name, order_month, SUM(amount) AS monthly_sales FROM SALES GROUP BY product_name, order_month ORDER BY order_month, product_name"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-1603-0002-b6f200010146"
-      ]
-    },
-    {
-      "id": "Q_LOGISTICS_CATEGORY_REVENUE",
-      "suite": "business",
-      "question": "What is the total sales revenue generated by products in the Logistics category?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 1125.0,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The total sales revenue generated by products in the Logistics category is $235,351.69 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.category = 'Logistics'"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-16bc-0002-b6f2000120ba"
-      ]
-    },
-    {
-      "id": "Q_SECURITY_CATEGORY_REVENUE",
-      "suite": "business",
-      "question": "What is the total revenue for the Security category?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 835.0,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The total revenue for products in the 'Security' category is $361,662.14 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.category = 'Security'"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-16a4-0000-0002b6f29189"
-      ]
-    },
-    {
-      "id": "Q_NOVASHIP_MARCH_SALES",
-      "suite": "business",
-      "question": "What was the total sales amount for Novaship in March 2026?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 994.9,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The total sales amount for Novaship in March 2026 was $28,357.22 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT SUM(s.amount) FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'Novaship' AND s.order_month = '2026-03-01'"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-1673-0000-0002b6f2b1a5"
-      ]
-    },
-    {
-      "id": "Q_NOVASHIP_FEB_SALES",
-      "suite": "business",
-      "question": "What was the total sales amount for Novaship in February 2026?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 1000.9,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The total sales amount for Novaship in February 2026 was $82,160.45 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT SUM(s.amount) FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'Novaship' AND s.order_month = '2026-02-01'"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-1603-0002-b6f20001014e"
-      ]
-    },
-    {
-      "id": "Q_ORDERS_PER_PRODUCT",
-      "suite": "business",
-      "question": "How many distinct orders were placed for each product?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 1323.8,
-      "citations_valid": 5,
-      "citations_invalid": 0,
-      "verified_numbers": 4,
-      "discrepancies": 0,
-      "answer": "The number of distinct orders placed for each product is as follows:\n\n*   **SecureVault**: 412 distinct orders [[Q1:R1]]\n*   **DataFlow**: 368 distinct orders [[Q1:R2]]\n*   **CloudSync**: 259 distinct orders [[Q1:R3]]\n*   **Novaship**: 253 distinct orders [[Q1:R4]]\n*   **OmniChat**: 158 distinct orders [[Q1:R5]]",
-      "executed_sql": [
-        "SELECT p.product_name, COUNT(DISTINCT s.order_id) AS distinct_orders FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id GROUP BY p.product_name ORDER BY distinct_orders DESC"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-16bc-0002-b6f2000120c2"
-      ]
-    },
-    {
-      "id": "Q_CRITICAL_SUPPORT_TICKETS",
-      "suite": "business",
-      "question": "How many critical priority support tickets were logged?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 730.6,
-      "citations_valid": 1,
-      "citations_invalid": 0,
-      "verified_numbers": 1,
-      "discrepancies": 0,
-      "answer": "The total number of critical priority support tickets logged is 1 [[Q1:R1]].",
-      "executed_sql": [
-        "SELECT COUNT(ticket_id) FROM SUPPORT_TICKETS WHERE priority = 'Critical'"
-      ],
-      "query_ids": [
-        "01c7ce9a-000e-16a4-0000-0002b6f2918d"
-      ]
-    },
-    {
-      "id": "Q_OUTAGE_TICKETS_PRODUCT",
-      "suite": "business",
-      "question": "Which products had support tickets related to outages?",
-      "passed": true,
-      "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 807.5,
+      "elapsed_ms": 3208.9,
       "citations_valid": 1,
       "citations_invalid": 0,
       "verified_numbers": 0,
       "discrepancies": 0,
-      "answer": "DataMind has identified that the product \"Novaship\" has had support tickets categorized as 'Outage' [[Q1:R1]].",
+      "answer": "There are 5 geographic regions in the database [[Q1:R1]].",
       "executed_sql": [
-        "SELECT DISTINCT product_name FROM SUPPORT_TICKETS WHERE category = 'Outage'"
+        "SELECT COUNT(DISTINCT R_REGIONKEY) FROM REGION"
       ],
       "query_ids": [
-        "01c7ce9a-000e-16ab-0000-0002b6f2f1cd"
-      ]
+        "01c7d005-000e-1619-0000-0002b6f2c42d"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS region_count FROM REGION;",
+      "ground_truth_query_id": "01c7d005-000e-1673-0002-b6f20001f052",
+      "ground_truth_rows": [
+        [
+          5
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(DISTINCT R_REGIONKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
     },
     {
-      "id": "Q_TICKETS_PER_PRODUCT",
-      "suite": "business",
-      "question": "How many support tickets were submitted for each product?",
+      "id": "TPCH_CUSTOMER_COUNT",
+      "suite": "tpch",
+      "question": "How many customers are in the CUSTOMER table?",
       "passed": true,
       "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 1121.4,
+      "elapsed_ms": 824.2,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "There are 150,000 customers in the CUSTOMER table [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(C_CUSTKEY) FROM CUSTOMER"
+      ],
+      "query_ids": [
+        "01c7d005-000e-16f2-0002-b6f20001e036"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS customer_count FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7d005-000e-16f2-0002-b6f20001e03a",
+      "ground_truth_rows": [
+        [
+          150000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(C_CUSTKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_AVG_BALANCE",
+      "suite": "tpch",
+      "question": "What is the average customer account balance?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 957.1,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The average customer account balance is $4,495.51 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT AVG(T1.C_ACCTBAL) FROM CUSTOMER AS T1"
+      ],
+      "query_ids": [
+        "01c7d005-000e-16d0-0002-b6f20001a0e6"
+      ],
+      "ground_truth_sql": "SELECT ROUND(AVG(C_ACCTBAL), 2) AS avg_balance FROM CUSTOMER;",
+      "ground_truth_query_id": "01c7d005-000e-1619-0000-0002b6f2c431",
+      "ground_truth_rows": [
+        [
+          "4495.51"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "AVG(T1.C_ACCTBAL)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_SEGMENT_BREAKDOWN",
+      "suite": "tpch",
+      "question": "How many customers are in each market segment?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1663.4,
       "citations_valid": 5,
       "citations_invalid": 0,
       "verified_numbers": 5,
       "discrepancies": 0,
-      "answer": "Based on the analysis, the total number of support tickets submitted for each product is as follows:\n\n*   **Novaship**: 5 tickets [[Q1:R1]]\n*   **CloudSync**: 2 tickets [[Q1:R2]]\n*   **DataFlow**: 1 ticket [[Q1:R3]]\n*   **SecureVault**: 1 ticket [[Q1:R4]]\n*   **OmniChat**: 1 ticket [[Q1:R5]]",
+      "answer": "Based on the data, here is the count of customers in each market segment:\n\n*   **AUTOMOBILE**: 29,752 customers [[Q1:R1]]\n*   **FURNITURE**: 29,968 customers [[Q1:R2]]\n*   **BUILDING**: 30,142 customers [[Q1:R3]]\n*   **MACHINERY**: 29,949 customers [[Q1:R4]]\n*   **HOUSEHOLD**: 30,189 customers [[Q1:R5]]",
       "executed_sql": [
-        "SELECT product_name, COUNT(ticket_id) AS ticket_count FROM SUPPORT_TICKETS GROUP BY product_name ORDER BY ticket_count DESC"
+        "SELECT T1.C_MKTSEGMENT, COUNT(T1.C_CUSTKEY) FROM CUSTOMER AS T1 GROUP BY T1.C_MKTSEGMENT"
       ],
       "query_ids": [
-        "01c7ce9a-000e-16bc-0002-b6f2000120c6"
-      ]
+        "01c7d005-000e-16d0-0002-b6f20001a0ea"
+      ],
+      "ground_truth_sql": "SELECT C_MKTSEGMENT, COUNT(*) AS customer_count\nFROM CUSTOMER\nGROUP BY C_MKTSEGMENT\nORDER BY customer_count DESC;\n",
+      "ground_truth_query_id": "01c7d005-000e-1619-0000-0002b6f2c435",
+      "ground_truth_rows": [
+        [
+          "HOUSEHOLD",
+          30189
+        ],
+        [
+          "BUILDING",
+          30142
+        ],
+        [
+          "FURNITURE",
+          29968
+        ],
+        [
+          "MACHINERY",
+          29949
+        ],
+        [
+          "AUTOMOBILE",
+          29752
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "C_MKTSEGMENT",
+            "COUNT(T1.C_CUSTKEY)"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
     },
     {
-      "id": "Q_MAX_SINGLE_ORDER",
-      "suite": "business",
-      "question": "What is the highest single transaction amount recorded in SALES?",
+      "id": "TPCH_URGENT_ORDERS",
+      "suite": "tpch",
+      "question": "How many orders have urgent priority?",
       "passed": true,
       "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 594.4,
+      "elapsed_ms": 1088.8,
       "citations_valid": 1,
       "citations_invalid": 0,
       "verified_numbers": 1,
       "discrepancies": 0,
-      "answer": "The highest single transaction amount recorded in the SALES table is $2,242.37 [[Q1:R1]].",
+      "answer": "Based on the database query, there are 300,343 orders with an 'Urgent' priority. [[Q1:R1]]",
       "executed_sql": [
-        "SELECT MAX(amount) FROM SALES"
+        "SELECT COUNT(O_ORDERKEY) FROM ORDERS WHERE O_ORDERPRIORITY = '1-URGENT'"
       ],
       "query_ids": [
-        "01c7ce9a-000e-16a4-0000-0002b6f29195"
-      ]
+        "01c7d005-000e-16cf-0002-b6f20001b0fe"
+      ],
+      "ground_truth_sql": "SELECT COUNT(*) AS urgent_orders FROM ORDERS WHERE O_ORDERPRIORITY = '1-URGENT';",
+      "ground_truth_query_id": "01c7d005-000e-16b8-0002-b6f200018102",
+      "ground_truth_rows": [
+        [
+          300343
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(O_ORDERKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [
+        {
+          "sql": "SELECT DISTINCT \"O_ORDERPRIORITY\" FROM ORDERS WHERE NOT \"O_ORDERPRIORITY\" IS NULL LIMIT 26",
+          "query_id": "01c7d005-000e-16cf-0002-b6f20001b0fa",
+          "purpose": "Live categorical filter validation",
+          "column": "ORDERS.O_ORDERPRIORITY",
+          "row_count": 5,
+          "truncated": false
+        },
+        {
+          "purpose": "Unique live category normalization",
+          "column": "ORDERS.O_ORDERPRIORITY",
+          "proposed_value": "Urgent",
+          "stored_value": "1-URGENT",
+          "query_id": "01c7d005-000e-16cf-0002-b6f20001b0fa"
+        }
+      ],
+      "tool_failures": []
     },
     {
-      "id": "Q_MIN_SINGLE_ORDER",
-      "suite": "business",
-      "question": "What is the lowest single transaction amount recorded in SALES?",
+      "id": "TPCH_REVENUE_BY_YEAR",
+      "suite": "tpch",
+      "question": "What was the total order value for each year?",
       "passed": true,
       "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 567.7,
-      "citations_valid": 1,
+      "elapsed_ms": 3178.5,
+      "citations_valid": 7,
       "citations_invalid": 0,
-      "verified_numbers": 1,
+      "verified_numbers": 7,
       "discrepancies": 0,
-      "answer": "The lowest single transaction amount recorded in the SALES table is $80.54 [[Q1:R1]].",
+      "answer": "The total order value for each year is as follows:\n\n| Year | Total Order Value (USD) |\n| :--- | :--- |\n| 1992 | $34,330,674,052.43 |\n| 1993 | $34,340,410,079.03 |\n| 1994 | $34,416,369,052.97 |\n| 1995 | $34,546,133,183.60 |\n| 1996 | $34,609,364,760.86 |\n| 1997 | $34,373,633,413.04 |\n| 1998 | $20,212,721,905.53 |\n\n[[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]] [[Q1:R6]] [[Q1:R7]]",
       "executed_sql": [
-        "SELECT MIN(amount) FROM SALES"
+        "SELECT DATE_PART(YEAR, O_ORDERDATE) AS order_year, SUM(O_TOTALPRICE) AS total_order_value FROM ORDERS GROUP BY order_year ORDER BY order_year"
       ],
       "query_ids": [
-        "01c7ce9a-000e-1619-0000-0002b6f2c195"
+        "01c7d005-000e-16f2-0002-b6f20001e03e"
+      ],
+      "ground_truth_sql": "SELECT YEAR(O_ORDERDATE) AS order_year, ROUND(SUM(O_TOTALPRICE), 2) AS total_value\nFROM ORDERS\nGROUP BY order_year\nORDER BY order_year;\n",
+      "ground_truth_query_id": "01c7d005-000e-16d0-0002-b6f20001a0ee",
+      "ground_truth_rows": [
+        [
+          1992,
+          "34330674052.43"
+        ],
+        [
+          1993,
+          "34340410079.03"
+        ],
+        [
+          1994,
+          "34416369052.97"
+        ],
+        [
+          1995,
+          "34546133183.60"
+        ],
+        [
+          1996,
+          "34609364760.86"
+        ],
+        [
+          1997,
+          "34373633413.04"
+        ],
+        [
+          1998,
+          "20212721905.53"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "ORDER_YEAR",
+            "TOTAL_ORDER_VALUE"
+          ],
+          "row_count": 7,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": [
+        "{\"error\": \"SQLSecurityError\", \"message\": \"Function 'STRFTIME' is not approved; use native supported SQL functions. UDFs are not allowed.\", \"violation_type\": \"dangerous_function\"}\n[Execution-Guided Repair Hint]: Please check table names and qualify column names with aliases. Approved tables: CUSTOMER, LINEITEM, NATION, ORDERS, PART. Database dialect: snowflake. For calendar-year grouping use EXTRACT(YEAR FROM <actual date column>); for period grouping use DATE_TRUNC('YEAR', <actual date column>). Do not invent functions, columns or categorical values."
       ]
     },
     {
-      "id": "Q_AVG_QUANTITY_PER_LINE",
-      "suite": "business",
-      "question": "What is the average quantity of units per sales line item?",
+      "id": "TPCH_NATIONS_IN_AMERICA",
+      "suite": "tpch",
+      "question": "Which nations belong to the AMERICA region?",
       "passed": true,
       "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 649.6,
-      "citations_valid": 1,
+      "elapsed_ms": 1984.6,
+      "citations_valid": 5,
       "citations_invalid": 0,
-      "verified_numbers": 1,
+      "verified_numbers": 0,
       "discrepancies": 0,
-      "answer": "The average quantity of units per sales line item across all recorded sales transactions is 7.77 units [[Q1:R1]].",
+      "answer": "The nations that belong to the AMERICA region are Argentina, Brazil, Canada, Peru, and the United States [[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]].",
       "executed_sql": [
-        "SELECT AVG(quantity) FROM SALES"
+        "SELECT T1.N_NAME FROM NATION AS T1 INNER JOIN REGION AS T2 ON T1.N_REGIONKEY = T2.R_REGIONKEY WHERE T2.R_NAME = 'AMERICA'"
       ],
       "query_ids": [
-        "01c7ce9a-000e-16ab-0000-0002b6f2f1d9"
-      ]
+        "01c7d005-000e-1673-0002-b6f20001f056"
+      ],
+      "ground_truth_sql": "SELECT N_NAME\nFROM NATION\nJOIN REGION ON N_REGIONKEY = R_REGIONKEY\nWHERE R_NAME = 'AMERICA'\nORDER BY N_NAME;\n",
+      "ground_truth_query_id": "01c7d005-000e-16f2-0002-b6f20001e042",
+      "ground_truth_rows": [
+        [
+          "ARGENTINA"
+        ],
+        [
+          "BRAZIL"
+        ],
+        [
+          "CANADA"
+        ],
+        [
+          "PERU"
+        ],
+        [
+          "UNITED STATES"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "N_NAME"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [
+        {
+          "sql": "SELECT DISTINCT \"R_NAME\" FROM REGION WHERE NOT \"R_NAME\" IS NULL LIMIT 26",
+          "query_id": "01c7d005-000e-1619-0000-0002b6f2c439",
+          "purpose": "Live categorical filter validation",
+          "column": "REGION.R_NAME",
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "tool_failures": []
     },
     {
-      "id": "Q_PRODUCT_COUNT_BY_CAT",
-      "suite": "business",
-      "question": "How many products belong to each category in the catalog?",
+      "id": "TPCH_TOP_NATIONS_BY_CUSTOMERS",
+      "suite": "tpch",
+      "question": "Which five nations have the most customers?",
       "passed": true,
       "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 1024.2,
+      "elapsed_ms": 2198.4,
       "citations_valid": 5,
       "citations_invalid": 0,
       "verified_numbers": 5,
       "discrepancies": 0,
-      "answer": "Based on the catalog data, here is the count of products per category:\n\n| Category | Product Count |\n| :--- | :--- |\n| Logistics | 1 |\n| Infrastructure | 1 |\n| Analytics | 1 |\n| Security | 1 |\n| Communications | 1 |\n\n[[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]]",
+      "answer": "The five nations with the most customers are:\n\n1.  **INDONESIA** with 6,161 customers [[Q1:R1]]\n2.  **ROMANIA** with 6,100 customers [[Q1:R2]]\n3.  **FRANCE** with 6,100 customers [[Q1:R3]]\n4.  **RUSSIA** with 6,078 customers [[Q1:R4]]\n5.  **INDIA** with 6,042 customers [[Q1:R5]]",
       "executed_sql": [
-        "SELECT category, COUNT(product_id) AS product_count FROM PRODUCTS GROUP BY category"
+        "SELECT T1.N_NAME, COUNT(T2.C_CUSTKEY) AS CustomerCount FROM NATION AS T1 INNER JOIN CUSTOMER AS T2 ON T1.N_NATIONKEY = T2.C_NATIONKEY GROUP BY T1.N_NAME ORDER BY CustomerCount DESC LIMIT 5"
       ],
       "query_ids": [
-        "01c7ce9a-000e-16a4-0000-0002b6f2919d"
-      ]
+        "01c7d005-000e-1619-0000-0002b6f2c43d"
+      ],
+      "ground_truth_sql": "SELECT N_NAME, COUNT(*) AS customer_count\nFROM CUSTOMER\nJOIN NATION ON C_NATIONKEY = N_NATIONKEY\nGROUP BY N_NAME\nORDER BY customer_count DESC\nLIMIT 5;\n",
+      "ground_truth_query_id": "01c7d005-000e-16cf-0002-b6f20001b102",
+      "ground_truth_rows": [
+        [
+          "INDONESIA",
+          6161
+        ],
+        [
+          "ROMANIA",
+          6100
+        ],
+        [
+          "FRANCE",
+          6100
+        ],
+        [
+          "RUSSIA",
+          6078
+        ],
+        [
+          "INDIA",
+          6042
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "N_NAME",
+            "CUSTOMERCOUNT"
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
     },
     {
-      "id": "Q_CLOUDSYNC_TOTAL_REVENUE",
-      "suite": "business",
-      "question": "What is the total sales revenue generated specifically by CloudSync?",
+      "id": "TPCH_REVENUE_AFTER_DISCOUNT",
+      "suite": "tpch",
+      "question": "What is the total revenue from line items after discounts?",
       "passed": true,
       "reason": "All numbers, citations, and ground-truth result sets verified",
-      "elapsed_ms": 819.4,
+      "elapsed_ms": 1205.0,
       "citations_valid": 1,
       "citations_invalid": 0,
       "verified_numbers": 1,
       "discrepancies": 0,
-      "answer": "The total sales revenue generated specifically by CloudSync is $243,784.17 [[Q1:R1]].",
+      "answer": "The model's explanation did not pass verification. The database returned 218102223885.0001 [[Q1:R1]]. Inspect the executed SQL for the filters and calculation.",
       "executed_sql": [
-        "SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'CloudSync'"
+        "SELECT SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)) FROM LINEITEM"
       ],
       "query_ids": [
-        "01c7ce9a-000e-16bc-0002-b6f2000120ca"
-      ]
+        "01c7d005-000e-1619-0000-0002b6f2c441"
+      ],
+      "ground_truth_sql": "SELECT ROUND(SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)), 2) AS net_revenue\nFROM LINEITEM;\n",
+      "ground_truth_query_id": "01c7d005-000e-1673-0002-b6f20001f05a",
+      "ground_truth_rows": [
+        [
+          "218102223885.00"
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT))"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
+    },
+    {
+      "id": "TPCH_ORDERS_WITH_LINE_ITEMS",
+      "suite": "tpch",
+      "question": "How many distinct orders have at least one line item?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 923.7,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total number of distinct orders that have at least one line item is 1,500,000 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(DISTINCT T1.L_ORDERKEY) FROM LINEITEM AS T1"
+      ],
+      "query_ids": [
+        "01c7d005-000e-16d0-0002-b6f20001a0f2"
+      ],
+      "ground_truth_sql": "SELECT COUNT(DISTINCT O_ORDERKEY) AS order_count\nFROM ORDERS\nJOIN LINEITEM ON O_ORDERKEY = L_ORDERKEY;\n",
+      "ground_truth_query_id": "01c7d005-000e-16cf-0002-b6f20001b106",
+      "ground_truth_rows": [
+        [
+          1500000
+        ]
+      ],
+      "agent_results": [
+        {
+          "columns": [
+            "COUNT(DISTINCT T1.L_ORDERKEY)"
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      ],
+      "validation_queries": [],
+      "tool_failures": []
     }
   ]
 }
