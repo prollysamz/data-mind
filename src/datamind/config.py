@@ -154,6 +154,10 @@ class AgentConfig(BaseModel):
     dynamic_few_shot: bool = False
     execution_guided_repair: bool = True
     self_consistency: bool = False
+    # Screen questions against the semantic model for ambiguity / missing attributes
+    answerability_check: bool = True
+    # When the schema screen is inconclusive, ask the LLM for a short structured verdict
+    answerability_llm_fallback: bool = True
 
 
 class RetrievalConfig(BaseModel):

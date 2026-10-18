@@ -9,6 +9,7 @@ from datamind.adapters.duckdb_adapter import DuckDBAdapter
 from datamind.agent.evidence import EvidenceStore
 from datamind.agent.orchestrator import AgentOrchestrator
 from datamind.agent.verifier import verify_citations
+from datamind.config import AgentConfig
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
 
@@ -196,6 +197,8 @@ def test_reject_fabricated_citation(test_setup):
         retriever=retriever,
         semantic_model=semantic_model,
         evidence_store=evidence_store,
+        # The script drives the agent loop; keep the answerability screen schema-only.
+        config=AgentConfig(answerability_llm_fallback=False),
     )
 
     result = orchestrator.run("Fake query")

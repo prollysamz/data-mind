@@ -9,6 +9,10 @@ Analyzes executed SQL queries against the Semantic Model AST to catch
 5. Unrequested Grouping: GROUP BY on a dimension the question never mentions
    (e.g. per-product rows for "total revenue for each month").
 
+Checks 1 and 2 take their rules from the semantic model: 1-to-many pairs from its joins
+(explicit `relationship`, or inferred from declared primary keys) and filters from `default_filters`
+declared on tables. A linter built without a model skips them.
+
 Downgrades verification badge to "Partially verified" with plain-language diagnostic reasons.
 """
 
@@ -205,7 +209,14 @@ class QueryLinter:
         if year_matches:
             date_range.extend([f"Year {y}" for y in sorted(set(year_matches))])
         if "between" in where_sql_lower or ">" in where_sql_lower or "<" in where_sql_lower:
-            for part in re.findall(r"(?:order_purchase_timestamp|created_at|date)\s*(?:between|[><=]+)\s*[^)\n]+", where_sql_lower):
+            date_cols = {"date"} | {
+                c.name.lower()
+                for t in (self.semantic_model.tables if self.semantic_model else [])
+                for c in t.columns
+                if re.search(r"date|time", c.type.lower())
+            }
+            date_alt = "|".join(re.escape(c) for c in sorted(date_cols, key=len, reverse=True))
+            for part in re.findall(rf"(?:{date_alt})\s*(?:between|[><=]+)\s*[^)\n]+", where_sql_lower):
                 date_range.append(part.strip())
 
         limit_val: int | None = None
@@ -219,19 +230,14 @@ class QueryLinter:
         # ----------------------------------------------------------------------
         # Check A: Join Fan-Out Detection
         # ----------------------------------------------------------------------
-        one_to_many_pairs = [
-            ("olist_orders", "olist_order_items"),
-            ("olist_orders", "olist_order_payments"),
-            ("olist_customers", "olist_orders"),
-        ]
+        one_to_many = self.semantic_model.one_to_many_joins() if self.semantic_model else []
 
-        for parent, child in one_to_many_pairs:
+        for parent, child, parent_keys in one_to_many:
             if parent in tables and child in tables:
                 for agg in ast.find_all((exp.Count, exp.Sum)):
                     agg_sql = agg.sql().lower()
                     is_distinct = isinstance(agg.this, exp.Distinct) if hasattr(agg, "this") else False
-                    is_parent_key = ("order_id" in agg_sql and parent == "olist_orders") or \
-                                    ("customer_id" in agg_sql and parent == "olist_customers")
+                    is_parent_key = any(re.search(rf"\b{re.escape(k)}\b", agg_sql) for k in parent_keys)
 
                     if is_parent_key and not is_distinct:
                         findings.append(
@@ -250,22 +256,36 @@ class QueryLinter:
         # Check B: Default-Filter Echo Check
         # ----------------------------------------------------------------------
         q_lower = question.lower()
-        exempt_keywords = ["canceled", "cancelled", "unavailable", "invoiced", "shipped", "processing", "status", "all orders", "broken down by status"]
-        is_exempt = any(k in q_lower for k in exempt_keywords)
-
-        if "olist_orders" in tables and not is_exempt:
-            has_delivered_filter = ("order_status" in where_sql_lower and "delivered" in where_sql_lower) or \
-                                  ("delivered" in where_sql_lower)
-            if not has_delivered_filter:
+        q_words = set(re.findall(r"[a-z0-9]+", q_lower))
+        for table_def in (self.semantic_model.tables if self.semantic_model else []):
+            if table_def.name.lower() not in tables:
+                continue
+            for dflt in table_def.default_filters:
+                column = dflt.column.lower()
+                # Asking about the filter column itself ("by status") or a declared exemption lifts the default
+                # (only parts that don't just repeat the table name: 'order' in olist_orders.order_status)
+                table_parts = set(re.split(r"[^a-z0-9]+", table_def.name.lower()))
+                name_parts = {
+                    p for p in re.split(r"[^a-z0-9]+", column)
+                    if p and p not in _GENERIC_COLUMN_PARTS and not _question_mentions(p, table_parts)
+                }
+                if any(_question_mentions(p, q_words) for p in name_parts) or any(
+                    t.lower() in q_lower for t in dflt.exempt_terms
+                ):
+                    continue
+                values = [v.lower() for v in dflt.values]
+                if column in where_sql_lower and (not values or any(v in where_sql_lower for v in values)):
+                    continue
+                wanted = " / ".join(f"'{v}'" for v in dflt.values) or "its declared default"
                 findings.append(
                     QueryLintFinding(
                         check_name="missing_default_filter",
                         severity="WARNING",
                         message=(
-                            "Default filter missing: Query includes 'olist_orders' but does not filter for "
-                            "order_status = 'delivered'. Results may include canceled or incomplete orders."
-                        ),
-                        remediation="Add WHERE order_status = 'delivered' in accordance with semantic model defaults.",
+                            f"Default filter missing: Query includes '{table_def.name}' but does not filter for "
+                            f"{dflt.column} = {wanted}. {dflt.description}"
+                        ).strip(),
+                        remediation=f"Add WHERE {dflt.column} = {wanted} in accordance with semantic model defaults.",
                     )
                 )
 

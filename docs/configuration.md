@@ -52,6 +52,8 @@ guardrails:
 agent:
   max_steps: 6
   max_sql_repairs: 2
+  answerability_check: true          # screen questions against the semantic model before any SQL
+  answerability_llm_fallback: true   # short JSON classification call when the screen is inconclusive
 
 # LLM inference endpoint
 llm:
@@ -66,6 +68,38 @@ llm:
 ```
 
 `thinking: false` sends `reasoning_effort: none` to local servers. Thinking tokens count against `max_tokens`, so with thinking on a small model can spend the whole completion budget reasoning and return an empty reply (`finish_reason=length`).
+
+### Answerability screen
+
+Before the agent loop, each new question is compared with a vocabulary built from the semantic model (table, column and metric names and descriptions):
+
+- names nothing measurable ("How are the numbers looking?") → a clarifying question whose examples are the model's metrics;
+- every content word matches the schema → straight to the SQL agent, no extra call;
+- some words don't match → one short classification call to the orchestrator model returns `answerable` / `unanswerable` / `ambiguous`. A refusal is only accepted when it names at least one of the unmatched words; clarification only when nothing in the question matched. If the call fails, the question is refused only when none of its words match the schema.
+
+Nothing here is dataset-specific: pointing `semantic_model` at another YAML changes what counts as answerable.
+
+### Semantic model keys used by the query linter
+
+The linter's fan-out and default-filter checks read their rules from the semantic model:
+
+```yaml
+tables:
+  - name: orders
+    primary_key: [order_id]          # marks the "one" side of joins on order_id
+    default_filters:                 # optional; flagged when a query on this table omits it
+      - column: order_status
+        values: [delivered]
+        description: Revenue counts delivered orders only.
+        exempt_terms: [canceled, shipped]   # question words that lift the default
+joins:
+  - from_table: order_items
+    to_table: orders
+    on_condition: order_items.order_id = orders.order_id
+    relationship: many_to_one        # optional; inferred from primary keys when omitted
+```
+
+Without primary keys (or `relationship`) on a join, fan-out can't be judged for it and the check is skipped; tables without `default_filters` get no default-filter check. A question that mentions the filter column itself (e.g. "by status") also lifts the default.
 
 ---
 

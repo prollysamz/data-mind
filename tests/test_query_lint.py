@@ -2,10 +2,23 @@
 
 import pytest
 from datamind.guardrails.query_lint import QueryLinter, AssumptionsCard, QueryLintFinding
+from datamind.semantic.loader import load_semantic_model
+from datamind.semantic.model import (
+    ColumnDef,
+    DefaultFilterDef,
+    JoinDef,
+    SemanticModel,
+    TableDef,
+)
 
 
-def test_join_fan_out_detection():
-    linter = QueryLinter()
+@pytest.fixture(scope="module")
+def olist_model():
+    return load_semantic_model("examples/olist/semantic_model.yaml")
+
+
+def test_join_fan_out_detection(olist_model):
+    linter = QueryLinter(olist_model)
 
     # Negative case: Aggregating order_id without DISTINCT across 1-to-many join
     bad_sql = """
@@ -33,8 +46,8 @@ def test_join_fan_out_detection():
     assert "join_fan_out" not in check_names
 
 
-def test_default_filter_echo():
-    linter = QueryLinter()
+def test_default_filter_echo(olist_model):
+    linter = QueryLinter(olist_model)
 
     # Negative case: Querying orders without order_status = 'delivered' on general query
     bad_sql = "SELECT order_id, order_purchase_timestamp FROM olist_orders;"
@@ -145,3 +158,68 @@ def test_requested_grouping_is_not_flagged():
     for sql, question in cases:
         findings, _ = QueryLinter().lint_query(sql, question=question)
         assert not [f for f in findings if f.check_name == "unrequested_grouping"], (sql, question)
+
+
+def _toy_model(**join_kwargs) -> SemanticModel:
+    """A non-Olist schema: accounts 1-to-many invoices, invoices default to state = 'posted'."""
+    return SemanticModel(
+        tables=[
+            TableDef(
+                name="accounts",
+                primary_key=["acct_no"],
+                columns=[ColumnDef(name="acct_no", type="INTEGER"), ColumnDef(name="region", type="VARCHAR")],
+            ),
+            TableDef(
+                name="invoices",
+                columns=[
+                    ColumnDef(name="invoice_no", type="INTEGER", is_primary_key=True),
+                    ColumnDef(name="acct_no", type="INTEGER"),
+                    ColumnDef(name="state", type="VARCHAR"),
+                    ColumnDef(name="issued_on", type="DATE"),
+                ],
+                default_filters=[DefaultFilterDef(column="state", values=["posted"], exempt_terms=["draft"])],
+            ),
+        ],
+        joins=[JoinDef(from_table="invoices", to_table="accounts",
+                       on_condition="invoices.acct_no = accounts.acct_no", **join_kwargs)],
+    )
+
+
+def test_one_to_many_inferred_from_primary_keys():
+    assert _toy_model().one_to_many_joins() == [("accounts", "invoices", {"acct_no"})]
+
+
+def test_explicit_relationship_overrides_inference():
+    model = _toy_model(relationship="one_to_one")
+    assert model.one_to_many_joins() == []
+
+
+def test_fan_out_uses_model_joins_on_other_schema():
+    linter = QueryLinter(_toy_model())
+    sql = "SELECT COUNT(a.acct_no) FROM accounts a JOIN invoices i ON a.acct_no = i.acct_no WHERE i.state = 'posted'"
+    findings, _ = linter.lint_query(sql, question="How many accounts have invoices?")
+    assert [f.check_name for f in findings] == ["join_fan_out"]
+
+    sql_ok = sql.replace("COUNT(a.acct_no)", "COUNT(DISTINCT a.acct_no)")
+    findings, _ = linter.lint_query(sql_ok, question="How many accounts have invoices?")
+    assert findings == []
+
+
+def test_default_filter_from_model_on_other_schema():
+    linter = QueryLinter(_toy_model())
+    sql = "SELECT SUM(invoice_no) FROM invoices"
+    findings, _ = linter.lint_query(sql, question="Total invoices this year")
+    assert any(f.check_name == "missing_default_filter" and "state" in f.message for f in findings)
+
+    for question in ("Invoices broken down by state", "How many draft invoices are there?"):
+        findings, _ = linter.lint_query(sql, question=question)
+        assert not any(f.check_name == "missing_default_filter" for f in findings), question
+
+    findings, _ = linter.lint_query(sql + " WHERE state = 'posted'", question="Total invoices this year")
+    assert not any(f.check_name == "missing_default_filter" for f in findings)
+
+
+def test_no_model_means_no_schema_specific_checks():
+    sql = "SELECT COUNT(o.order_id) FROM olist_orders o JOIN olist_order_items i ON o.order_id = i.order_id"
+    findings, _ = QueryLinter().lint_query(sql, question="Total orders")
+    assert not any(f.check_name in ("join_fan_out", "missing_default_filter") for f in findings)

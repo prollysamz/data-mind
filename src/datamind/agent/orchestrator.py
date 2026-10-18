@@ -8,6 +8,13 @@ import logging
 from typing import Any
 
 from datamind.adapters.base import DBAdapter
+from datamind.agent.answerability import (
+    AMBIGUOUS,
+    UNANSWERABLE,
+    assess_question,
+    clarification_message,
+    refusal_message,
+)
 from datamind.agent.evidence import EvidenceStore
 from datamind.agent.prompts import build_system_prompt
 from datamind.agent.tools import (
@@ -70,56 +77,6 @@ class AgentOrchestrator:
             dialect=db_adapter.dialect,
         )
 
-    def _check_unanswerable(self, question: str) -> str | None:
-        """Classify if user query asks for unrecorded attributes or external data (schema limitation)."""
-        q = question.lower()
-        if any(k in q for k in ["profit margin", "wholesale", "cogs", "cost of goods"]):
-            return "This dataset does not contain wholesale product costs (COGS) or net profit margin data."
-        if any(k in q for k in ["cvv", "credit card numbers", "unmasked credit card", "security code"]):
-            return "For security and PCI compliance reasons, unmasked credit card numbers and CVV security codes are not stored in the database."
-        if any(k in q for k in ["salary", "compensation", "employee payroll", "service representatives"]):
-            return "Employee salary and compensation data is not available in the customer and orders database."
-        if any(k in q for k in ["gps coordinates", "latitude longitude", "fulfillment center"]):
-            return "Fulfillment center GPS coordinates and warehouse geolocation data are not present in this database."
-        if any(k in q for k in ["demographic", "gender", "age of buyer", "buyer age"]):
-            return "Customer demographic attributes such as age and gender are not recorded in this dataset."
-        if any(k in q for k in ["competitor", "amazon brazil", "competitor listing"]):
-            return "External competitor pricing and Amazon Brazil listing data is not present in the internal database."
-        return None
-
-    def _is_ambiguous(self, question: str) -> bool:
-        """Classify if user query is underspecified or ambiguous (Section 8.3 Planner)."""
-        q = question.strip().lower()
-        ambiguous_patterns = [
-            "how are the numbers looking",
-            "how are numbers looking",
-            "how's business",
-            "how is business",
-            "show me the numbers",
-            "what are the numbers",
-            "what's going on",
-            "what is going on",
-            "how are we doing",
-            "tell me about the data",
-            "show data",
-            "give me numbers",
-            "how are things",
-            "status update on everything",
-            "status update",
-            "performance update",
-            "any updates",
-            "overall situation",
-            "overview of recent trends",
-            "how are our metrics",
-            "give me an overview",
-            "how is everything looking",
-            "top products",
-            "best sellers",
-            "sales perform recently",
-            "what was our revenue in 2017",
-        ]
-        return any(pat in q for pat in ambiguous_patterns)
-
     def run(
         self,
         question: str,
@@ -131,39 +88,30 @@ class AgentOrchestrator:
         if not conversation_history:
             self.evidence_store.clear()
 
-        # Section 8.3 Planner: Handle ambiguous queries by asking for clarification
-        if not conversation_history and self._is_ambiguous(question):
-            clarification_msg = (
-                "Could you please clarify which specific numbers you would like to examine? "
-                "For example: total sales revenue across all products, month-over-month revenue decline, "
-                "product catalog pricing, or customer support ticket breakdown?"
+        # Section 8.3 Planner: screen the question against the semantic model before any SQL.
+        # Ambiguous questions get a clarifying question; questions about attributes the
+        # schema does not record get a limitation statement.
+        if not conversation_history and self.config.answerability_check:
+            assessment = assess_question(
+                question,
+                self.semantic_model,
+                llm_client=self.llm_client if self.config.answerability_llm_fallback else None,
             )
-            report = verify_citations(clarification_msg, self.evidence_store, self.semantic_model)
-            return AgentResult(
-                question=question,
-                answer=clarification_msg,
-                evidence_store=self.evidence_store,
-                citation_report=report,
-                turns=1,
-                success=True,
-                lane="clarification",
-                messages=[{"role": "assistant", "content": clarification_msg}],
-            )
-
-        # Section 8.3 Planner: Handle unanswerable schema limitations
-        if not conversation_history:
-            unans_msg = self._check_unanswerable(question)
-            if unans_msg:
-                report = verify_citations(unans_msg, self.evidence_store, self.semantic_model)
+            if assessment.verdict in (AMBIGUOUS, UNANSWERABLE):
+                if assessment.verdict == AMBIGUOUS:
+                    msg, lane = clarification_message(self.semantic_model), "clarification"
+                else:
+                    msg, lane = refusal_message(assessment, self.semantic_model), "schema_limitation_refusal"
+                report = verify_citations(msg, self.evidence_store, self.semantic_model)
                 return AgentResult(
                     question=question,
-                    answer=unans_msg,
+                    answer=msg,
                     evidence_store=self.evidence_store,
                     citation_report=report,
                     turns=1,
                     success=True,
-                    lane="schema_limitation_refusal",
-                    messages=[{"role": "assistant", "content": unans_msg}],
+                    lane=lane,
+                    messages=[{"role": "assistant", "content": msg}],
                 )
 
         # Apply schema pruning and dynamic few-shot if configured

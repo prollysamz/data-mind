@@ -3,6 +3,7 @@
 from datamind.semantic.loader import load_semantic_model
 from datamind.semantic.model import (
     ColumnDef,
+    DefaultFilterDef,
     JoinDef,
     MetricDef,
     SemanticModel,
@@ -12,6 +13,7 @@ from datamind.semantic.model import (
 
 __all__ = [
     "ColumnDef",
+    "DefaultFilterDef",
     "JoinDef",
     "MetricDef",
     "SemanticModel",

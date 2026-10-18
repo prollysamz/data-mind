@@ -8,6 +8,7 @@ import yaml
 
 from datamind.semantic.model import (
     ColumnDef,
+    DefaultFilterDef,
     JoinDef,
     MetricDef,
     SemanticModel,
@@ -34,6 +35,7 @@ def load_semantic_model(yaml_path: str | Path) -> SemanticModel:
                 description=t_data.get("description", ""),
                 columns=cols,
                 primary_key=t_data.get("primary_key", []),
+                default_filters=[DefaultFilterDef(**f) for f in t_data.get("default_filters", [])],
             )
         )
 

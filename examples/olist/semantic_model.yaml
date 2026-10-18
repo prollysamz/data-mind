@@ -11,6 +11,12 @@ tables:
     description: >
       Master orders table containing order status and fulfillment lifecycle timestamps.
       One row per order (99,441 orders).
+    primary_key: [order_id]
+    default_filters:
+      - column: order_status
+        values: [delivered]
+        description: Revenue, delivery and customer totals count delivered orders only.
+        exempt_terms: [canceled, cancelled, unavailable, invoiced, shipped, processing, created, approved, all orders]
     columns:
       - name: order_id
         type: VARCHAR
@@ -44,6 +50,7 @@ tables:
     description: >
       Line-item detail for items included in each order (112,650 items).
       Orders may contain multiple items. Many-to-one relationship with olist_orders.
+    primary_key: [order_id, order_item_id]
     columns:
       - name: order_id
         type: VARCHAR
@@ -71,6 +78,7 @@ tables:
     description: >
       Payment transaction details for orders (103,886 payment records).
       Customers may pay across multiple sequential payment methods (credit_card, boleto, voucher, debit_card).
+    primary_key: [order_id, payment_sequential]
     columns:
       - name: order_id
         type: VARCHAR
@@ -119,6 +127,7 @@ tables:
     description: >
       Customer information and location (99,441 records).
       Maps customer_id (per order) to customer_unique_id (person).
+    primary_key: [customer_id]
     columns:
       - name: customer_id
         type: VARCHAR
@@ -140,6 +149,7 @@ tables:
     description: >
       Product catalog details (32,951 products).
       Contains product category, dimensions, photo counts, and weight.
+    primary_key: [product_id]
     columns:
       - name: product_id
         type: VARCHAR
@@ -172,6 +182,7 @@ tables:
   - name: olist_sellers
     description: >
       Merchant sellers fulfilling orders on the Olist marketplace (3,095 sellers).
+    primary_key: [seller_id]
     columns:
       - name: seller_id
         type: VARCHAR
@@ -189,6 +200,7 @@ tables:
   - name: product_category_name_translation
     description: >
       Translation dictionary mapping Portuguese product categories to English (71 categories).
+    primary_key: [product_category_name]
     columns:
       - name: product_category_name
         type: VARCHAR
