@@ -8,7 +8,8 @@ DataMind incorporates and interfaces with open-source software and public benchm
 
 DataMind is built to support the **Gemma** family of open models (including Gemma 2B, 7B, 9B, 26B, and 31B variants) created by Google DeepMind.
 
-- **Terms of Use:** Gemma is provided under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+- **Gemma 4 (the tested model, `gemma4:e2b`):** Apache License 2.0, as shipped with the weights (`ollama show gemma4:e2b --license`).
+- **Earlier Gemma generations (Gemma 2/3/3n):** provided under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
 - **Prohibited Use:** DataMind complies with the Gemma Prohibited Use Policy.
 - **Redistribution Notice:** DataMind **does not** redistribute model weights, checkpoints, or proprietary binary artifacts. Users download and run models locally via Ollama or through authorized API endpoints.
 

@@ -72,7 +72,9 @@ pip install -e ".[dev]"
 python examples/primary/build_demo_data.py
 ```
 
-On Windows, `powershell -ExecutionPolicy Bypass -File scripts/setup_local.ps1` performs the environment creation, install, demo-data build, test run, and diagnostics in one step. The default local model is Google Gemma (`gemma4:e2b`, run `ollama pull gemma4:e2b` first); override it with `-Model <ollama-model>` to try another Gemma variant. Gemma is a hard requirement of the hackathon track, so non-Gemma models are for experimentation only.
+For exactly the tested dependency versions, install from the lockfile instead: `pip install -r requirements.lock && pip install -e . --no-deps`.
+
+On Linux/macOS, `bash scripts/setup_local.sh` does the whole setup (venv, pinned install, demo data, 16k-context Gemma model, `.env`, tests, diagnostics). On Windows, `powershell -ExecutionPolicy Bypass -File scripts/setup_local.ps1` performs the environment creation, install, demo-data build, test run, and diagnostics in one step. The default local model is Google Gemma (`gemma4:e2b`, run `ollama pull gemma4:e2b` first); override it with `-Model <ollama-model>` to try another Gemma variant. Gemma is a hard requirement of the hackathon track, so non-Gemma models are for experimentation only.
 
 ### 3. Verify System Diagnostics
 ```bash
@@ -95,6 +97,22 @@ python scripts/demo_data_change.py                          # DuckDB, on a tempo
 python scripts/demo_data_change.py datamind_snowflake.yaml  # Snowflake
 ```
 Asks the same question before and after inserting one sales row, then removes it. A recorded DuckDB run is in [eval/evidence/data_change_duckdb.txt](eval/evidence/data_change_duckdb.txt).
+
+---
+
+## Tested Environment
+
+| Component | Version / size |
+|---|---|
+| OS | Windows 11 Home (build 26300) |
+| CPU / RAM | Intel Core i9-13900HX / 16 GB |
+| GPU | NVIDIA GeForce RTX 4070 Laptop GPU (8 GB VRAM) |
+| Python | 3.11.9 (dependencies pinned in [requirements.lock](requirements.lock)) |
+| Ollama | 0.40.1 |
+| Model | `gemma4:e2b` (Gemma 4 E2B, 4.6B parameters, Q4_K_M, 4.6 GB download; Apache-2.0), run as `gemma4-e2b-16k` with `num_ctx 16384` |
+| Data | DuckDB 1.5.6 (local); Snowflake trial account (cloud backend) |
+
+Business-suite questions took about 1-5 s each with the model on this GPU. The Linux/macOS setup script is provided but has not been run on those platforms.
 
 ---
 

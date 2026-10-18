@@ -25,7 +25,8 @@ try {
 
     $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
     & $venvPython -m pip install --upgrade pip setuptools wheel
-    & $venvPython -m pip install -e ".[dev]"
+    & $venvPython -m pip install -r requirements.lock
+    & $venvPython -m pip install -e . --no-deps
     & $venvPython "examples\primary\build_demo_data.py"
 
     $ctxModel = ($Model -replace '[:/]', '-') + "-16k"
