@@ -28,9 +28,13 @@ DataMind is architected from the ground up to support **100% local, offline, and
    ```
 2. **Gemma Model with 16k Context:**
    ```bash
-   ollama run gemma4:e2b
+   ollama pull gemma4:e2b
+   printf 'FROM gemma4:e2b
+PARAMETER num_ctx 16384
+' > Modelfile
+   ollama create gemma4-e2b-16k -f Modelfile
    ```
-   DataMind automatically passes `{"num_ctx": 16384}` in request options to ensure the full context window is active without requiring manual model re-baking.
+   Then set `LLM_ORCHESTRATOR_MODEL=gemma4-e2b-16k` (and `LLM_FAST_MODEL`). Ollama's OpenAI-compatible endpoint ignores per-request `num_ctx`, so without this the context window stays at 4,096 tokens and multi-step answers are cut off (`finish_reason=length`). `datamind doctor` checks for this.
 
 ---
 

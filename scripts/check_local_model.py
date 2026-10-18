@@ -1,5 +1,6 @@
 """Local model speed benchmark and GPU/CPU inspection for Gate G0."""
 
+import argparse
 import json
 import shutil
 import subprocess
@@ -7,6 +8,8 @@ import sys
 import time
 import urllib.request
 from openai import OpenAI
+
+from datamind.config import load_config
 
 
 def get_ollama_ps() -> str:
@@ -31,8 +34,14 @@ def get_ollama_ps() -> str:
 
 
 def main() -> int:
-    base_url = "http://localhost:11434/v1"
-    model = "gemma4:e2b"
+    parser = argparse.ArgumentParser(description="Benchmark the configured local Ollama model")
+    parser.add_argument("--model", help="Override the configured orchestrator model")
+    parser.add_argument("--base-url", help="Override the configured LLM base URL")
+    args = parser.parse_args()
+
+    config = load_config()
+    base_url = args.base_url or config.llm.base_url
+    model = args.model or config.llm.orchestrator_model
     print(f"Benchmarking local model '{model}' at {base_url}...")
 
     client = OpenAI(base_url=base_url, api_key="ollama")

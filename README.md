@@ -2,7 +2,7 @@
 
 > An open-source, verifiable AI data agent powered by **Google Gemma** and **Snowflake / DuckDB**. Natural language questions answered with executable SQL, interactive provenance citations, deterministic numeric verification, and automated data uploads.
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Local First](https://img.shields.io/badge/execution-100%25%20local%20available-brightgreen.svg)](docs/local-only.md)
 [![Deterministic Verifier](https://img.shields.io/badge/verifier-100%25%20mutation%20catch-blueviolet.svg)](eval/mutation.py)
@@ -52,8 +52,8 @@ User Question (Browser UI / CLI / MCP)
 
 ### 1. Clone & Setup Virtual Environment
 ```bash
-git clone https://github.com/mohit-hackoctober/DataMind.git
-cd DataMind
+git clone https://github.com/DARK-1926/MAD-2-LABS.git
+cd MAD-2-LABS
 
 # Create virtual environment
 python -m venv .venv
@@ -67,13 +67,18 @@ python -m venv .venv
 ### 2. Install Package
 ```bash
 pip install -e ".[dev]"
+
+# Generate the deterministic local DuckDB fixture required by the app and tests
+python examples/primary/build_demo_data.py
 ```
+
+On Windows, `powershell -ExecutionPolicy Bypass -File scripts/setup_local.ps1` performs the environment creation, install, demo-data build, test run, and diagnostics in one step. The default local model is Google Gemma (`gemma4:e2b`, run `ollama pull gemma4:e2b` first); override it with `-Model <ollama-model>` to try another Gemma variant. Gemma is a hard requirement of the hackathon track, so non-Gemma models are for experimentation only.
 
 ### 3. Verify System Diagnostics
 ```bash
 datamind doctor
 ```
-Checks Python version, core dependencies, configuration, DuckDB, local Ollama (16k context window), client-side budget guard, and Snowflake connectivity.
+Checks Python version, core dependencies, configuration, DuckDB, local Ollama (verifies a >=8k context window is configured), client-side budget guard, and Snowflake connectivity.
 
 ### 4. Start the Interactive Web UI
 ```bash
@@ -91,8 +96,8 @@ All benchmark evaluations are deterministic, execute live against configured bac
 
 | Evaluation Suite | Question Count | Passed | Failed | Pass Rate | Provenance & Standard |
 |---|:---:|:---:|:---:|:---:|---|
-| **Olist Development Benchmark (`olist_dev.yaml`)** | **30** | **30** | **0** | **100.0%** | Real 100k-row Brazilian E-Commerce dataset; verified on DuckDB & Snowflake. |
-| **Business Suite (`business.yaml`)** | **21** | **21** | **0** | **100.0%** | Development tuning set; verified to the exact cent. |
+| **Olist Development Benchmark (`olist_dev.yaml`)** | **30** | — | — | **Under re-run** | Earlier 100% figure came from a hard-coded SQL lane that bypassed Gemma and has been removed (see [eval/HISTORY.md](eval/HISTORY.md) §E). To be re-run through Gemma on DuckDB and Snowflake. |
+| **Business Suite (`business.yaml`)** | **21** | **19-20** | **1-2** | **90.5-95.2%** | Synthetic DuckDB data, local `gemma4:e2b` with a 16k context window, three runs on 2026-10-18 after removing dev-set answers from the system prompt (20, 20, 19 of 21). Development tuning set, not a generalisation figure. `Q_MONTHLY_REVENUE_TREND` fails every run (groups by product as well as month); `Q_MIXED_REVENUE_SUPPORT` fails intermittently (invalid multi-CTE SQL, then document-only fallback). |
 | **Trust & Guardrails Suite (`trust.yaml`)** | **6** | **6** | **0** | **100.0%** | Planted numbers, DROP injections, Cartesian joins. |
 | **Automated Security Suite (`tests/test_security.py`)** | **50** | **50** | **0** | **100.0%** | Destructive SQL, CTE writes, file functions, Unicode, injection defenses. |
 | **Deterministic Verifier Mutation Suite** | **73** | **73** | **0** | **100.0%** | Comprehensive mutation suite (12 failure classes caught 100%). |

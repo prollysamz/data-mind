@@ -6,7 +6,7 @@ This guide walks you through setting up DataMind from a clean repository.
 
 - Python 3.11+
 - Git
-- Local Ollama with `gemma4:e2b` (for offline testing) OR Amazon Bedrock / OpenAI-compatible endpoint with Gemma models.
+- Local Ollama with a Gemma model (`gemma4:e2b` by default) OR an OpenAI-compatible endpoint serving Gemma.
 - (Optional) Snowflake account credentials with read-only access.
 
 ---
@@ -27,6 +27,15 @@ python -m pip install --upgrade pip
 
 # Install in editable mode with dev extras
 pip install -e ".[dev]"
+
+# Generate the deterministic local database used by the default configuration
+python examples/primary/build_demo_data.py
+```
+
+For a one-command Windows setup, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup_local.ps1
 ```
 
 *Note for PowerShell:* If script execution is restricted on your system, run:
@@ -97,17 +106,22 @@ datamind --help
 
 ---
 
-## 5. Local Ollama Context Window Configuration
+## 5. Local Ollama Model Configuration
 
-By default, Ollama initializes models with a 2,048 or 4,096 token context window, which can cause multi-turn analytical reasoning to truncate (`finish_reason=length`). DataMind automatically passes `{"options": {"num_ctx": 16384}}` in its API requests, but for optimal local performance, configure the 16k context window directly:
+The model must be a Gemma variant that supports OpenAI-compatible tool calls. The setup script writes the selected model to the ignored `.env` file. To use the default:
 
 ```bash
-# Export existing model definition
-ollama show gemma4:e2b --modelfile > Modelfile
-
-# Add the 16k context parameter:
-# PARAMETER num_ctx 16384
-
-# Re-create the model definition
-ollama create gemma4:e2b -f Modelfile
+ollama pull gemma4:e2b
+python scripts/check_llm.py --model gemma4:e2b
 ```
+
+**Context window (required).** Ollama's OpenAI-compatible endpoint ignores per-request `num_ctx`, so the default 4,096-token window cuts off multi-step answers (`finish_reason=length`). Bake a 16k variant (the Windows setup script does this for you):
+
+```bash
+printf 'FROM gemma4:e2b
+PARAMETER num_ctx 16384
+' > Modelfile
+ollama create gemma4-e2b-16k -f Modelfile
+```
+
+Then use `LLM_ORCHESTRATOR_MODEL=gemma4-e2b-16k` and `LLM_FAST_MODEL=gemma4-e2b-16k` (or export `OLLAMA_CONTEXT_LENGTH=16384` before `ollama serve`). `datamind doctor` flags a missing context setting. Validate tool calling and JSON output with `scripts/check_llm.py`. Thinking mode is off by default for local servers (`llm.thinking: false`).
