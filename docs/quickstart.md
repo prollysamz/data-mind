@@ -7,7 +7,7 @@ This guide walks you through setting up DataMind from a clean repository.
 - Python 3.11+
 - Git
 - Local Ollama with a Gemma model (`gemma4:e2b` by default) OR an OpenAI-compatible endpoint serving Gemma.
-- (Optional) Snowflake account credentials with read-only access.
+- A Snowflake account for the Snowflake backend (required for the hackathon track; see [snowflake.md](snowflake.md)). The local DuckDB backend needs no account.
 
 ---
 

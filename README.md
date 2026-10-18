@@ -86,6 +86,16 @@ datamind serve --enable-uploads --port 8080
 ```
 Open **`http://localhost:8080`** in your browser.
 
+### 5. Run on Snowflake (required for the hackathon track)
+Follow [docs/snowflake.md](docs/snowflake.md): one bootstrap script creates the warehouse, database, read-only and loader roles, and a credit cap; then `datamind serve --config datamind_snowflake.yaml` runs every query in Snowflake and shows its Snowflake query ID.
+
+### 6. See the answer follow the data
+```bash
+python scripts/demo_data_change.py                          # DuckDB, on a temporary copy
+python scripts/demo_data_change.py datamind_snowflake.yaml  # Snowflake
+```
+Asks the same question before and after inserting one sales row, then removes it. A recorded DuckDB run is in [eval/evidence/data_change_duckdb.txt](eval/evidence/data_change_duckdb.txt).
+
 ---
 
 ## Evaluation & Empirical Benchmarks

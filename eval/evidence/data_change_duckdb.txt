@@ -1,0 +1,17 @@
+# 2026-10-18T11:19:40+05:30 commit c8a0f72 (+ uncommitted demo script)
+Backend: DuckDB (examples/primary/demo.duckdb) | Model: gemma4-e2b-16k
+Question: What was the total sales revenue for CloudSync in May 2026?
+
+=== BEFORE the data change ===
+The total sales revenue for CloudSync for the month of May 2026 was $57,493.80 [[Q1:R1]].
+  [Q1] query_id=ce21fe2d-1193-4250-baef-3ede5090a80d  rows=[(Decimal('57493.80'),)]
+      SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'CloudSync' AND s.order_month = '2026-05-01'
+  citations clean: True
+
+>>> Inserted one CloudSync sales line of $50,000.00 (order_id 990001) for May 2026
+
+=== AFTER the data change ===
+The total sales revenue for CloudSync for the month of May 2026 was $107,493.80 [[Q1:R1]].
+  [Q1] query_id=5467613f-a1cb-4374-aa57-437eb9ff97ec  rows=[(Decimal('107493.80'),)]
+      SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'CloudSync' AND s.order_month = '2026-05-01'
+  citations clean: True
