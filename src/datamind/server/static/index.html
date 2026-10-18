@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/index.css">
   <script src="/smoke.js" defer></script>
   <script src="/conversations.js" defer></script>
+  <script src="/settings.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body data-view="empty">
@@ -29,6 +30,7 @@
         <button class="ghost-btn" type="button" id="paletteBtn" aria-label="Open command palette"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><span class="desktop-only">Search</span></button>
         <button class="ghost-btn desktop-only" type="button" id="catalogBtn">Data catalog</button>
         <button class="ghost-btn" type="button" id="uploadModalBtn" aria-label="Add data"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="desktop-only">Add data</span></button>
+        <button class="icon-btn" type="button" id="settingsBtn" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
       </div>
     </header>
 
@@ -158,6 +160,56 @@
       <div class="modal-body"><div class="upload-status" id="uploadStatus"></div><div class="dropzone" id="fileDropzone" tabindex="0"><input id="filePickerInput" type="file" accept=".csv,.parquet" hidden><strong>Drop a CSV or Parquet file here</strong><p>Your file stays in an isolated local session and can be deleted at any time.</p><button class="primary-btn" type="button" id="browseFilesBtn">Choose a file</button></div><div class="upload-progress" id="uploadProgress" hidden><span></span><p>Profiling columns and preparing a safe semantic model…</p></div><div class="upload-review" id="uploadReview" hidden><div class="upload-review-heading"><div><span class="label">Ready to review</span><h3 id="reviewTableName">Dataset</h3></div><span id="reviewTableStats"></span></div><div class="review-table-wrap"><table><thead><tr><th>Use</th><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody id="uploadColumnsTbody"></tbody></table></div><div class="modal-actions"><button class="ghost-btn" data-modal-close type="button">Cancel</button><button class="primary-btn" type="button" id="confirmUploadBtn">Activate dataset</button></div></div></div>
     </div>
   </div>
+  <div class="modal" id="settingsModal" hidden role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-card settings-card">
+      <div class="modal-header"><div><span class="label">Settings</span><h2 id="settingsTitle">Model provider</h2></div><button class="icon-button" data-modal-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      <form class="modal-body settings-body" id="settingsForm" autocomplete="off">
+        <div class="provider-options" role="radiogroup" aria-label="Model provider">
+          <label class="provider-option"><input type="radio" name="provider" value="local" checked><span><strong>Local model</strong><small>Runs on this machine through Ollama. Nothing leaves it.</small></span></label>
+          <label class="provider-option"><input type="radio" name="provider" value="openrouter"><span><strong>OpenRouter</strong><small>Use a free model through your OpenRouter key.</small></span></label>
+          <label class="provider-option"><input type="radio" name="provider" value="google"><span><strong>Google AI Studio</strong><small>Use Gemini directly with a Gemini API key.</small></span></label>
+        </div>
+        <div class="settings-panel" id="localPanel">
+          <p class="settings-note private-note">Data stays on this computer. Data Mind asks Ollama which models are installed and lets you choose one here.</p>
+          <label class="field" for="localModelSelect"><span>Installed model <small id="localModelCount"></small><button class="text-button" type="button" id="refreshLocalModelsBtn">Refresh list</button></span>
+            <select id="localModelSelect"><option value="">Loading local models…</option></select>
+          </label>
+          <p class="field-help">Start Ollama before refreshing. The list comes directly from <code>/api/tags</code> on your local Ollama service.</p>
+        </div>
+        <div class="settings-panel" id="openrouterPanel" hidden>
+          <p class="settings-note">With OpenRouter, your questions, the schema summary and the rows needed to answer are sent to OpenRouter and the model’s provider. Free models are rate limited, and some providers may log prompts.</p>
+          <label class="field" for="openrouterKeyInput"><span>API key</span>
+            <input id="openrouterKeyInput" type="password" spellcheck="false" autocomplete="off" placeholder="sk-or-…">
+          </label>
+          <p class="key-state" id="openrouterKeyState" hidden><span id="openrouterKeyStateText"></span><button class="text-button danger" type="button" id="removeOpenrouterKeyBtn">Remove key</button></p>
+          <p class="field-help">Create a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a>. It is saved in plaintext on this computer in <code>.datamind/settings.json</code> (excluded from Git), never returned to the browser. Protect access to this file.</p>
+          <label class="field" for="openrouterModelSelect"><span>Model <small id="openrouterModelCount"></small><button class="text-button" type="button" id="refreshOpenrouterModelsBtn">Refresh list</button></span>
+            <select id="openrouterModelSelect"><option value="">Choose a model…</option></select>
+          </label>
+          <p class="field-help">All currently free text models are listed, including multimodal models that accept text. Native tool calling is recommended; other models use text tool compatibility mode. Availability and free-tier quotas depend on OpenRouter.</p>
+        </div>
+        <div class="settings-panel" id="googlePanel" hidden>
+          <p class="settings-note">Questions, schema context and required rows are sent to Google when this provider is active. Usage follows the quota and billing attached to your Google AI Studio project.</p>
+          <label class="field" for="googleKeyInput"><span>Gemini API key <button class="text-button" type="button" id="loadGoogleModelsBtn">Load models</button></span>
+            <input id="googleKeyInput" type="password" spellcheck="false" autocomplete="off" placeholder="Enter your Gemini API key">
+          </label>
+          <p class="key-state" id="googleKeyState" hidden><span id="googleKeyStateText"></span><button class="text-button danger" type="button" id="removeGoogleKeyBtn">Remove key</button></p>
+          <p class="field-help">Create a key in <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>. It is stored locally in the same gitignored settings file and is never returned by this page.</p>
+          <label class="field" for="googleModelSelect"><span>Gemini model <small id="googleModelCount"></small></span>
+            <select id="googleModelSelect"><option value="">Enter a key, then load models…</option></select>
+          </label>
+          <p class="field-help">Data Mind fetches the compatible Gemini models available to this key. If you only add a key, the first available model is selected automatically.</p>
+        </div>
+        <p class="settings-status" id="settingsStatus" role="status" hidden></p>
+        <div class="modal-actions">
+          <button class="ghost-btn" type="button" id="testBtn" disabled title="Sends a tiny request using the active saved provider">Test provider</button>
+          <button class="ghost-btn" data-modal-close type="button">Cancel</button>
+          <button class="primary-btn" type="submit" id="saveSettingsBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

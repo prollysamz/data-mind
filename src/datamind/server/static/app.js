@@ -321,6 +321,7 @@ function openModal(modal) {
 
 function closeModal(modal) {
   if (!modal) return;
+  modal.querySelectorAll('input[type="password"]').forEach((input) => { input.value = ''; });
   modal.hidden = true;
   document.body.style.overflow = '';
 }

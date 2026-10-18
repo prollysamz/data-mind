@@ -2,6 +2,30 @@
 
 DataMind is configured via `datamind.yaml` with support for environment variable interpolation and strict environment variable overrides.
 
+## Web UI model providers
+
+Open the gear icon in the top-right corner to choose one of three providers:
+
+- **Local model** fetches the models installed in Ollama from its local `/api/tags` endpoint.
+  Select any installed model and refresh the list after pulling or deleting models.
+- **OpenRouter** accepts an OpenRouter API key and lists the text-capable models currently
+  advertised with zero prompt, completion, and request prices. Requests also carry a zero-price
+  ceiling so a model leaving the free catalogue fails instead of silently becoming paid.
+- **Google AI Studio** accepts a Gemini API key, fetches the compatible Gemini text models
+  available to that key, and uses Google's OpenAI-compatible endpoint. If only a key is saved,
+  Data Mind selects the first compatible model returned by Google.
+
+**Test provider** sends a small request through the active saved provider. The web selection
+applies to connected-data and uploaded-data questions, and does not alter CLI configuration or
+installed models. With OpenRouter or Google active, questions, schema information, required SQL
+rows, and retrieved documents may leave the machine. Review the provider's data policy first.
+
+Keys are stored in plaintext in the gitignored `.datamind/settings.json` and are never returned
+by the settings API. Protect access to this file. `DATAMIND_SETTINGS_PATH` changes its location.
+Environment alternatives are `OPENROUTER_API_KEY` and either `GOOGLE_API_KEY` or
+`GEMINI_API_KEY`. Removing a saved key does not remove an environment key. Failed saves leave
+the previous settings unchanged.
+
 ## Configuration Precedence
 
 DataMind enforces strict precedence:

@@ -19,6 +19,7 @@ from datamind.llm.budget import BudgetConfigError, BudgetExceeded
 from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
+from datamind.server.settings import SettingsStore
 from datamind.trust.chart_planner import plan_chart
 from datamind.uploads.manager import UploadError, UploadManager
 
@@ -176,12 +177,13 @@ def format_orchestrator_result(
     from datamind.llm.budget import CostGuard
     is_local = CostGuard.is_local_endpoint(orchestrator.llm_client.config.base_url)
     egress_ledger = {
-        "privacy_mode": "LOCAL_PRIVATE" if is_local else "CLOUD_METERED",
+        "privacy_mode": "LOCAL_PRIVATE" if is_local else "CLOUD_HOSTED",
         "is_air_gapped": is_local,
-        "total_rows_sent": 0,
-        "total_documents_sent": 0,
-        "summary": "Air-Gapped: 0 bytes left your machine (100% Local Execution)." if is_local else "Cloud Metered (Inspected by Egress Guard).",
-        "details": "Planner, retrieval, and narration ran locally. 0 result rows or document chunks were sent outbound.",
+        "total_rows_sent": 0 if is_local else None,
+        "total_documents_sent": 0 if is_local else None,
+        "summary": "Air-Gapped: 0 bytes left your machine (100% Local Execution)." if is_local else "Cloud inference: data sent to the configured model provider.",
+        "details": ("Planner, retrieval, and narration ran locally. 0 result rows or document chunks were sent outbound."
+                    if is_local else "Questions, schema, retrieved rows and documents may be sent to the model provider. Outbound counts are not measured."),
     }
 
     # Cryptographic Receipt Generation
@@ -242,12 +244,104 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
     config: AppConfig
     backend_name: str
     upload_manager: UploadManager
+    settings: SettingsStore
     agent_lock: threading.Lock = threading.Lock()
 
     def _is_allowed_host(self) -> bool:
         host_header = self.headers.get("Host", "")
         hostname = urlparse(f"//{host_header}").hostname
         return (hostname or "").lower() in {"localhost", "127.0.0.1", "::1"}
+
+    def _is_same_origin(self) -> bool:
+        """Browsers attach Origin to cross-site POSTs; settings writes must come from this page."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        return urlparse(origin).netloc == self.headers.get("Host")
+
+    def _send_provider_error(self, exc: Exception) -> bool:
+        """Turn model-provider failures into messages the user can act on."""
+        from openai import (
+            APIConnectionError,
+            APIStatusError,
+            AuthenticationError,
+            PermissionDeniedError,
+            RateLimitError,
+        )
+
+        from datamind.llm.google_ai import GoogleAIError
+        from datamind.llm.local_models import LocalModelError
+        from datamind.llm.openrouter import OpenRouterError
+
+        provider = self.settings.provider
+        provider_name = {"google": "Google AI", "openrouter": "OpenRouter", "local": "Ollama"}.get(
+            provider, "The model provider"
+        )
+        if isinstance(exc, OpenRouterError | GoogleAIError | LocalModelError):
+            self._send_json(exc.status, {"error_type": "provider_error", "error": str(exc)})
+        elif isinstance(exc, AuthenticationError | PermissionDeniedError):
+            self._send_json(401, {
+                "error_type": "provider_auth",
+                "error": f"{provider_name} rejected the API key. Update it in Settings.",
+            })
+        elif isinstance(exc, RateLimitError):
+            self._send_json(429, {
+                "error_type": "provider_rate_limit",
+                "error": f"{provider_name} rate limited this model. Wait a moment or pick another model in Settings.",
+            })
+        elif isinstance(exc, APIConnectionError):
+            self._send_json(502, {
+                "error_type": "provider_unreachable",
+                "error": f"Could not reach {provider_name}. Check the connection or choose another provider in Settings.",
+            })
+        elif isinstance(exc, APIStatusError):
+            self._send_json(502, {
+                "error_type": "provider_unavailable",
+                "error": f"{provider_name} could not serve this model (HTTP {exc.status_code}). Choose another model in Settings.",
+            })
+        else:
+            return False
+        return True
+
+    def _send_openrouter_error(self, exc: Exception) -> bool:
+        """Compatibility alias retained for callers from the earlier provider implementation."""
+        return self._send_provider_error(exc)
+
+    def _openrouter_client(self, *, saved_test: bool = False) -> Any:
+        from datamind.llm.openrouter import build_client
+        provider, key, model = self.settings.credentials()
+        if provider != "openrouter" and not saved_test:
+            return None
+        if not key or not model:
+            from datamind.llm.openrouter import OpenRouterError
+            raise OpenRouterError("OpenRouter needs a key and model. Update Settings or choose the local provider.", 400)
+        return build_client(key, model)
+
+    def _selected_client(
+        self,
+        *,
+        provider_override: str | None = None,
+        local_model_override: str | None = None,
+    ) -> LLMClient:
+        provider = provider_override or self.settings.provider
+        if provider == "openrouter":
+            from datamind.llm.openrouter import OpenRouterError
+
+            key, model = self.settings.openrouter_credentials()
+            if not key or not model:
+                raise OpenRouterError("OpenRouter needs a key and model. Update Settings.", 400)
+            return self._openrouter_client(saved_test=True)
+        if provider == "google":
+            from datamind.llm.google_ai import GoogleAIError, build_client
+
+            key, model = self.settings.google_credentials()
+            if not key or not model:
+                raise GoogleAIError("Google AI needs a Gemini API key and model. Update Settings.", 400)
+            return build_client(key, model)
+
+        model = local_model_override or self.settings.local_model or self.config.llm.orchestrator_model
+        local_config = self.config.llm.model_copy(update={"orchestrator_model": model})
+        return LLMClient(local_config)
 
     def _reject_untrusted_host(self) -> bool:
         if self._is_allowed_host():
@@ -271,6 +365,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
         self._set_cors_headers()
         self.end_headers()
         self.wfile.write(payload)
@@ -296,6 +391,28 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 "backend": self.backend_name,
                 "uploads_enabled": getattr(self, "upload_manager", None) is not None and self.upload_manager.enabled,
             })
+            return
+
+        if path == "/api/settings":
+            self._send_json(200, self.settings.public())
+            return
+
+        if path == "/api/openrouter/models":
+            from datamind.llm.openrouter import OpenRouterError, list_free_models
+            try:
+                refresh = "refresh=1" in (parsed.query or "")
+                self._send_json(200, {"models": list_free_models(force=refresh)})
+            except OpenRouterError as exc:
+                self._send_json(exc.status, {"error": str(exc)})
+            return
+
+        if path == "/api/local/models":
+            from datamind.llm.local_models import LocalModelError, list_models
+
+            try:
+                self._send_json(200, {"models": list_models(self.config.llm.base_url)})
+            except LocalModelError as exc:
+                self._send_json(exc.status, {"error": str(exc)})
             return
 
         if path == "/api/models":
@@ -324,13 +441,22 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                     f"What is the total count of records in {t.name}?" for t in semantic_model.tables[:3]
                 ]
 
-            from datamind.llm.budget import CostGuard
-            is_local = CostGuard.is_local_endpoint(self.config.llm.base_url)
-            privacy_indicator = "Local Only (Private)" if is_local else "Cloud Endpoint (Metered)"
+            provider = self.settings.provider
+            is_local = provider == "local"
+            model_name = self.settings.local_model or self.orchestrator.llm_client.config.orchestrator_model
+            privacy_indicator = "Local Only (Private)"
+            if provider == "openrouter":
+                is_local = False
+                model_name = self.settings.openrouter_model
+                privacy_indicator = "OpenRouter (cloud)"
+            elif provider == "google":
+                is_local = False
+                model_name = self.settings.google_model
+                privacy_indicator = "Google AI Studio (cloud)"
 
             self._send_json(200, {
                 "backend": self.backend_name,
-                "model_name": self.orchestrator.llm_client.config.orchestrator_model,
+                "model_name": model_name,
                 "semantic_model": semantic_model.name,
                 "default_currency": getattr(semantic_model, "default_currency", "USD"),
                 "currency_symbol": getattr(semantic_model, "currency_symbol", "$"),
@@ -403,6 +529,118 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    def _handle_settings(self, path: str, payload: dict[str, Any]) -> None:
+        from datamind.llm.google_ai import GoogleAIError
+        from datamind.llm.google_ai import list_models as list_google_models
+        from datamind.llm.local_models import LocalModelError
+        from datamind.llm.local_models import list_models as list_local_models
+        from datamind.llm.openrouter import OpenRouterError, list_free_models, validate_key
+        from datamind.server.settings import PROVIDERS
+
+        if path == "/api/google/models":
+            api_key = payload.get("google_api_key")
+            if api_key is not None and not isinstance(api_key, str):
+                self._send_json(400, {"error": "google_api_key must be a string"})
+                return
+            key = api_key.strip() if isinstance(api_key, str) else self.settings.google_api_key
+            try:
+                self._send_json(200, {"models": list_google_models(key, force=True)})
+            except GoogleAIError as exc:
+                self._send_json(exc.status, {"error": str(exc)})
+            return
+
+        if path == "/api/settings/test":
+            try:
+                reply = self._selected_client().chat(
+                    [{"role": "user", "content": "Reply with the single word OK."}], max_tokens=16
+                )
+                text = (reply.get("content") or "").strip()
+                if not text:
+                    self._send_json(502, {"success": False, "error": "The model returned an empty response. Try another model."})
+                    return
+                self._send_json(200, {"success": True, "response": text})
+            except Exception as exc:
+                if not self._send_provider_error(exc):
+                    self._send_json(502, {"success": False, "error": "Model test failed. Try another model."})
+            return
+
+        provider = payload.get("provider")
+        if provider is not None and provider not in PROVIDERS:
+            self._send_json(400, {"error": f"provider must be one of {list(PROVIDERS)}"})
+            return
+
+        fields = {
+            "local_model": payload.get("local_model"),
+            "openrouter_model": payload.get("openrouter_model"),
+            "openrouter_api_key": payload.get("openrouter_api_key"),
+            "google_model": payload.get("google_model"),
+            "google_api_key": payload.get("google_api_key"),
+        }
+        for name, value in fields.items():
+            if value is not None and not isinstance(value, str):
+                self._send_json(400, {"error": f"{name} must be a string"})
+                return
+            if isinstance(value, str):
+                fields[name] = value.strip()
+
+        resulting_provider = provider or self.settings.provider
+        local_model = fields["local_model"] if fields["local_model"] is not None else self.settings.local_model
+        openrouter_model = (
+            fields["openrouter_model"]
+            if fields["openrouter_model"] is not None
+            else self.settings.openrouter_model
+        )
+        openrouter_key = (
+            fields["openrouter_api_key"]
+            if fields["openrouter_api_key"] is not None
+            else self.settings.openrouter_api_key
+        )
+        google_model = (
+            fields["google_model"] if fields["google_model"] is not None else self.settings.google_model
+        )
+        google_key = (
+            fields["google_api_key"] if fields["google_api_key"] is not None else self.settings.google_api_key
+        )
+
+        try:
+            if fields["openrouter_api_key"]:
+                validate_key(openrouter_key)
+            if fields["openrouter_model"] is not None or resulting_provider == "openrouter":
+                if openrouter_model not in {model["id"] for model in list_free_models()}:
+                    self._send_json(400, {"error": "Only models OpenRouter lists as free can be selected."})
+                    return
+            google_models: list[dict[str, Any]] = []
+            if fields["google_api_key"] or fields["google_model"] is not None or resulting_provider == "google":
+                google_models = list_google_models(google_key, force=bool(fields["google_api_key"]))
+                if not google_model and google_models:
+                    google_model = google_models[0]["id"]
+                    fields["google_model"] = google_model
+                if google_model not in {model["id"] for model in google_models}:
+                    self._send_json(400, {"error": "Choose a Gemini model available to this Google AI Studio key."})
+                    return
+            if fields["local_model"] is not None:
+                local_models = list_local_models(self.config.llm.base_url)
+                if local_model not in {model["id"] for model in local_models}:
+                    self._send_json(400, {"error": "Choose a model currently installed in Ollama."})
+                    return
+        except (OpenRouterError, GoogleAIError, LocalModelError) as exc:
+            self._send_json(exc.status, {"error": str(exc)})
+            return
+
+        if resulting_provider == "openrouter" and not (openrouter_key and openrouter_model):
+            self._send_json(400, {"error": "OpenRouter needs an API key and a model before it can be used."})
+            return
+        if resulting_provider == "google" and not (google_key and google_model):
+            self._send_json(400, {"error": "Google AI needs a Gemini API key before it can be used."})
+            return
+
+        try:
+            self.settings.update(provider=provider, **fields)
+        except OSError:
+            self._send_json(500, {"error": "Settings could not be saved on this computer. Your previous settings are unchanged."})
+            return
+        self._send_json(200, self.settings.public())
+
     def do_POST(self) -> None:
         if self._reject_untrusted_host():
             return
@@ -431,6 +669,19 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": f"Invalid JSON body: {e}"})
             return
 
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "Request body must be a JSON object"})
+            return
+
+        # Settings and provider discovery are same-origin only: these requests can contain
+        # credentials and change where prompts are sent.
+        if path in ("/api/settings", "/api/settings/test", "/api/google/models"):
+            if not self._is_same_origin() or self.headers.get_content_type() != "application/json":
+                self._send_json(403, {"error": "Cross-origin settings changes are not allowed"})
+                return
+            self._handle_settings(path, payload)
+            return
+
         # 1. Primary Ask Endpoint
         if path == "/api/ask":
             question = payload.get("question", "").strip()
@@ -444,13 +695,13 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             from datamind.llm.models import ModelRegistry
             reg = ModelRegistry(self.config)
             selected_model: str | None = None
-            if model_id:
+            if model_id and self.settings.provider == "local":
                 valid, msg, _model_info = reg.validate_model_selection(model_id)
                 if not valid:
                     self._send_json(400, {"error": msg, "error_type": "invalid_model"})
                     return
                 selected_model = model_id
-            elif preset_id:
+            elif preset_id and self.settings.provider == "local":
                 preset = reg.get_preset(preset_id)
                 if preset:
                     target_m = preset.get("default_model")
@@ -481,8 +732,14 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             # One shared orchestrator serves the UI; its evidence store and model setting
             # are per-question state, so questions run one at a time.
             with self.agent_lock:
-                if selected_model:
-                    self.orchestrator.llm_client.config.orchestrator_model = selected_model
+                local_client = self.orchestrator.llm_client
+                try:
+                    selected_client = self._selected_client(local_model_override=selected_model)
+                except Exception as exc:
+                    if not self._send_provider_error(exc):
+                        self._send_json(502, {"error": "Could not initialize the selected model. Check Settings."})
+                    return
+                self.orchestrator.llm_client = selected_client
                 try:
                     result = self.orchestrator.run(question, max_turns=max_turns)
                 except BudgetExceeded as e:
@@ -502,16 +759,24 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                     })
                     return
                 except Exception as e:
+                    if self._send_provider_error(e):
+                        return
                     logger.exception("Agent execution error")
                     self._send_json(500, {"error": f"Execution error: {e}"})
                     return
+                finally:
+                    self.orchestrator.llm_client = local_client
 
-                response_data = format_orchestrator_result(
-                    result=result,
-                    orchestrator=self.orchestrator,
-                    backend_name=self.backend_name,
-                    is_permissive=is_permissive,
-                )
+                self.orchestrator.llm_client = selected_client
+                try:
+                    response_data = format_orchestrator_result(
+                        result=result,
+                        orchestrator=self.orchestrator,
+                        backend_name=self.backend_name,
+                        is_permissive=is_permissive,
+                    )
+                finally:
+                    self.orchestrator.llm_client = local_client
             self._send_json(200, response_data)
             return
 
@@ -821,6 +1086,7 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                     return
 
                 try:
+                    orchestrator.llm_client = self._selected_client()
                     result = orchestrator.run(question, max_turns=max_turns)
                     response_data = format_orchestrator_result(
                         result=result,
@@ -832,6 +1098,8 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                 except BudgetExceeded as e:
                     self._send_json(429, {"error_type": "budget_exceeded", "error": str(e)})
                 except Exception as e:
+                    if self._send_provider_error(e):
+                        return
                     logger.exception("Session ask error")
                     self._send_json(500, {"error": f"Execution error: {e}"})
                 finally:
@@ -909,6 +1177,7 @@ def create_server(
     CustomHandler.config = config
     CustomHandler.backend_name = backend_type
     CustomHandler.upload_manager = upload_manager
+    CustomHandler.settings = SettingsStore(default_local_model=config.llm.orchestrator_model)
 
     server = ThreadingHTTPServer((host, port), CustomHandler)
     return server, adapter, retriever, upload_manager

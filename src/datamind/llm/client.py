@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import urlparse
 
 from openai import BadRequestError, OpenAI
 
@@ -179,6 +180,14 @@ class LLMClient:
                 kwargs["tools"] = tools
             if response_format is not None:
                 kwargs["response_format"] = response_format
+
+            if urlparse(self.config.base_url).hostname == "openrouter.ai":
+                # Enforce free-only routing at the provider, even if catalogue prices change.
+                return self._client.chat.completions.create(
+                    **kwargs,
+                    extra_body={"provider": {"max_price": {"prompt": 0, "completion": 0, "request": 0}}},
+                    extra_headers={"HTTP-Referer": "http://localhost", "X-OpenRouter-Title": "Data Mind"},
+                )
 
             if self._custom_client_provided:
                 return self._create_local(kwargs, {})
