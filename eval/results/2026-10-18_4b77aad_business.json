@@ -1,0 +1,416 @@
+{
+  "timestamp": "2026-10-18T12:19:33.946006",
+  "date": "2026-10-18",
+  "commit": "4b77aad",
+  "suite": "business",
+  "model_used": "gemma4-e2b-16k",
+  "dataset": "Snowflake (DATAMIND.PUBLIC, warehouse DATAMIND_XS, role DATAMIND_READONLY)",
+  "total": 21,
+  "passed": 20,
+  "failed": 1,
+  "not_run": 0,
+  "pass_rate_pct": 95.2,
+  "median_latency_ms": 994.9,
+  "p90_latency_ms": 2988.2,
+  "items": [
+    {
+      "id": "Q_MOM_DECLINE",
+      "suite": "business",
+      "question": "Which products experienced the largest month-over-month revenue decline?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 12877.1,
+      "citations_valid": 3,
+      "citations_invalid": 0,
+      "verified_numbers": 3,
+      "discrepancies": 0,
+      "answer": "The products that experienced the largest month-over-month revenue decline are:\n\n1.  **Novaship**: Experienced a month-over-month revenue decline of $53,803.23 in the period starting 2026-03-01 [[Q1:R1]].\n2.  **SecureVault**: Experienced a month-over-month revenue decline of $5,686.56 in the period starting 2026-04-01 [[Q1:R2]].\n3.  **DataFlow**: Experienced a month-over-month revenue decline of $3,482.85 in the period starting 2026-03-01 [[Q1:R3]].",
+      "executed_sql": [
+        "WITH monthly_revenue AS (SELECT product_name, order_month, SUM(amount) AS monthly_sales FROM SALES GROUP BY product_name, order_month), revenue_changes AS (SELECT product_name, order_month, monthly_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline FROM monthly_revenue) SELECT product_name, order_month, prev_month_sales, monthly_sales, mom_revenue_decline FROM revenue_changes WHERE NOT prev_month_sales IS NULL AND mom_revenue_decline > 0 ORDER BY mom_revenue_decline DESC"
+      ],
+      "query_ids": [
+        "01c7ce99-000e-16a4-0000-0002b6f29175"
+      ]
+    },
+    {
+      "id": "Q_MIXED_REVENUE_SUPPORT",
+      "suite": "business",
+      "question": "Which products experienced the largest month-over-month revenue decline and what were customer complaints about that product?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 3140.0,
+      "citations_valid": 6,
+      "citations_invalid": 0,
+      "verified_numbers": 3,
+      "discrepancies": 0,
+      "answer": "The product that experienced the largest month-over-month revenue decline was **Novaship** [[Q1:R1]].\n\nThe month-over-month revenue decline for Novaship was **$53,803.23** for the month of March 2026, comparing the current month's sales of $28,357.22 to the previous month's sales of $82,160.45 [[Q1:R1]].\n\nCustomer complaints regarding Novaship include:\n*   **Churn/Billing Issues**: Customers downgraded their tier due to ongoing March downtime and missed SLAs [[D:SUPPORT_TICKETS:TK-1005]].\n*   **Performance Issues**: Reports included database connection pool exhaustion causing batch shipment requests to fail with error code 503 [[D:SUPPORT_TICKETS:TK-1004]] and severe API latency with 504 gateway timeouts during peak hours [[D:SUPPORT_TICKETS:TK-1001]].\n*   **Outages**: A critical full dashboard outage was reported on March 12 across the North America region [[D:SUPPORT_TICKETS:TK-1003]].\n*   **Billing Errors**: Multiple customers reported duplicate billing charges following the v2.4 upgrade [[D:SUPPORT_TICKETS:TK-1002]].",
+      "executed_sql": [
+        "WITH monthly_revenue AS (SELECT product_name, order_month, SUM(amount) AS monthly_sales FROM SALES GROUP BY product_name, order_month), revenue_changes AS (SELECT product_name, order_month, monthly_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) AS prev_month_sales, LAG(monthly_sales) OVER (PARTITION BY product_name ORDER BY order_month) - monthly_sales AS mom_revenue_decline FROM monthly_revenue) SELECT product_name, order_month, prev_month_sales, monthly_sales, mom_revenue_decline FROM revenue_changes WHERE NOT prev_month_sales IS NULL AND mom_revenue_decline > 0 ORDER BY mom_revenue_decline DESC LIMIT 1"
+      ],
+      "query_ids": [
+        "01c7ce99-000e-1673-0000-0002b6f2b195"
+      ]
+    },
+    {
+      "id": "Q_TOTAL_REVENUE",
+      "suite": "business",
+      "question": "What is the total sales revenue across all products in the database?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 943.9,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total sales revenue across all products in the database is $1,300,674.43 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(amount) AS total_revenue FROM SALES"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16a4-0000-0002b6f2917d"
+      ]
+    },
+    {
+      "id": "Q_PRODUCTS_CATALOG",
+      "suite": "business",
+      "question": "List all product categories and their default base prices from the products catalog.",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1260.2,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "DataMind has retrieved the product categories and their base prices from the catalog.\n\nThe product categories and their default base prices are:\n*   **Logistics**: $120.00 [[Q1:R1]]\n*   **Infrastructure**: $80.00 [[Q1:R2]]\n*   **Analytics**: $150.00 [[Q1:R3]]\n*   **Security**: $200.00 [[Q1:R4]]\n*   **Communications**: $45.00 [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT category, base_price FROM PRODUCTS"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-1673-0000-0002b6f2b199"
+      ]
+    },
+    {
+      "id": "Q_TOP_SELLING_PRODUCT",
+      "suite": "business",
+      "question": "Which product generated the highest total revenue?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1069.6,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "DataMind has determined that the product **SecureVault** generated the highest total revenue.\n\nThe total revenue generated by SecureVault is $361,662.14 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT s.product_name, SUM(s.amount) AS total_revenue FROM SALES AS s GROUP BY s.product_name ORDER BY total_revenue DESC LIMIT 1"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16ab-0000-0002b6f2f1bd"
+      ]
+    },
+    {
+      "id": "Q_TOTAL_UNITS_SOLD",
+      "suite": "business",
+      "question": "How many total units were sold across all orders?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 779.3,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total number of units sold across all orders is 11,260 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(quantity) FROM SALES"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-1619-0000-0002b6f2c18d"
+      ]
+    },
+    {
+      "id": "Q_AVG_ORDER_VALUE",
+      "suite": "business",
+      "question": "What is the average order line amount across all sales?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 830.2,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The average order line amount across all sales is $897.02 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT AVG(amount) FROM SALES"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-1673-0000-0002b6f2b19d"
+      ]
+    },
+    {
+      "id": "Q_MONTHLY_REVENUE_TREND",
+      "suite": "business",
+      "question": "What was the total sales revenue for each month?",
+      "passed": false,
+      "reason": "Failures: Result-set mismatch (expected 5 rows matching ground truth SQL)",
+      "elapsed_ms": 2988.2,
+      "citations_valid": 15,
+      "citations_invalid": 0,
+      "verified_numbers": 15,
+      "discrepancies": 0,
+      "answer": "The total sales revenue for each product and month is as follows:\n\n| Product Name | Order Month | Monthly Sales (USD) |\n| :--- | :--- | :--- |\n| CloudSync | 2026-01-01 | 41,273.68 |\n| DataFlow | 2026-01-01 | 60,162.72 |\n| Novaship | 2026-01-01 | 56,915.19 |\n| OmniChat | 2026-01-01 | 25,598.47 |\n| SecureVault | 2026-01-01 | 70,442.29 |\n| CloudSync | 2026-02-01 | 45,343.78 |\n| DataFlow | 2026-02-01 | 63,273.91 |\n| Novaship | 2026-02-01 | 82,160.45 |\n| OmniChat | 2026-02-01 | 28,056.62 |\n| SecureVault | 2026-02-01 | 72,053.67 |\n| CloudSync | 2026-03-01 | 47,955.77 |\n| DataFlow | 2026-03-01 | 59,791.06 |\n| Novaship | 2026-03-01 | 28,357.22 |\n| OmniChat | 2026-03-01 | 28,111.03 |\n| SecureVault | 2026-03-01 | 74,077.77 |\n\n[[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]] [[Q1:R6]] [[Q1:R7]] [[Q1:R8]] [[Q1:R9]] [[Q1:R10]] [[Q1:R11]] [[Q1:R12]] [[Q1:R13]] [[Q1:R14]] [[Q1:R15]]",
+      "executed_sql": [
+        "SELECT product_name, order_month, SUM(amount) AS monthly_sales FROM SALES GROUP BY product_name, order_month ORDER BY order_month, product_name"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-1603-0002-b6f200010146"
+      ]
+    },
+    {
+      "id": "Q_LOGISTICS_CATEGORY_REVENUE",
+      "suite": "business",
+      "question": "What is the total sales revenue generated by products in the Logistics category?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1125.0,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total sales revenue generated by products in the Logistics category is $235,351.69 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.category = 'Logistics'"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16bc-0002-b6f2000120ba"
+      ]
+    },
+    {
+      "id": "Q_SECURITY_CATEGORY_REVENUE",
+      "suite": "business",
+      "question": "What is the total revenue for the Security category?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 835.0,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total revenue for products in the 'Security' category is $361,662.14 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.category = 'Security'"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16a4-0000-0002b6f29189"
+      ]
+    },
+    {
+      "id": "Q_NOVASHIP_MARCH_SALES",
+      "suite": "business",
+      "question": "What was the total sales amount for Novaship in March 2026?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 994.9,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total sales amount for Novaship in March 2026 was $28,357.22 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(s.amount) FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'Novaship' AND s.order_month = '2026-03-01'"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-1673-0000-0002b6f2b1a5"
+      ]
+    },
+    {
+      "id": "Q_NOVASHIP_FEB_SALES",
+      "suite": "business",
+      "question": "What was the total sales amount for Novaship in February 2026?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1000.9,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total sales amount for Novaship in February 2026 was $82,160.45 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(s.amount) FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'Novaship' AND s.order_month = '2026-02-01'"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-1603-0002-b6f20001014e"
+      ]
+    },
+    {
+      "id": "Q_ORDERS_PER_PRODUCT",
+      "suite": "business",
+      "question": "How many distinct orders were placed for each product?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1323.8,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 4,
+      "discrepancies": 0,
+      "answer": "The number of distinct orders placed for each product is as follows:\n\n*   **SecureVault**: 412 distinct orders [[Q1:R1]]\n*   **DataFlow**: 368 distinct orders [[Q1:R2]]\n*   **CloudSync**: 259 distinct orders [[Q1:R3]]\n*   **Novaship**: 253 distinct orders [[Q1:R4]]\n*   **OmniChat**: 158 distinct orders [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT p.product_name, COUNT(DISTINCT s.order_id) AS distinct_orders FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id GROUP BY p.product_name ORDER BY distinct_orders DESC"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16bc-0002-b6f2000120c2"
+      ]
+    },
+    {
+      "id": "Q_CRITICAL_SUPPORT_TICKETS",
+      "suite": "business",
+      "question": "How many critical priority support tickets were logged?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 730.6,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total number of critical priority support tickets logged is 1 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT COUNT(ticket_id) FROM SUPPORT_TICKETS WHERE priority = 'Critical'"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16a4-0000-0002b6f2918d"
+      ]
+    },
+    {
+      "id": "Q_OUTAGE_TICKETS_PRODUCT",
+      "suite": "business",
+      "question": "Which products had support tickets related to outages?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 807.5,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 0,
+      "discrepancies": 0,
+      "answer": "DataMind has identified that the product \"Novaship\" has had support tickets categorized as 'Outage' [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT DISTINCT product_name FROM SUPPORT_TICKETS WHERE category = 'Outage'"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16ab-0000-0002b6f2f1cd"
+      ]
+    },
+    {
+      "id": "Q_TICKETS_PER_PRODUCT",
+      "suite": "business",
+      "question": "How many support tickets were submitted for each product?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1121.4,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "Based on the analysis, the total number of support tickets submitted for each product is as follows:\n\n*   **Novaship**: 5 tickets [[Q1:R1]]\n*   **CloudSync**: 2 tickets [[Q1:R2]]\n*   **DataFlow**: 1 ticket [[Q1:R3]]\n*   **SecureVault**: 1 ticket [[Q1:R4]]\n*   **OmniChat**: 1 ticket [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT product_name, COUNT(ticket_id) AS ticket_count FROM SUPPORT_TICKETS GROUP BY product_name ORDER BY ticket_count DESC"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16bc-0002-b6f2000120c6"
+      ]
+    },
+    {
+      "id": "Q_MAX_SINGLE_ORDER",
+      "suite": "business",
+      "question": "What is the highest single transaction amount recorded in SALES?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 594.4,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The highest single transaction amount recorded in the SALES table is $2,242.37 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT MAX(amount) FROM SALES"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16a4-0000-0002b6f29195"
+      ]
+    },
+    {
+      "id": "Q_MIN_SINGLE_ORDER",
+      "suite": "business",
+      "question": "What is the lowest single transaction amount recorded in SALES?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 567.7,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The lowest single transaction amount recorded in the SALES table is $80.54 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT MIN(amount) FROM SALES"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-1619-0000-0002b6f2c195"
+      ]
+    },
+    {
+      "id": "Q_AVG_QUANTITY_PER_LINE",
+      "suite": "business",
+      "question": "What is the average quantity of units per sales line item?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 649.6,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The average quantity of units per sales line item across all recorded sales transactions is 7.77 units [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT AVG(quantity) FROM SALES"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16ab-0000-0002b6f2f1d9"
+      ]
+    },
+    {
+      "id": "Q_PRODUCT_COUNT_BY_CAT",
+      "suite": "business",
+      "question": "How many products belong to each category in the catalog?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 1024.2,
+      "citations_valid": 5,
+      "citations_invalid": 0,
+      "verified_numbers": 5,
+      "discrepancies": 0,
+      "answer": "Based on the catalog data, here is the count of products per category:\n\n| Category | Product Count |\n| :--- | :--- |\n| Logistics | 1 |\n| Infrastructure | 1 |\n| Analytics | 1 |\n| Security | 1 |\n| Communications | 1 |\n\n[[Q1:R1]] [[Q1:R2]] [[Q1:R3]] [[Q1:R4]] [[Q1:R5]]",
+      "executed_sql": [
+        "SELECT category, COUNT(product_id) AS product_count FROM PRODUCTS GROUP BY category"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16a4-0000-0002b6f2919d"
+      ]
+    },
+    {
+      "id": "Q_CLOUDSYNC_TOTAL_REVENUE",
+      "suite": "business",
+      "question": "What is the total sales revenue generated specifically by CloudSync?",
+      "passed": true,
+      "reason": "All numbers, citations, and ground-truth result sets verified",
+      "elapsed_ms": 819.4,
+      "citations_valid": 1,
+      "citations_invalid": 0,
+      "verified_numbers": 1,
+      "discrepancies": 0,
+      "answer": "The total sales revenue generated specifically by CloudSync is $243,784.17 [[Q1:R1]].",
+      "executed_sql": [
+        "SELECT SUM(s.amount) AS total_revenue FROM SALES AS s JOIN PRODUCTS AS p ON s.product_id = p.product_id WHERE p.product_name = 'CloudSync'"
+      ],
+      "query_ids": [
+        "01c7ce9a-000e-16bc-0002-b6f2000120ca"
+      ]
+    }
+  ]
+}

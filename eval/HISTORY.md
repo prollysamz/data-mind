@@ -67,3 +67,7 @@ This document reconstructs every evaluation run in DataMind's development trajec
 - **Finding:** `_check_unanswerable` and `_is_ambiguous` in the orchestrator decided refusals and clarifications from phrase lists written for the dev questions (e.g. "profit margin", "gps coordinates", "top products", "what was our revenue in 2017"), and returned canned Olist-specific refusal texts.
 - **Action:** Replaced by `agent/answerability.py`, which matches the question against the semantic model's vocabulary and asks the orchestrator model for a JSON verdict only when that is inconclusive. Trust suite on commit `3a4fac1`: 6/6.
 - **Expected effect on `olist_dev`:** the four ambiguous items ("What were our top products?", "What was our revenue in 2017?", "Who are the best sellers?", "How did sales perform recently?") passed only through the phrase list; they name schema attributes, so they now go to the SQL agent and are likely to fail the clarification check. Olist dev scores before this commit are not comparable.
+
+### K. Business Suite on Live Snowflake (2026-10-18)
+- Business suite against Snowflake (`DATAMIND.PUBLIC`, `DATAMIND_XS`, role `DATAMIND_READONLY`, connecting as a `LEGACY_SERVICE` user), commit `4b77aad`, model `gemma4-e2b-16k`: 20/21; `Q_MONTHLY_REVENUE_TREND` failed (same product-grain failure as in section G). All 21 items carry their Snowflake query IDs in `eval/results/2026-10-18_4b77aad_business.json`.
+- Query History export from Snowsight (section 6 of `docs/snowflake.md`) has not been added yet.
