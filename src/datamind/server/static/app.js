@@ -432,7 +432,7 @@ async function executeQuery(question) {
 function renderResult(data, turnId) {
   $('questionEcho').textContent = data.question || $('questionInput').value;
   renderTrust(data);
-  $('answerContent').innerHTML = formatAnswer(data.answer || 'No answer was returned.');
+  $('answerContent').innerHTML = formatAnswer(data.answer || 'No answer was returned.') + coverageMarkup(data.diagnostics);
   const inspectCitation = (citation) => { selectTurn(turnId); showCitation(citation); };
   $('answerContent').querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => inspectCitation(button.dataset.citation)));
   renderClarifications(data);
@@ -458,6 +458,14 @@ function renderTrust(data) {
   ];
   if (report.discrepancy_count) parts.push(plural(report.discrepancy_count, 'discrepancy').replace('discrepancys', 'discrepancies'));
   $('trustMetrics').textContent = parts.join(' · ');
+}
+
+function coverageMarkup(diagnostics) {
+  return (diagnostics || []).map((d) => {
+    if (d.status !== 'available') return '<aside class="coverage-diagnostic"><strong>Date coverage unavailable</strong><p>Inspect the query filters; a cause for the missing result has not been established.</p></aside>';
+    const range = d.earliest_date === null ? 'No non-null dates recorded' : `${d.earliest_date} to ${d.latest_date}`;
+    return `<aside class="coverage-diagnostic"><strong>Source date coverage</strong><p>${escapeHtml(d.table)}.${escapeHtml(d.column)}: ${escapeHtml(range)}.</p><p>Whole source table: ${escapeHtml(d.source_rows)} rows; ${escapeHtml(d.dated_rows)} with dates. Original filters excluded. This context does not establish which filter caused no matches.</p><button type="button" class="citation-token" data-citation="${escapeHtml(d.query_label)}:R1">${escapeHtml(d.query_label)}:R1</button></aside>`;
+  }).join('');
 }
 
 function formatAnswer(text) {
@@ -539,6 +547,7 @@ function renderQueries(queries) {
     const columns = q.columns || [];
     const item = document.createElement('section');
     item.className = 'query-item';
+    item.dataset.executionId = `${q.query_label}:EXEC`;
     item.innerHTML = `
       <div class="query-item-head"><span class="query-label">${escapeHtml(q.query_label || 'Q')}</span><span class="query-meta">${escapeHtml(String(q.query_id || "local").slice(0, 8))} · ${rows.length} rows · ${Number(q.elapsed_ms || 0).toFixed(0)} ms</span></div>
       ${q.purpose ? `<div class="query-purpose">${escapeHtml(q.purpose)}</div>` : ''}
@@ -618,7 +627,9 @@ function showCitation(citationId) {
     target = [...document.querySelectorAll('.doc-item')].find((el) => el.dataset.chunkId === citationId);
   } else {
     activateTab('sqlTab');
-    target = [...document.querySelectorAll('#queriesList tr[data-row-id]')].find((el) => el.dataset.rowId === citationId);
+    target = citationId.endsWith(':EXEC')
+      ? [...document.querySelectorAll('#queriesList [data-execution-id]')].find((el) => el.dataset.executionId === citationId)
+      : [...document.querySelectorAll('#queriesList tr[data-row-id]')].find((el) => el.dataset.rowId === citationId);
   }
   if (!target) return showToast(`${citationId} is not present in this result`);
   target.classList.add('highlighted');
@@ -845,7 +856,7 @@ function renderArchivedTurn(turn) {
   const badge = data.trust_badge || {};
   const tone = badge.state === 'VERIFIED' ? 'verified' : badge.state === 'PARTIALLY_VERIFIED' || badge.state === 'CLARIFICATION' ? 'warning' : 'failed';
   article.innerHTML = '<header class="result-head"><h2>' + escapeHtml(turn.question) + '</h2><div class="verdict-row"><span class="verdict ' + tone + '">' + escapeHtml(badge.label || 'Saved answer') + '</span><span class="verdict-meta">Saved with source evidence</span></div></header>' +
-    '<div class="answer-content">' + formatAnswer(data.answer || 'No answer was returned.') + '</div>' +
+    '<div class="answer-content">' + formatAnswer(data.answer || 'No answer was returned.') + coverageMarkup(data.diagnostics) + '</div>' +
     '<section class="chart-block" data-chart-card hidden><h3 data-chart-title></h3><div class="chart-body" data-chart-body role="img"></div><p class="chart-note" data-chart-note hidden></p></section>' +
     '<div class="result-actions"><button class="ghost-btn" type="button" data-turn-action="copy">Copy</button><button class="ghost-btn" type="button" data-turn-action="csv">Export CSV</button><button class="ghost-btn" type="button" data-turn-action="evidence">Inspect evidence</button></div>';
   const inspect = (citation) => { selectTurn(turn.id); showCitation(citation); };

@@ -87,15 +87,19 @@ history, a historical read, and loader availability. The saved
 [receipt](../eval/evidence/snowflake_depth.json) has live query IDs. Historical reads
 use [BEFORE (STATEMENT => ...)](https://docs.snowflake.com/en/sql-reference/constructs/at-before).
 
-`python scripts/demo_data_change.py datamind_snowflake.yaml` requires the loader
+`python scripts/demo_data_change.py datamind_snowflake.yaml --output eval/evidence/data_change_snowflake.json` requires the loader
 role. It creates a randomly named schema and zero-copy SALES clone, runs the same
 Gemma question before and after insertion, compares against live aggregate SQL,
 then checks the original value with Time Travel. Cleanup drops only the generated
-schema. The writer needs source-table SELECT and schema creation privileges; readers
-retain SELECT only. Current login: loader unavailable (390186), so this mutation
-path has not yet been demonstrated live.
+schema. The prompt exposes only the cloned SALES table and its basic metric definitions;
+it supplies no joins, SQL templates or example queries. The writer needs source-table
+SELECT and schema creation privileges; readers retain SELECT only. The loader grant
+was verified on 2026-10-18. The receipt records PASS only when both agent answers,
+the independent aggregate delta and Time Travel agree; failures and missing-role
+blockers are saved explicitly, including cleanup status. Exit codes are 0 for a
+completed run, 1 for failure, and 2 for a missing-loader blocker.
 
-For the current missing-role blocker, an administrator can run
+For a missing-role blocker, an administrator can run
 [`scripts/snowflake_enable_ingestion.sql`](../scripts/snowflake_enable_ingestion.sql)
 after setting the ingestion login. It grants the loader role, schema creation,
 warehouse usage and source SALES read access for cloning. The agent continues to
@@ -126,3 +130,33 @@ read-only masked values using a Snowflake masking policy. Do not run it against
 user data. [Dynamic Data Masking](https://docs.snowflake.com/en/user-guide/security-column-ddm-intro)
 requires Enterprise edition. Setup and actual masking remain unverified in this
 account; the script's presence is not evidence of deployed governance.
+
+## 9. Schema context and empty-result diagnostics
+
+The model prompt includes declared column descriptions, primary/composite keys,
+nullability, units and join relationships, with literal SQL identifiers. For
+question-relevant categorical columns, up to three guarded live queries each
+collect at most three short examples. These examples are untrusted, incomplete
+context, not a complete domain. Names, contact columns and document text are not
+sampled by default. The SQL and query IDs appear under `validation_queries`.
+
+An empty result, or an all-NULL aggregate, with a date predicate on one base table
+can trigger a separate MIN/MAX and row-count query. Joins, CTEs, subqueries and
+set operations are skipped. The diagnostic describes the whole source table with
+the original filters excluded; it does not establish which filter caused no
+matches. NULL is preserved rather than converted to zero. Its separate row
+citation and query ID appear in the UI and `diagnostics` API field. Diagnostic
+queries are excluded from answer chart/KPI generation and ground-truth matching.
+No configurable warning thresholds are introduced.
+
+Empty results can cite `[[Q1:EXEC]]`: an execution receipt containing SQL, query ID,
+returned-row count and truncation status. It opens the corresponding SQL card in
+the UI, without inventing `Q1:R1`. Execution citations cannot verify measured
+numbers; an empty result is still distinct from a measured zero. If narration
+fails verification twice, a single complete empty answer query can use an explicit
+execution-status fallback. Truncated results, multiple answer queries and mixed
+document evidence do not qualify for that fallback. Empty-result query-lint
+warnings remain visible as partial verification.
+
+Run `python scripts/verify_schema_diagnostics.py` for a read-only Snowflake check;
+the default output is `eval/evidence/schema_diagnostics_snowflake.json`.

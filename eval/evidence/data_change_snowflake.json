@@ -1,0 +1,43 @@
+{
+  "timestamp": "2026-10-18T13:26:23.980692+00:00",
+  "backend": "snowflake",
+  "question": "What is the total amount for CloudSync in the SALES table in May 2026? Use the product name recorded on each sales line.",
+  "model": "gemma4-e2b-16k",
+  "status": "PASS",
+  "schema": "DATAMIND_CHANGE_73C127BE084D",
+  "source_table": "\"DATAMIND\".\"PUBLIC\".\"SALES\"",
+  "cleanup": "complete",
+  "expected_delta": "50000.00",
+  "semantic_scope": "SALES clone and its basic metric definitions only; no joins, SQL templates or example queries supplied",
+  "before": {
+    "value": "57493.80",
+    "query_id": "01c7d026-000e-1619-0000-0002b6f2c4f1",
+    "sql": "SELECT SUM(AMOUNT) FROM SALES WHERE PRODUCT_NAME = 'CloudSync' AND ORDER_MONTH = DATE '2026-05-01'",
+    "answer": "The total sales amount for the product 'CloudSync' in May 2026 is $57,493.80 [[Q1:R1]].",
+    "agent_queries": [
+      {
+        "sql": "SELECT SUM(T1.amount) FROM SALES AS T1 WHERE T1.product_name = 'CloudSync' AND T1.order_month = '2026-05-01'",
+        "query_id": "01c7d026-000e-1673-0002-b6f20001f0fa"
+      }
+    ]
+  },
+  "insert_query_id": "01c7d026-000e-16cf-0002-b6f20001b1ce",
+  "after": {
+    "value": "107493.80",
+    "query_id": "01c7d026-000e-1619-0000-0002b6f2c4f5",
+    "sql": "SELECT SUM(AMOUNT) FROM SALES WHERE PRODUCT_NAME = 'CloudSync' AND ORDER_MONTH = DATE '2026-05-01'",
+    "answer": "The total sales amount for the product 'CloudSync' in May 2026 is $107,493.80 [[Q1:R1]].",
+    "agent_queries": [
+      {
+        "sql": "SELECT SUM(T1.amount) FROM SALES AS T1 WHERE T1.product_name = 'CloudSync' AND T1.order_month = '2026-05-01'",
+        "query_id": "01c7d026-000e-16f2-0002-b6f20001e0ce"
+      }
+    ]
+  },
+  "time_travel": {
+    "value": "57493.80",
+    "query_id": "01c7d026-000e-16f2-0002-b6f20001e0d2",
+    "statement_anchor": "01c7d026-000e-16cf-0002-b6f20001b1ce"
+  },
+  "cleanup_query_id": "01c7d026-000e-16f2-0002-b6f20001e0d6"
+}

@@ -50,7 +50,9 @@ def validate_categorical_filters(sql, guard, adapter, model: SemanticModel, evid
             if key not in domains:
                 if len(domains) >= 8:
                     return sql, json.dumps({"error": "FilterValidationLimit", "message": "Use fewer categorical filters per query."})
-                col = exp.column(field.name, quoted=True)
+                # Preserve SQL identifier semantics: Snowflake folds unquoted
+                # names to uppercase, while quoted lowercase names are distinct.
+                col = exp.Column(this=column.this.copy())
                 statement = exp.select(col).distinct().from_(exp.to_table(table.name)).where(col.copy().is_(exp.Null()).not_()).limit(26)
                 domain_sql = guard.validate(statement.sql(dialect=adapter.dialect))
                 result = adapter.execute(domain_sql)

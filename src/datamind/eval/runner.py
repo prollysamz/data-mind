@@ -41,6 +41,8 @@ def _compare_result_sets(gt_rows: list[tuple], agent_queries: list[Any], *, orde
     norm_gt_rows = [tuple(norm_cell(c) for c in r) for r in gt_rows]
 
     for q in agent_queries:
+        if getattr(q, "kind", "answer") == "diagnostic":
+            continue
         if getattr(q.result, "truncated", False):
             continue
         agent_rows = q.result.rows if hasattr(q, "result") and hasattr(q.result, "rows") else []
@@ -78,6 +80,7 @@ class EvalItemResult:
     agent_results: list = field(default_factory=list)
     validation_queries: list = field(default_factory=list)
     tool_failures: list = field(default_factory=list)
+    diagnostics: list = field(default_factory=list)
 
 
 @dataclass
@@ -308,6 +311,7 @@ def _evaluate_item(
             query_ids=[q.result.query_id for q in agent_res.evidence_store.queries if q.result],
             ground_truth_sql=gt_sql or "",
             validation_queries=agent_res.evidence_store.validation_queries,
+            diagnostics=agent_res.evidence_store.diagnostics,
             tool_failures=[m.get("content", "")[:2000] for m in agent_res.messages if m.get("role") == "tool" and '"error"' in (m.get("content") or "")],
             ground_truth_query_id=gt_result.query_id if gt_result else "",
             ground_truth_rows=gt_result.rows if gt_result else [],
@@ -545,6 +549,7 @@ def _save_eval_results(
                 "agent_results": i.agent_results,
                 "validation_queries": i.validation_queries,
                 "tool_failures": i.tool_failures,
+                "diagnostics": i.diagnostics,
             }
             for i in report.items
         ],

@@ -4,20 +4,24 @@ The same question is answered twice by the agent. Between the two runs one sales
 inserted, and afterwards it is removed again, so the dataset is left as it was.
 
   DuckDB (default): works on a temporary copy of the configured database file.
-  Snowflake:        inserts with the DATAMIND_LOADER role, queries with the configured
-                    read-only role, prints Snowflake query IDs for both runs, then deletes the row.
+  Snowflake:        writes only to an isolated clone with the DATAMIND_LOADER role,
+                    queries read-only, verifies Time Travel and drops its generated schema.
 
 Usage:
   python scripts/demo_data_change.py                              # datamind.yaml (DuckDB)
   python scripts/demo_data_change.py datamind_snowflake.yaml      # Snowflake
+  python scripts/demo_data_change.py datamind_snowflake.yaml --output eval/evidence/data_change_snowflake.json
 """
 
 from __future__ import annotations
 
+import argparse
+import json
 import shutil
 import sys
 import tempfile
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from datamind.adapters import backend_label, build_adapter
@@ -26,8 +30,9 @@ from datamind.config import AppConfig, load_config
 from datamind.llm.client import LLMClient
 from datamind.retrieval.sqlite_fts import SQLiteFTSRetriever
 from datamind.semantic.loader import load_semantic_model
+from datamind.semantic.model import SemanticModel
 
-QUESTION = "What was the total sales revenue for CloudSync in May 2026?"
+QUESTION = "What is the total amount for CloudSync in the SALES table in May 2026? Use the product name recorded on each sales line."
 MARKER_ORDER_ID = 990001
 INSERT_SQL = f"""
 INSERT INTO SALES (order_id, line_no, order_date, order_month, product_id, product_name, quantity, amount)
@@ -37,14 +42,14 @@ FROM SALES WHERE product_name = 'CloudSync' LIMIT 1
 DELETE_SQL = f"DELETE FROM SALES WHERE order_id = {MARKER_ORDER_ID}"
 
 
-def ask(config: AppConfig, label: str) -> AgentResult:
+def ask(config: AppConfig, label: str, semantic_model: SemanticModel | None = None) -> AgentResult:
     adapter = build_adapter(config)
     retriever = SQLiteFTSRetriever(index_path=":memory:")
     orchestrator = AgentOrchestrator(
         llm_client=LLMClient(config.llm),
         db_adapter=adapter,
         retriever=retriever,
-        semantic_model=load_semantic_model(config.semantic_model),
+        semantic_model=semantic_model or load_semantic_model(config.semantic_model),
         config=config.agent,
     )
     try:
@@ -78,11 +83,12 @@ def run_duckdb(config: AppConfig) -> int:
     return 0
 
 
-def run_snowflake(config: AppConfig) -> int:
+def run_snowflake(config: AppConfig, proof: dict | None = None) -> int:
     from datamind.eval.runner import _compare_result_sets
     from datamind.uploads.snowflake_store import SnowflakeUploadStore, identifier
 
     sf = config.backend.snowflake
+    proof = proof if proof is not None else {}
     # Work exclusively in a newly created schema. Never delete a fixed marker ID
     # or insert into the user's source SALES table.
     schema = "DATAMIND_CHANGE_" + uuid.uuid4().hex[:12].upper()
@@ -90,6 +96,7 @@ def run_snowflake(config: AppConfig) -> int:
     namespace = f"{database}.{identifier(schema)}"
     original = f"{database}.{identifier(sf.schema or 'PUBLIC')}.{identifier('SALES')}"
     target = f"{namespace}.{identifier('SALES')}"
+    proof.update(schema=schema, source_table=original, cleanup="not_created", expected_delta="50000.00")
     writer_adapter = SnowflakeUploadStore(config)._loader()
     writer = writer_adapter._conn
     created = False
@@ -97,6 +104,7 @@ def run_snowflake(config: AppConfig) -> int:
         cur = writer.cursor()
         cur.execute(f"CREATE SCHEMA {namespace}")
         created = True
+        proof["cleanup"] = "pending"
         cur.execute(f"CREATE TABLE {target} CLONE {original}")
         cur.execute(f"ALTER TABLE {target} SET DATA_RETENTION_TIME_IN_DAYS = 1")
         cur.execute(f"GRANT USAGE ON SCHEMA {namespace} TO ROLE {identifier(sf.role)}")
@@ -105,15 +113,32 @@ def run_snowflake(config: AppConfig) -> int:
         config = config.model_copy(deep=True)
         config.backend.snowflake.schema_ = schema
         config.backend.snowflake.query_tag = "datamind:data-change:" + schema
+        # The isolated schema contains SALES only. Advertising PRODUCTS/support
+        # joins here would invite queries against tables we deliberately did not clone.
+        source_model = load_semantic_model(config.semantic_model)
+        sales = source_model.get_table("SALES")
+        if sales is None:
+            raise RuntimeError("The mutation demo requires a declared SALES table")
+        isolated_model = SemanticModel(
+            name="isolated_sales_change_demo", description="Isolated SALES clone for the data-change demonstration",
+            default_currency=source_model.default_currency, currency_symbol=source_model.currency_symbol,
+            tables=[sales],
+            metrics=[m for m in source_model.metrics if m.table.lower() == sales.name.lower() and not m.sql_template],
+        )
+        proof["semantic_scope"] = "SALES clone and its basic metric definitions only; no joins, SQL templates or example queries supplied"
         baseline_sql = "SELECT SUM(AMOUNT) FROM SALES WHERE PRODUCT_NAME = 'CloudSync' AND ORDER_MONTH = DATE '2026-05-01'"
         cur.execute(baseline_sql)
         before = cur.fetchone()[0]
+        proof["before"] = {"value": str(before), "query_id": cur.sfqid, "sql": baseline_sql}
         print(f"Baseline sum={before}; query_id={cur.sfqid}")
-        first_answer = ask(config, "BEFORE the data change")
+        first_answer = ask(config, "BEFORE the data change", isolated_model)
+        proof["before"]["answer"] = first_answer.answer
+        proof["before"]["agent_queries"] = [{"sql": q.sql, "query_id": q.result.query_id} for q in first_answer.evidence_store.queries]
         if not first_answer.success or not first_answer.citation_report.is_clean or not _compare_result_sets([(before,)], first_answer.evidence_store.queries)[0]:
             raise RuntimeError("The before answer did not match the independent live aggregate")
         cur.execute(INSERT_SQL)
         insertion_id = cur.sfqid
+        proof["insert_query_id"] = insertion_id
         if cur.rowcount != 1:
             raise RuntimeError("Expected exactly one inserted row in isolated demo")
         writer.commit()
@@ -121,14 +146,18 @@ def run_snowflake(config: AppConfig) -> int:
               f"Snowflake query_id={insertion_id}")
         cur.execute(baseline_sql)
         after = cur.fetchone()[0]
+        proof["after"] = {"value": str(after), "query_id": cur.sfqid, "sql": baseline_sql}
         print(f"Changed sum={after}; query_id={cur.sfqid}")
         if before is None or after - before != 50000:
             raise RuntimeError("Live Snowflake aggregate did not increase by exactly 50000")
-        second_answer = ask(config, "AFTER the data change")
+        second_answer = ask(config, "AFTER the data change", isolated_model)
+        proof["after"]["answer"] = second_answer.answer
+        proof["after"]["agent_queries"] = [{"sql": q.sql, "query_id": q.result.query_id} for q in second_answer.evidence_store.queries]
         if not second_answer.success or not second_answer.citation_report.is_clean or not _compare_result_sets([(after,)], second_answer.evidence_store.queries)[0]:
             raise RuntimeError("The after answer did not match the independent live aggregate")
         cur.execute(baseline_sql.replace("FROM SALES", f"FROM SALES BEFORE (STATEMENT => '{insertion_id}')"))
         historical = cur.fetchone()[0]
+        proof["time_travel"] = {"value": str(historical), "query_id": cur.sfqid, "statement_anchor": insertion_id}
         print(f"Time Travel sum={historical}; anchor={insertion_id}; query_id={cur.sfqid}")
         if historical != before:
             raise RuntimeError("Time Travel did not recover the original aggregate")
@@ -137,6 +166,8 @@ def run_snowflake(config: AppConfig) -> int:
             if created:
                 cur = writer.cursor()
                 cur.execute(f"DROP SCHEMA {namespace} CASCADE")
+                proof["cleanup"] = "complete"
+                proof["cleanup_query_id"] = cur.sfqid
                 print(f"\n>>> Removed isolated demo schema {schema} (query_id={cur.sfqid})")
         finally:
             writer_adapter.close()
@@ -144,13 +175,32 @@ def run_snowflake(config: AppConfig) -> int:
 
 
 def main() -> int:
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "datamind.yaml"
-    config = load_config(config_path)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("config", nargs="?", default="datamind.yaml")
+    parser.add_argument("--output", help="Save a machine-readable live proof or a clearly labelled blocker receipt")
+    args = parser.parse_args()
+    config = load_config(args.config)
     print(f"Backend: {backend_label(config)} | Model: {config.llm.orchestrator_model}")
     print(f"Question: {QUESTION}")
-    if config.backend.type == "snowflake":
-        return run_snowflake(config)
-    return run_duckdb(config)
+    proof = {"timestamp": datetime.now(UTC).isoformat(), "backend": config.backend.type,
+             "question": QUESTION, "model": config.llm.orchestrator_model, "status": "NOT_RUN"}
+    try:
+        code = run_snowflake(config, proof) if config.backend.type == "snowflake" else run_duckdb(config)
+        proof["status"] = "PASS" if config.backend.type == "snowflake" else "COMPLETED"
+        return code
+    except Exception as exc:
+        error_code = getattr(exc, "errno", None)
+        proof.update(status="BLOCKED" if error_code == 390186 else "FAIL", error_code=error_code,
+                     error_type=type(exc).__name__)
+        if error_code == 390186:
+            proof["required_action"] = "An administrator must grant DATAMIND_LOADER to the ingestion login using scripts/snowflake_enable_ingestion.sql. No mutation proof was produced."
+        print(json.dumps(proof, indent=2, default=str))
+        return 2 if proof["status"] == "BLOCKED" else 1
+    finally:
+        if args.output:
+            path = Path(args.output)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(proof, indent=2, default=str) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

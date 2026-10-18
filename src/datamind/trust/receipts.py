@@ -67,6 +67,7 @@ class ReceiptGenerator:
                 "query_id": q.result.query_id if q.result else "mock-qid",
                 "sql": q.sql,
                 "purpose": q.purpose,
+                "kind": q.kind,
                 "row_count": len(q.result.rows) if q.result else 0,
                 "columns": q.result.columns if q.result else [],
                 "rows_sample": [list(r) for r in (q.result.rows[:10] if q.result else [])],
@@ -253,7 +254,7 @@ class ReceiptVerifier:
                 elapsed_ms=1.0,
                 truncated=step.get("truncated", False),
             )
-            store.add_query(step.get("sql", ""), step.get("purpose", ""), res)
+            store.add_query(step.get("sql", ""), step.get("purpose", ""), res, kind=step.get("kind", "answer"))
 
         rep = verify_citations(receipt.get("answer", ""), store)
         checks["verifier_consistency"] = (rep.is_clean == receipt.get("citation_report", {}).get("is_clean", True))

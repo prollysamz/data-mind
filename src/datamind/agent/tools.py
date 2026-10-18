@@ -103,6 +103,12 @@ def execute_sql_tool(
         purpose=purpose,
         result=query_result,
     )
+    coverage_context = ""
+    if semantic_model is not None:
+        from datamind.agent.empty_results import diagnose_date_coverage
+        coverage_context = diagnose_date_coverage(
+            sanitized_sql, query_label, query_result, semantic_model, guard, adapter, evidence_store,
+        )
 
     # 4. Format output for LLM with citations
     lines: list[str] = [
@@ -112,8 +118,10 @@ def execute_sql_tool(
     normalizations = [v for v in evidence_store.validation_queries if v.get("purpose") == "Unique live category normalization"]
     if normalizations:
         lines.append("Filter assumptions (disclose these exact stored-value mappings): " + json.dumps(normalizations, default=str))
+    if coverage_context:
+        lines.append(coverage_context)
     if not query_result.rows:
-        lines.append("No rows returned.")
+        lines.append(f"No rows returned. Cite [[{query_label}:EXEC]] for this execution status only. No row citation exists for this empty result; do not invent R1. Execution metadata does not support measured values or explain the absence of matches.")
         return "\n".join(lines)
 
     # Header with RowID column

@@ -112,8 +112,8 @@ def screen_question(question: str, model: SemanticModel) -> Assessment:
     value_words: set[str] = set()
     for sentence in re.split(r"[.?!:]\s+", question.strip()):
         for tok in re.findall(r"[A-Za-z]+", sentence)[1:]:
-            if re.fullmatch(r"[A-Z][a-z]+", tok):
-                value_words.add(tok.lower())
+            if re.fullmatch(r"[A-Z][A-Za-z]+", tok) and not tok.isupper():
+                value_words.update(_words(tok))
     for w in _words(question):
         if _stem(w) in seen or len(w) < 2:
             continue

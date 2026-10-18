@@ -145,3 +145,68 @@ answer being labelled successful. A bounded retry and explicit
 confirmed `success: false` and an actionable message. This smoke question has not
 been demonstrated as a successful answer in this run; the 10/10 claim applies only
 to the recorded TPC-H development suite, not all schemas or UI questions.
+
+### O. Rich schema context, empty-date diagnostics and live mutation proof (2026-10-18)
+
+The prompt now exposes column descriptions, literal identifiers, primary/composite
+keys, nullability and units. Question-relevant categorical examples come from
+bounded live queries, with separate SQL/query-ID receipts. The first rerun scored
+9/10 (discounted revenue used an invalid column identifier); explicitly retaining
+the compact identifier list and fully qualified column descriptions restored
+10/10 in run_1792329438. Both runs are retained in `results/` and the ledger.
+
+Empty results and all-NULL aggregates with a single-table date predicate can
+produce separately cited whole-table coverage, with original filters excluded.
+Joins/CTEs/subqueries are intentionally skipped. Diagnostics do not enter chart/KPI
+planning or ground-truth matching. The live read-only check in
+[`schema_diagnostics_snowflake.json`](evidence/schema_diagnostics_snowflake.json)
+records an empty 2030 order query and actual coverage of 1992-01-01 to 1998-08-02
+across 1,500,000 dated rows. A browser run displayed this separate context and
+the SQL receipts. Gemma invented an empty-result row citation in that UI run;
+verification correctly kept the answer **Not Verified**. The diagnostic itself
+has a real, separate result row; this is not a claim of flawless narration.
+
+The administrator enabled the loader role. The first mutation attempt then failed
+because Gemma produced an empty before answer; that receipt is retained as
+[`data_change_snowflake_failed_before.json`](evidence/data_change_snowflake_failed_before.json).
+Subsequent debugging exposed a mismatch between the isolated SALES-only clone
+and the broader advertised schema, plus Snowflake identifier quoting in live
+filter validation. The demo now exposes only its cloned table and basic metric
+definitions, and validation preserves original SQL identifier quoting. Generic
+prompt guidance no longer advertises hard-coded tables outside the active schema.
+Camel-case entity names are also excluded from missing-attribute screening.
+
+The final [`data_change_snowflake.json`](evidence/data_change_snowflake.json) is
+**PASS**: the same explicit sales-line question is asked before/after insertion;
+Gemma independently generates SQL and answers **57493.80 → 107493.80**. Independent
+aggregate SQL confirms the 50000 delta, Time Travel recovers 57493.80, and the
+generated schema is dropped. No SQL templates or example queries are supplied to
+the agent. This proves live mutation behavior on synthetic sales data with that
+scoped question; it does not repair or validate every broader CloudSync question.
+Source SALES was never modified. Masking remains unverified.
+
+Offline verification: **382 tests passed**; Ruff and JavaScript syntax checks pass.
+After the identifier and prompt-scope fixes, the final live no-cache rerun also
+passed **10/10**: [run_1792330158](results/2026-10-18_4ff3def-dirty_tpch_run_20261018_1792330158.json).
+Median latency was 3187 ms; the first question took 99438 ms. The app was restarted
+on port 8081 with Snowflake and uploads enabled. The temporary TPC-H UI server was
+stopped after verification.
+
+### P. Empty-result execution citations (2026-10-18)
+
+Empty query results now expose `Q<n>:EXEC` provenance separately from actual row
+IDs. Execution metadata resolves to SQL, query ID, row count and truncation status;
+it cannot ground a measured number, including zero, or borrow a coverage count
+from another cited row. Invented row IDs and unknown execution IDs remain invalid.
+A narrow fallback can render the execution status after failed narration when
+there is exactly one complete empty answer query and no document evidence.
+
+A fresh local-Gemma/Snowflake browser run of the 2030 orders question used
+`Q1:EXEC` directly, with the independent date coverage still under `Q2:R1`.
+The execution citation opened the SQL card. The UI showed **Partially Verified**
+for empty-result query lint, with one valid citation and no invented result rows.
+This supersedes the invalid-citation observation in section O, without changing
+the historical evidence. Offline verification: **389 tests passed**; Ruff and
+JavaScript syntax checks passed. The read-only schema-diagnostic receipt includes
+the execution-citation check; its deterministic status sentence is not presented
+as an extra model evaluation.

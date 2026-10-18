@@ -22,7 +22,7 @@ Most "talk to your data" systems suffer from hallucinations, non-reproducible an
 **DataMind wins on three core principles:**
 1. **Trust:** Every claim carries its generated SQL, query ID, result rows, and document citations. A deterministic code verifier (not another LLM) parses every number, currency value, date semantic, and direction word in the answer and reconciles it against cited cells down to the exact cent.
 2. **Proof:** Published, empirical evaluation metrics with complete provenance (git commit `5fc44b2`, date, model, backend, latency) and 100% transparent reporting of failures.
-3. **Reusability:** Configure a semantic model for another schema, upload datasets with profiling and session isolation, or connect through MCP. Live TPC-H evaluation progressed from 3/10 to 10/10 after schema review, live category validation, SQL routing and verified narration. All intermediate runs are retained. This is a development result, not an unseen-data accuracy claim.
+3. **Reusability:** Configure a semantic model for another schema, upload datasets with profiling and session isolation, or connect through MCP. Prompts include column descriptions, primary keys and bounded live category examples. Empty date-filter results can show separately cited source coverage. Live TPC-H evaluation progressed from 3/10 to 10/10; all intermediate runs are retained. This is a development result, not an unseen-data accuracy claim.
 
 ---
 
@@ -106,9 +106,9 @@ Follow [docs/snowflake.md](docs/snowflake.md): one bootstrap script creates the 
 ### 6. See the answer follow the data
 ```bash
 python scripts/demo_data_change.py                          # DuckDB, on a temporary copy
-python scripts/demo_data_change.py datamind_snowflake.yaml  # Snowflake
+python scripts/demo_data_change.py datamind_snowflake.yaml --output eval/evidence/data_change_snowflake.json
 ```
-Asks the same question before and after inserting one sales row. Snowflake uses an isolated clone, checks both answers against live aggregates, compares the original value using Time Travel, and drops only its generated schema. The source tables remain untouched. A recorded DuckDB run is in [eval/evidence/data_change_duckdb.txt](eval/evidence/data_change_duckdb.txt). The Snowflake mutation run is still blocked: the current login lacks `DATAMIND_LOADER` (390186). Query tags and a read-only Time Travel check have passed live: [receipts](eval/evidence/snowflake_depth.json).
+Asks the same question before and after inserting one sales row. Snowflake uses an isolated clone, checks both answers against live aggregates, compares the original value using Time Travel, and drops only its generated schema. The source tables remain untouched. The [live Snowflake receipt](eval/evidence/data_change_snowflake.json) records Gemma answers **57,493.80 → 107,493.80**, a verified 50,000 insertion and historical recovery. This uses synthetic sales data and an explicit sales-line question; the [earlier failed attempt](eval/evidence/data_change_snowflake_failed_before.json) is also retained. The loader grant now works. Query tags were separately verified in [the depth receipt](eval/evidence/snowflake_depth.json); masking remains unverified.
 
 ### 7. Evaluate on Snowflake TPC-H
 ```bash

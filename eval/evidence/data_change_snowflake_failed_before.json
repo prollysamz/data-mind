@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-10-18T13:19:05.578999+00:00",
+  "backend": "snowflake",
+  "question": "What was the total sales revenue for CloudSync in May 2026?",
+  "model": "gemma4-e2b-16k",
+  "status": "FAIL",
+  "schema": "DATAMIND_CHANGE_27B095FD885E",
+  "source_table": "\"DATAMIND\".\"PUBLIC\".\"SALES\"",
+  "cleanup": "complete",
+  "expected_delta": "50000.00",
+  "before": {
+    "value": "57493.80",
+    "query_id": "01c7d01f-000e-16b8-0002-b6f2000181a2",
+    "sql": "SELECT SUM(AMOUNT) FROM SALES WHERE PRODUCT_NAME = 'CloudSync' AND ORDER_MONTH = DATE '2026-05-01'",
+    "answer": "The model returned no answer. Please retry or select another model in Settings.",
+    "agent_queries": []
+  },
+  "cleanup_query_id": "01c7d01f-000e-16cf-0002-b6f20001b182",
+  "error_code": null,
+  "error_type": "RuntimeError"
+}

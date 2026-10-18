@@ -41,35 +41,54 @@ def validate_base_url(value: str) -> str:
     return f"https://{host}{path}"
 
 
-def _client(api_key: str, bearer_token: str, endpoint: str) -> OpenAI:
-    # Bedrock accepts a bearer credential.  Supplying x-api-key as well supports
-    # integrations that require the explicitly configured API key header.
+def _credential(api_key: str, bearer_token: str) -> str:
+    """The single credential sent to Bedrock Mantle: the bearer token, else the API key."""
+    return bearer_token or api_key
+
+
+def _client(api_key: str, bearer_token: str, endpoint: str, timeout: float = 15) -> OpenAI:
+    # Bedrock Mantle authenticates with one header only. It rejects requests that carry
+    # both Authorization and x-api-key (HTTP 401, invalid_api_key), so send the Bedrock
+    # API key as a bearer token and nothing else.
     return OpenAI(
-        api_key=bearer_token,
+        api_key=_credential(api_key, bearer_token),
         base_url=endpoint,
-        default_headers={"x-api-key": api_key},
-        timeout=15,
+        timeout=timeout,
         max_retries=0,
     )
 
 
 def list_models(api_key: str, bearer_token: str, endpoint: str) -> list[dict]:
-    if not api_key or not bearer_token:
-        raise BedrockError("Enter both the Bedrock API key and AWS bearer token first.", 400)
-    try:
-        with _client(api_key, bearer_token, validate_base_url(endpoint)) as client:
-            models = [{"id": m.id, "name": m.id} for m in client.models.list() if "gemma" in m.id.lower()]
-    except OpenAIError as exc:
-        status = getattr(exc, "status_code", 502)
-        raise BedrockError("Could not list Gemma models from Bedrock Mantle. Check key, region, route and model access.", status) from exc
+    if not _credential(api_key, bearer_token):
+        raise BedrockError("Enter the Bedrock API key first.", 400)
+    endpoint = validate_base_url(endpoint)
+    # Mantle serves chat on /openai/v1 but its model list only on /v1 (the OpenAI
+    # route returns 404), so fall back to /v1 on the same host for listing.
+    candidates = [endpoint]
+    if endpoint.endswith("/openai/v1"):
+        candidates.append(endpoint.removesuffix("/openai/v1") + "/v1")
+    last_exc: OpenAIError | None = None
+    models: list[dict] | None = None
+    for candidate in candidates:
+        try:
+            with _client(api_key, bearer_token, candidate) as client:
+                models = [{"id": m.id, "name": m.id} for m in client.models.list() if "gemma" in m.id.lower()]
+            break
+        except OpenAIError as exc:
+            last_exc = exc
+            if getattr(exc, "status_code", None) != 404:
+                break
+    if models is None:
+        status = getattr(last_exc, "status_code", 502) or 502
+        raise BedrockError("Could not list Gemma models from Bedrock Mantle. Check key, region, route and model access.", status) from last_exc
     if not models:
         raise BedrockError("No Gemma models were listed for this key and region. Check AWS model access and route.", 400)
     return sorted(models, key=lambda m: m["id"])
 
 
 def build_client(api_key: str, bearer_token: str, model: str, endpoint: str, template: LLMConfig) -> LLMClient:
-    if not api_key or not bearer_token or not model or "gemma" not in model.lower():
-        raise BedrockError("Bedrock requires an API key, AWS bearer token, base URL, and a Gemma model for PS1.", 400)
+    if not _credential(api_key, bearer_token) or not model or "gemma" not in model.lower():
+        raise BedrockError("Bedrock requires an API key, a base URL, and a Gemma model for PS1.", 400)
     endpoint = validate_base_url(endpoint)
     budget = template.budget
     if (budget.max_usd_total is not None or budget.max_usd_per_run is not None) and (
@@ -90,12 +109,12 @@ def build_client(api_key: str, bearer_token: str, model: str, endpoint: str, tem
                 raise BudgetConfigError("Set DATAMIND_PRICE_INPUT_M and DATAMIND_PRICE_OUTPUT_M for Bedrock before using a USD cap.")
 
     config = template.model_copy(update={
-        "base_url": endpoint, "api_key": bearer_token, "orchestrator_model": model,
+        "base_url": endpoint, "api_key": _credential(api_key, bearer_token), "orchestrator_model": model,
         "fast_model": model, "reasoning_model": model,
     })
     return LLMClient(
         config,
-        client=_client(api_key, bearer_token, endpoint),
+        client=_client(api_key, bearer_token, endpoint, timeout=template.timeout_seconds),
         cost_guard=OptedInGuard(),
         purpose="ask",
     )

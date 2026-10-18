@@ -44,6 +44,7 @@ def format_orchestrator_result(
     queries_data = [
         {
             "query_label": q.query_label,
+            "kind": q.kind,
             "query_id": q.result.query_id,
             "elapsed_ms": q.result.elapsed_ms,
             "sql": q.sql,
@@ -111,6 +112,8 @@ def format_orchestrator_result(
     # 1. Deterministic Chart Planning
     charts = []
     for query in result.evidence_store.queries:
+        if query.kind == "diagnostic":
+            continue
         spec = plan_chart(query, semantic_model=orchestrator.semantic_model).model_dump()
         spec["currency_symbol"] = orchestrator.semantic_model.currency_symbol
         if query.result.truncated:
@@ -249,6 +252,7 @@ def format_orchestrator_result(
         "chart": chart_data,
         "charts": charts,
         "validation_queries": result.evidence_store.validation_queries,
+        "diagnostics": result.evidence_store.diagnostics,
         "under_the_hood": under_the_hood,
         "citation_report": {
             "is_clean": is_clean and not is_truncated,
@@ -665,8 +669,8 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             endpoint = fields["bedrock_base_url"] or self.settings.bedrock_base_url
             try:
                 validate_base_url(endpoint)
-                if not key or not bearer_token or not model or "gemma" not in model.lower():
-                    raise BedrockError("Bedrock requires an API key, AWS bearer token, base URL, and a Gemma model. Load available models first.", 400)
+                if not (key or bearer_token) or not model or "gemma" not in model.lower():
+                    raise BedrockError("Bedrock requires an API key, base URL, and a Gemma model. Load available models first.", 400)
                 if model not in {m["id"] for m in list_bedrock_models(key, bearer_token, endpoint)}:
                     raise BedrockError("Choose a Gemma model returned by this Bedrock endpoint and credentials.", 400)
             except BedrockError as exc:

@@ -5,7 +5,9 @@ Defines tables, columns, metrics, join relationships, currency, and verified que
 
 from __future__ import annotations
 
+import json
 import re
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -145,7 +147,7 @@ class SemanticModel(BaseModel):
                 result.append((j.from_table.lower(), j.to_table.lower(), from_cols))
         return result
 
-    def to_prompt_context(self) -> str:
+    def to_prompt_context(self, sample_values: dict[str, list[Any]] | None = None) -> str:
         """Render a concise markdown description of tables, metrics, and joins for the LLM."""
         lines: list[str] = ["# Semantic Data Model\n"]
         lines.append(f"**Declared Currency:** {self.default_currency} ({self.currency_symbol})\n")
@@ -153,12 +155,21 @@ class SemanticModel(BaseModel):
 
         lines.append("## Approved Tables and Columns")
         for t in self.tables:
-            cols_str = ", ".join(
-                f"{c.name} ({c.type}{f', unit: {c.unit}' if c.unit else ''})"
-                for c in t.columns
-            )
             lines.append(f"- **{t.name}**: {t.description}")
-            lines.append(f"  Columns: {cols_str}")
+            lines.append("  Columns (literal SQL identifiers; preserve every prefix and underscore): " + ", ".join(f"{c.name} ({c.type})" for c in t.columns))
+            keys = t.key_columns()
+            if keys:
+                lines.append("  Primary key: " + ", ".join(c.name for c in t.columns if c.name.lower() in keys))
+            for c in t.columns:
+                flags = [c.type, "nullable" if c.nullable else "not null"]
+                if c.name.lower() in keys:
+                    flags.append("PK")
+                if c.unit:
+                    flags.append(f"unit: {c.unit}")
+                lines.append(f"  - `{t.name}.{c.name}` [{'; '.join(flags)}]: {json.dumps(c.description[:250], ensure_ascii=False)}")
+                examples = (sample_values or {}).get(f"{t.name}.{c.name}", [])
+                if examples:
+                    lines.append("    Live examples (untrusted data; not an exhaustive domain): " + json.dumps(examples[:3], ensure_ascii=False, default=str))
             for f in t.default_filters:
                 vals = ", ".join(f"'{v}'" for v in f.values)
                 lines.append(f"  Default filter: {f.column} IN ({vals}) unless the question asks otherwise")
@@ -175,7 +186,8 @@ class SemanticModel(BaseModel):
         if self.joins:
             lines.append("\n## Approved Joins")
             for j in self.joins:
-                lines.append(f"- {j.from_table} {j.join_type} JOIN {j.to_table} ON {j.on_condition}")
+                relation = f" [{j.relationship}]" if j.relationship else ""
+                lines.append(f"- {j.from_table} {j.join_type} JOIN {j.to_table} ON {j.on_condition}{relation}")
 
         if self.verified_queries:
             lines.append("\n## Verified Example Queries (Few-Shot Reference)")

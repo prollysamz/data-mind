@@ -299,3 +299,5 @@ button.citation-token:hover { border-color: #6c91ff; background: #4c7afa25; }
 .chart-export { margin-top:10px; }
 .chart-svg [role=button]:focus { outline:1px solid #b6caff; }
 @media (max-width: 700px) { .provider-options { grid-template-columns: 1fr; }.provider-option { min-height: 0; }.settings-panel { padding: 14px; }.settings-card .modal-actions { flex-wrap: wrap; }.settings-card .modal-actions #testBtn { margin-right: auto; } }
+.coverage-diagnostic { margin: 1rem 0; padding: .85rem 1rem; border: 1px solid var(--border, #d7dce2); border-radius: 10px; background: var(--surface, #f5f7fa); font-size: .9rem; }
+.coverage-diagnostic p { margin: .4rem 0; }

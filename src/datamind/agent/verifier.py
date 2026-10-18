@@ -59,7 +59,7 @@ class CitationReport:
         return [nc.message for nc in self.numeric_checks if nc.status == "UNSUPPORTED"]
 
 
-CITATION_PATTERN = re.compile(r"\[\[(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\]\]")
+CITATION_PATTERN = re.compile(r"\[\[(Q\d+:(?:R\d+|EXEC)|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\]\]")
 LOOSE_CITATION_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
 
 CAUSAL_PHRASES = (
@@ -269,7 +269,7 @@ def verify_citations(
             report.is_clean = False
 
     # Detect single-bracket citation tags like [Q1:R1] that forgot double-brackets
-    single_bracket_matches = re.finditer(r"(?<!\[)\[(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\](?!\])", text)
+    single_bracket_matches = re.finditer(r"(?<!\[)\[(Q\d+:(?:R\d+|EXEC)|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\](?!\])", text)
     for s_match in single_bracket_matches:
         report.citations.append(
             Citation(
@@ -303,7 +303,7 @@ def verify_citations(
                         target_id=token,
                         is_valid=False,
                         evidence_type="unknown",
-                        error=f"Malformed citation syntax: '{token}'. Must be Q<n>:R<m> or D:<doc>:<pk>.",
+                        error=f"Malformed citation syntax: '{token}'. Must be Q<n>:R<m>, Q<n>:EXEC or D:<doc>:<pk>.",
                     )
                 )
                 report.invalid_count += 1
@@ -326,7 +326,13 @@ def verify_citations(
             continue
 
         # Valid citation
-        if token.startswith("Q"):
+        if token.endswith(":EXEC"):
+            report.citations.append(Citation(
+                raw=raw_str, target_id=token, is_valid=True,
+                evidence_type="query_execution", resolved_data=evidence_store.get_execution(token),
+            ))
+            report.valid_count += 1
+        elif token.startswith("Q"):
             row_data = evidence_store.get_row(token)
             report.citations.append(
                 Citation(
@@ -352,7 +358,7 @@ def verify_citations(
             report.valid_count += 1
 
     # 2. Deterministic Numeric Consistency Verification
-    all_valid_sql_citations = [c.target_id for c in report.citations if c.is_valid and c.target_id.startswith("Q")]
+    all_valid_sql_citations = [c.target_id for c in report.citations if c.is_valid and c.evidence_type == "sql_row"]
 
     # Break text into sentence/line segments
     segments = [s.strip() for s in re.split(r"[\n\r]+|\.\s+", text) if s.strip()]
@@ -388,7 +394,7 @@ def verify_citations(
             c_id for c_id in CITATION_PATTERN.findall(segment)
             if evidence_store.has_id(c_id)
         ]
-        row_citations = [c for c in all_segment_citations if c.startswith("Q")]
+        row_citations = [c for c in all_segment_citations if c.startswith("Q") and not c.endswith(":EXEC")]
         doc_citations = [c for c in all_segment_citations if c.startswith("D")]
 
         # Check causal wording lint for document / ticket claims (spec section 8.7)
@@ -454,6 +460,16 @@ def verify_citations(
 
             # Verify only real metrics (exclude dates, times, error codes, and incidental numbers)
             if not _is_real_metric(raw_full, raw_matched_num, cleaned_segment, match.start()):
+                continue
+
+            execution_only = any(c.endswith(":EXEC") for c in all_segment_citations) and not row_citations
+            if execution_only:
+                report.numeric_checks.append(NumericCheck(
+                    raw_text=raw_full, claimed_value=claimed_float, sentence=segment,
+                    status="UNSUPPORTED", message="Execution metadata cannot support a measured value; cite an actual result row.",
+                ))
+                report.unsupported_claims_count += 1
+                report.is_clean = False
                 continue
 
             matched = False
@@ -772,7 +788,7 @@ def verify_citations(
     # 3. Deterministic Query Linting & Assumptions Card
     if evidence_store and evidence_store.queries:
         from datamind.guardrails.query_lint import QueryLinter
-        last_q = evidence_store.queries[-1]
+        last_q = next((q for q in reversed(evidence_store.queries) if q.kind != "diagnostic"), evidence_store.queries[-1])
         linter = QueryLinter(semantic_model)
         rows = last_q.result.rows if last_q.result else []
         lint_findings, assumptions_card = linter.lint_query(

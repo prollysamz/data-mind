@@ -17,6 +17,7 @@ class QueryRecord:
     purpose: str
     result: QueryResult
     row_ids: list[str] = field(default_factory=list)
+    kind: str = "answer"
 
 
 @dataclass
@@ -25,6 +26,7 @@ class EvidenceStore:
     queries: list[QueryRecord] = field(default_factory=list)
     chunks: list[Chunk] = field(default_factory=list)
     validation_queries: list[dict[str, Any]] = field(default_factory=list)
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
     _rows: dict[str, dict[str, Any]] = field(default_factory=dict)
     _chunks_by_id: dict[str, Chunk] = field(default_factory=dict)
     _query_counter: int = 0
@@ -34,11 +36,12 @@ class EvidenceStore:
         self.queries.clear()
         self.chunks.clear()
         self.validation_queries.clear()
+        self.diagnostics.clear()
         self._rows.clear()
         self._chunks_by_id.clear()
         self._query_counter = 0
 
-    def add_query(self, sql: str, purpose: str, result: QueryResult) -> str:
+    def add_query(self, sql: str, purpose: str, result: QueryResult, *, kind: str = "answer") -> str:
         """Add query result to store, assign Q<n>:R<m> IDs to each row, return query label (e.g. 'Q1')."""
         self._query_counter += 1
         query_label = f"Q{self._query_counter}"
@@ -62,6 +65,7 @@ class EvidenceStore:
             purpose=purpose,
             result=result,
             row_ids=row_ids,
+            kind=kind,
         )
         self.queries.append(record)
         return query_label
@@ -107,7 +111,15 @@ class EvidenceStore:
 
     def has_id(self, evidence_id: str) -> bool:
         """Check if an evidence ID (row ID or chunk ID) exists."""
-        return (evidence_id in self._rows) or (evidence_id in self._chunks_by_id)
+        return (evidence_id in self._rows) or (evidence_id in self._chunks_by_id) or self.get_execution(evidence_id) is not None
+
+    def get_execution(self, evidence_id: str) -> dict[str, Any] | None:
+        """Resolve execution metadata separately from database result rows."""
+        query = next((q for q in self.queries if evidence_id == f"{q.query_label}:EXEC"), None)
+        if query is None:
+            return None
+        return {"sql": query.sql, "query_id": query.result.query_id,
+                "row_count": len(query.result.rows), "truncated": query.result.truncated}
 
     def to_json(self) -> dict[str, Any]:
         """Serialize evidence store into a JSON-compatible dictionary."""

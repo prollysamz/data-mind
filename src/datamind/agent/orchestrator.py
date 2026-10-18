@@ -17,8 +17,10 @@ from datamind.agent.answerability import (
     clarification_message,
     refusal_message,
 )
+from datamind.agent.empty_results import empty_execution_receipt
 from datamind.agent.evidence import EvidenceStore
 from datamind.agent.prompts import build_system_prompt
+from datamind.agent.schema_context import collect_schema_examples
 from datamind.agent.techniques.dynamic_few_shot import retrieve_dynamic_few_shot
 from datamind.agent.techniques.schema_pruning import prune_semantic_model
 from datamind.agent.techniques.structured_query_lane import try_structured_lane
@@ -167,7 +169,8 @@ class AgentOrchestrator:
                 verified_queries=few_shots,
             )
 
-        system_prompt = build_system_prompt(active_model)
+        examples = collect_schema_examples(active_model, question, self.db_adapter, self.sql_guard, self.evidence_store)
+        system_prompt = build_system_prompt(active_model, examples)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
         ]
@@ -256,7 +259,11 @@ class AgentOrchestrator:
                     # second incorrect narration. Do not generalize this to arbitrary
                     # tables, prose, units or interpretations.
                     last = self.evidence_store.queries[-1]
-                    if len(last.result.rows) == 1 and len(last.result.rows[0]) == 1 and isinstance(last.result.rows[0][0], (int, float, Decimal)) and not isinstance(last.result.rows[0][0], bool):
+                    empty_receipt = empty_execution_receipt(self.evidence_store)
+                    if empty_receipt:
+                        final_text = empty_receipt
+                        report = verify_citations(final_text, self.evidence_store, self.semantic_model, question=question)
+                    elif len(last.result.rows) == 1 and len(last.result.rows[0]) == 1 and isinstance(last.result.rows[0][0], (int, float, Decimal)) and not isinstance(last.result.rows[0][0], bool):
                         value = last.result.rows[0][0]
                         final_text = f"The model's explanation did not pass verification. The database returned {value} [[{last.query_label}:R1]]. Inspect the executed SQL for the filters and calculation."
                         report = verify_citations(final_text, self.evidence_store, self.semantic_model, question=question)

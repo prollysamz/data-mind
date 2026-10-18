@@ -41,7 +41,35 @@ def test_catalogue_is_fetched_with_key_and_filters_for_gemma():
         endpoint = "https://bedrock-mantle.us-east-1.api.aws/v1"
         assert list_models("test-key", "test-bearer", endpoint) == [{"id": "google.gemma-4-26b-a4b", "name": "google.gemma-4-26b-a4b"}]
         assert client.call_args.kwargs["api_key"] == "test-bearer"
-        assert client.call_args.kwargs["default_headers"] == {"x-api-key": "test-key"}
+        # Mantle rejects a request carrying both Authorization and x-api-key.
+        assert "default_headers" not in client.call_args.kwargs
+
+
+def test_catalogue_falls_back_to_v1_when_openai_route_has_no_model_list():
+    """Mantle chats on /openai/v1 but only lists models on /v1."""
+    from types import SimpleNamespace
+
+    from openai import NotFoundError
+
+    not_found = NotFoundError("missing", response=SimpleNamespace(status_code=404, headers={}, request=None), body=None)
+    with patch("datamind.llm.bedrock.OpenAI") as client:
+        listing = client.return_value.__enter__.return_value.models.list
+        listing.side_effect = [not_found, [SimpleNamespace(id="google.gemma-4-26b-a4b")]]
+        result = list_models("", "test-bearer", "https://bedrock-mantle.us-east-1.api.aws/openai/v1")
+    assert result == [{"id": "google.gemma-4-26b-a4b", "name": "google.gemma-4-26b-a4b"}]
+    assert [c.kwargs["base_url"] for c in client.call_args_list] == [
+        "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+        "https://bedrock-mantle.us-east-1.api.aws/v1",
+    ]
+
+
+def test_a_single_bedrock_key_is_enough():
+    from types import SimpleNamespace
+
+    with patch("datamind.llm.bedrock.OpenAI") as client:
+        client.return_value.__enter__.return_value.models.list.return_value = [SimpleNamespace(id="google.gemma-4-e2b")]
+        list_models("only-api-key", "", "https://bedrock-mantle.us-east-1.api.aws/v1")
+        assert client.call_args.kwargs["api_key"] == "only-api-key"
 
 
 def test_bedrock_preserves_budget_and_does_not_bypass_missing_price_inputs():

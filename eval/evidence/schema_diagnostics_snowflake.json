@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-10-18T13:35:23.302441+00:00",
+  "status": "PASS",
+  "backend": "snowflake",
+  "schema_example_columns": [
+    "ORDERS.O_ORDERPRIORITY"
+  ],
+  "validation_queries": [
+    {
+      "purpose": "Live schema examples (not exhaustive)",
+      "sql": "SELECT DISTINCT O_ORDERPRIORITY FROM ORDERS WHERE NOT O_ORDERPRIORITY IS NULL ORDER BY O_ORDERPRIORITY LIMIT 3",
+      "query_id": "01c7d02f-000e-16f2-0002-b6f20001e102",
+      "column": "ORDERS.O_ORDERPRIORITY",
+      "row_count": 3
+    }
+  ],
+  "queries": [
+    {
+      "sql": "SELECT O_ORDERKEY FROM ORDERS WHERE O_ORDERDATE >= CAST('2030-01-01' AS DATE)",
+      "query_id": "01c7d02f-000e-16d0-0002-b6f200020056",
+      "kind": "answer",
+      "row_count": 0
+    },
+    {
+      "sql": "SELECT MIN(O_ORDERDATE) AS earliest_date, MAX(O_ORDERDATE) AS latest_date, COUNT(*) AS source_rows, COUNT(O_ORDERDATE) AS dated_rows FROM ORDERS",
+      "query_id": "01c7d02f-000e-16d0-0002-b6f20002005a",
+      "kind": "diagnostic",
+      "row_count": 1
+    }
+  ],
+  "diagnostics": [
+    {
+      "source_query": "Q1",
+      "table": "ORDERS",
+      "column": "O_ORDERDATE",
+      "scope": "Whole source table; original filters excluded",
+      "trigger": "empty_rows",
+      "status": "available",
+      "query_label": "Q2",
+      "query_id": "01c7d02f-000e-16d0-0002-b6f20002005a",
+      "earliest_date": "1992-01-01",
+      "latest_date": "1998-08-02",
+      "source_rows": 1500000,
+      "dated_rows": 1500000
+    }
+  ],
+  "execution_citation_check": {
+    "citation": "Q1:EXEC",
+    "valid": true,
+    "fabricated_row_rejected": true
+  }
+}
