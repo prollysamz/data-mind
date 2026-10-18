@@ -1,335 +1,34 @@
-let currentResult = null;
-let currentAbortController = null;
-let queryTimerInterval = null;
-let queryStartTime = null;
-let activeUploadSession = null;
-let currentUploadTableMeta = null;
+'use strict';
+
+const state = {
+  config: null,
+  result: null,
+  abortController: null,
+  timer: null,
+  startedAt: 0,
+  activeUploadSession: null,
+  uploadTable: null,
+  history: [],
+  activeConversationId: null,
+  selectedTurnId: null,
+  runningConversationId: null,
+};
+const conversationStore = ConversationHistory.createStore();
 
 document.addEventListener('DOMContentLoaded', async () => {
-  initTabs();
-  initModal();
-  initActions();
-  initUploads();
+  initSmoke();
+  initInteractions();
+  initLayout();
+  setView('empty');
+  await restoreHistory();
   await loadConfig();
-
-  const form = document.getElementById('askForm');
-  const input = document.getElementById('questionInput');
-  const newChatBtn = document.getElementById('newChatBtn');
-  const cancelBtn = document.getElementById('cancelQueryBtn');
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const query = input.value.trim();
-    if (!query) return;
-    await executeQuery(query);
-  });
-
-  if (newChatBtn) {
-    newChatBtn.addEventListener('click', () => {
-      resetConversation();
-    });
-  }
-
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', () => {
-      if (currentAbortController) {
-        currentAbortController.abort();
-      }
-    });
-  }
 });
 
-async function loadConfig() {
-  try {
-    const res = await fetch('/api/config');
-    if (!res.ok) return;
-    const backendEl = document.getElementById('backendName');
-    if (backendEl && data.backend) {
-      backendEl.textContent = data.backend.toUpperCase();
-    }
-    const modelEl = document.getElementById('modelName');
-    if (modelEl && data.model_name) {
-      modelEl.textContent = data.model_name;
-    }
+function $(id) { return document.getElementById(id); }
 
-    const privacyEl = document.getElementById('privacyStatus');
-    if (privacyEl && data.privacy_indicator) {
-      privacyEl.textContent = data.privacy_indicator;
-    }
-
-    // Dynamic Sample Questions from Semantic Model
-    const chipsList = document.getElementById('chipsList');
-    if (chipsList && data.sample_questions && data.sample_questions.length) {
-      chipsList.innerHTML = '';
-      data.sample_questions.forEach(q => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'chip';
-        btn.textContent = q.length > 55 ? q.substring(0, 52) + '...' : q;
-        btn.title = q;
-        btn.setAttribute('data-q', q);
-        btn.addEventListener('click', () => {
-          document.getElementById('questionInput').value = q;
-          document.getElementById('askForm').dispatchEvent(new Event('submit'));
-        });
-        chipsList.appendChild(btn);
-      });
-    }
-  } catch (err) {
-    console.error('Failed to load config:', err);
-    document.getElementById('backendName').textContent = 'OFFLINE';
-  }
-}
-
-function resetConversation() {
-  currentResult = null;
-  document.getElementById('questionInput').value = '';
-  document.getElementById('resultsContainer').style.display = 'none';
-  document.getElementById('errorState').style.display = 'none';
-  document.getElementById('loadingState').style.display = 'none';
-  document.getElementById('emptyState').style.display = 'flex';
-  document.getElementById('conversationThread').innerHTML = '';
-}
-
-function startTimer() {
-  queryStartTime = performance.now();
-  const timerEl = document.getElementById('elapsedTimer');
-  const stagePlanning = document.getElementById('stagePlanning');
-  const stageGuard = document.getElementById('stageGuard');
-  const stageExec = document.getElementById('stageExec');
-  const stageAudit = document.getElementById('stageAudit');
-
-  // Reset stages
-  [stagePlanning, stageGuard, stageExec, stageAudit].forEach(s => {
-    if (s) {
-      s.className = 'stage-pill';
-    }
-  });
-  if (stagePlanning) stagePlanning.className = 'stage-pill active';
-
-  queryTimerInterval = setInterval(() => {
-    const elapsedSec = ((performance.now() - queryStartTime) / 1000).toFixed(1);
-    if (timerEl) timerEl.textContent = `${elapsedSec}s`;
-
-    // Progress simulation through real lifecycle stages
-    if (elapsedSec > 0.8 && stageGuard && !stageGuard.classList.contains('active') && !stageGuard.classList.contains('done')) {
-      if (stagePlanning) stagePlanning.className = 'stage-pill done';
-      stageGuard.className = 'stage-pill active';
-    }
-    if (elapsedSec > 1.8 && stageExec && !stageExec.classList.contains('active') && !stageExec.classList.contains('done')) {
-      if (stageGuard) stageGuard.className = 'stage-pill done';
-      stageExec.className = 'stage-pill active';
-    }
-    if (elapsedSec > 3.2 && stageAudit && !stageAudit.classList.contains('active') && !stageAudit.classList.contains('done')) {
-      if (stageExec) stageExec.className = 'stage-pill done';
-      stageAudit.className = 'stage-pill active';
-    }
-  }, 100);
-}
-
-function stopTimer() {
-  if (queryTimerInterval) {
-    clearInterval(queryTimerInterval);
-    queryTimerInterval = null;
-  }
-}
-
-async function executeQuery(question) {
-  const submitBtn = document.getElementById('submitBtn');
-  const btnSpinner = document.getElementById('btnSpinner');
-  const btnText = submitBtn.querySelector('.btn-text');
-  const sendIcon = submitBtn.querySelector('.send-icon');
-  const emptyState = document.getElementById('emptyState');
-  const resultsContainer = document.getElementById('resultsContainer');
-  const loadingState = document.getElementById('loadingState');
-  const errorState = document.getElementById('errorState');
-  const isStrict = document.getElementById('strictModeToggle').checked;
-
-  submitBtn.disabled = true;
-  btnSpinner.style.display = 'block';
-  sendIcon.style.display = 'none';
-  btnText.textContent = 'Analyzing...';
-
-  if (emptyState) emptyState.style.display = 'none';
-  if (resultsContainer) resultsContainer.style.display = 'none';
-  if (errorState) errorState.style.display = 'none';
-  if (loadingState) loadingState.style.display = 'flex';
-
-  currentAbortController = new AbortController();
-  startTimer();
-
-  try {
-    const targetUrl = activeUploadSession ? `/api/uploads/${activeUploadSession}/ask` : '/api/ask';
-    const selectedPreset = document.getElementById('modelPresetSelect')?.value || 'local';
-    const res = await fetch(targetUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question: question,
-        permissive: !isStrict,
-        preset: selectedPreset,
-      }),
-      signal: currentAbortController.signal,
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      if (data.error_type === 'budget_exceeded') {
-        const err = new Error(data.message || data.error || 'Budget limit reached.');
-        err.isBudget = true;
-        throw err;
-      }
-      throw new Error(data.error || `Server returned HTTP ${res.status}`);
-    }
-
-    currentResult = data;
-    renderResult(data);
-
-    if (loadingState) loadingState.style.display = 'none';
-    if (resultsContainer) resultsContainer.style.display = 'flex';
-  } catch (err) {
-    if (loadingState) loadingState.style.display = 'none';
-    if (errorState) {
-      if (err.name === 'AbortError') {
-        document.getElementById('errorTitle').textContent = 'Query Cancelled';
-        document.getElementById('errorMessage').textContent = 'Query execution was cancelled by user.';
-      } else {
-        document.getElementById('errorTitle').textContent = err.isBudget ? 'Budget Limit Reached' : 'Query Execution Failed';
-        document.getElementById('errorMessage').textContent = err.message || 'An unexpected error occurred during execution.';
-      }
-      errorState.style.display = 'flex';
-    }
-  } finally {
-    stopTimer();
-    currentAbortController = null;
-    submitBtn.disabled = false;
-    btnSpinner.style.display = 'none';
-    sendIcon.style.display = 'block';
-    btnText.textContent = 'Run Query';
-  }
-}
-
-function renderResult(data) {
-  document.getElementById('questionEcho').textContent = data.question;
-
-  // Render Three-State Trust Badges
-  const trustDiv = document.getElementById('trustSummary');
-  trustDiv.innerHTML = '';
-
-  const badgeInfo = data.trust_badge || {};
-  const badgeState = badgeInfo.state || 'VERIFIED';
-
-  const mainBadge = document.createElement('span');
-  mainBadge.className = 'trust-badge';
-
-  if (badgeState === 'VERIFIED') {
-    mainBadge.classList.add('badge-clean-pass');
-    mainBadge.innerHTML = `&#10003; ${badgeInfo.label || 'Verified Grounded'}`;
-  } else if (badgeState === 'PARTIALLY_VERIFIED') {
-    mainBadge.style.background = 'rgba(234, 179, 8, 0.15)';
-    mainBadge.style.color = '#eab308';
-    mainBadge.style.border = '1px solid rgba(234, 179, 8, 0.4)';
-    mainBadge.innerHTML = `&#9888; ${badgeInfo.label || 'Partially Verified'}`;
-  } else if (badgeState === 'NOT_VERIFIED') {
-    mainBadge.classList.add('badge-clean-fail');
-    mainBadge.innerHTML = `&#9888; ${badgeInfo.label || 'Not Verified'}`;
-  } else if (badgeState === 'REFUSAL') {
-    mainBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-    mainBadge.style.color = '#f59e0b';
-    mainBadge.style.border = '1px solid rgba(245, 158, 11, 0.4)';
-    mainBadge.innerHTML = `&#9888; ${badgeInfo.label || 'Schema Boundary'}`;
-  } else if (badgeState === 'CLARIFICATION') {
-    mainBadge.style.background = 'rgba(168, 85, 247, 0.15)';
-    mainBadge.style.color = '#a855f7';
-    mainBadge.style.border = '1px solid rgba(168, 85, 247, 0.4)';
-    mainBadge.innerHTML = `&#9432; ${badgeInfo.label || 'Clarification'}`;
-  }
-  trustDiv.appendChild(mainBadge);
-
-  const citReport = data.citation_report || {};
-  if (citReport.verified_numbers_count > 0) {
-    const numBadge = document.createElement('span');
-    numBadge.className = 'trust-badge badge-num-verified';
-    numBadge.textContent = `${citReport.verified_numbers_count} Numbers Verified`;
-    trustDiv.appendChild(numBadge);
-  }
-
-  if (citReport.discrepancy_count > 0) {
-    const discBadge = document.createElement('span');
-    discBadge.className = 'trust-badge badge-clean-fail';
-    discBadge.textContent = `${citReport.discrepancy_count} Discrepancies`;
-    trustDiv.appendChild(discBadge);
-  }
-
-  // Handle Clarification state quick-replies
-  const clarifyCard = document.getElementById('clarifyCard');
-  const clarifyChips = document.getElementById('clarifyChips');
-  if (data.response_type === 'clarification') {
-    clarifyCard.style.display = 'block';
-    clarifyChips.innerHTML = '';
-    const suggestions = [
-      'Total revenue across all products',
-      'Month-over-month revenue decline',
-      'Customer support tickets by priority',
-      'Average order line amount',
-    ];
-    suggestions.forEach(s => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'clarify-chip';
-      btn.textContent = s;
-      btn.addEventListener('click', () => {
-        document.getElementById('questionInput').value = s;
-        document.getElementById('askForm').dispatchEvent(new Event('submit'));
-      });
-      clarifyChips.appendChild(btn);
-    });
-  } else {
-    clarifyCard.style.display = 'none';
-  }
-
-  // Render Query Method & Assumptions Card (AST Linter Integrity)
-  renderAssumptionsCard(data.assumptions_card);
-
-  // Render Answer Markdown
-  const answerContent = document.getElementById('answerContent');
-  answerContent.innerHTML = formatMarkdownWithCitations(data.answer, data);
-
-  // Bind click handlers to citation pills
-  answerContent.querySelectorAll('.citation-token').forEach(pill => {
-    pill.addEventListener('click', (e) => {
-      e.preventDefault();
-      const targetId = pill.getAttribute('data-citation');
-      handleCitationClick(targetId);
-    });
-  });
-
-  // Render SVG Chart
-  renderChart(data.chart);
-
-  // Render Under The Hood Metadata
-  renderUnderTheHood(data);
-
-  // Render Inspector Tab 1: SQL Queries
-  const queries = (data.evidence && data.evidence.queries) || [];
-  document.getElementById('sqlCount').textContent = queries.length;
-  renderQueries(queries);
-
-  // Render Inspector Tab 2: Document Chunks
-  const docs = (data.evidence && data.evidence.chunks) || [];
-  document.getElementById('docsCount').textContent = docs.length;
-  renderDocs(docs);
-
-  // Render Inspector Tab 3: Numeric Checks
-  const checks = (citReport.numeric_checks) || [];
-  document.getElementById('numChecksCount').textContent = checks.length;
-  renderNumericChecks(checks);
-}
-
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -337,1304 +36,999 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-function renderAssumptionsCard(card) {
-  const box = document.getElementById('assumptionsBox');
-  const badge = document.getElementById('assumptionsBadge');
-  const body = document.getElementById('assumptionsBody');
-  if (!box || !badge || !body) return;
+function initInteractions() {
+  document.querySelector('.wordmark').addEventListener('click', (event) => { event.preventDefault(); startNewAnalysis(); });
+  $('askForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const question = $('questionInput').value.trim();
+    if (question) executeQuery(question);
+  });
 
-  if (!card) {
-    box.style.display = 'none';
-    return;
-  }
+  $('questionInput').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      $('askForm').requestSubmit();
+    }
+  });
+  $('questionInput').addEventListener('input', autoSizeInput);
 
-  box.style.display = 'block';
-  const isAmber = card.badge_status === 'PARTIALLY_VERIFIED';
-  badge.textContent = isAmber ? 'Partially Verified Method' : 'Verified Method';
-  if (isAmber) {
-    badge.className = 'assumptions-badge badge-amber';
-    box.open = true; // Auto-expand when there are lint diagnostics
-  } else {
-    badge.className = 'assumptions-badge';
-    box.open = false;
-  }
+  document.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      openPalette();
+    }
+    if (event.key === 'Escape') closeOverlays();
+  });
 
-  let html = '<div class="assumptions-grid">';
-  if (card.tables && card.tables.length) {
-    html += `<div class="assumptions-item"><div class="assumptions-item-label">Tables Used</div><div class="assumptions-item-val">${escapeHtml(card.tables.join(', '))}</div></div>`;
-  }
-  if (card.join_keys && card.join_keys.length) {
-    html += `<div class="assumptions-item"><div class="assumptions-item-label">Join Keys</div><div class="assumptions-item-val">${escapeHtml(card.join_keys.join('; '))}</div></div>`;
-  }
-  if (card.filters && card.filters.length) {
-    html += `<div class="assumptions-item"><div class="assumptions-item-label">Business Filters</div><div class="assumptions-item-val">${escapeHtml(card.filters.join(' AND '))}</div></div>`;
-  }
-  if (card.group_by && card.group_by.length) {
-    html += `<div class="assumptions-item"><div class="assumptions-item-label">Grouping</div><div class="assumptions-item-val">${escapeHtml(card.group_by.join(', '))}</div></div>`;
-  }
-  if (card.metrics && card.metrics.length) {
-    html += `<div class="assumptions-item"><div class="assumptions-item-label">Metric Aggregations</div><div class="assumptions-item-val">${escapeHtml(card.metrics.join(', '))}</div></div>`;
-  }
-  if (card.date_range) {
-    html += `<div class="assumptions-item"><div class="assumptions-item-label">Date Window</div><div class="assumptions-item-val">${escapeHtml(card.date_range)}</div></div>`;
-  }
-  html += '</div>';
+  ['sidebarNewBtn', 'workspaceBtn'].forEach((id) => $(id).addEventListener('click', startNewAnalysis));
+  ['catalogBtn', 'sidebarCatalogBtn', 'overviewCatalogBtn'].forEach((id) => $(id).addEventListener('click', openCatalog));
+  $('drawerScrim').addEventListener('click', closeCatalog);
+  document.querySelectorAll('[data-close="catalogDrawer"]').forEach((button) => button.addEventListener('click', closeCatalog));
+  document.querySelectorAll('[data-modal-close]').forEach((button) => button.addEventListener('click', () => closeModal(button.closest('.modal'))));
+  document.querySelectorAll('.modal').forEach((modal) => modal.addEventListener('click', (event) => {
+    if (event.target === modal) closeModal(modal);
+  }));
 
-  if (card.plain_language_assumptions && card.plain_language_assumptions.length) {
-    html += '<ul style="margin: 0.5rem 0 0.5rem 1.25rem; padding: 0;">';
-    card.plain_language_assumptions.forEach(item => {
-      html += `<li>${escapeHtml(item)}</li>`;
-    });
-    html += '</ul>';
-  }
+  $('cancelQueryBtn').addEventListener('click', () => state.abortController?.abort());
+  $('paletteBtn').addEventListener('click', () => openPalette());
+  $('dismissErrorBtn').addEventListener('click', () => { $('errorState').hidden = true; });
+  $('clearHistoryBtn').addEventListener('click', clearHistory);
+  const latestAction = (action) => () => { selectTurn($('resultsContainer').dataset.turnId); action(); };
+  $('copyAnswerBtn').addEventListener('click', latestAction(copyAnswer));
+  $('copySqlBtn').addEventListener('click', latestAction(copySql));
+  $('exportCsvBtn').addEventListener('click', latestAction(exportResultCsv));
+  $('receiptBtn').addEventListener('click', latestAction(showReceipt));
+  $('secondOpinionBtn').addEventListener('click', latestAction(requestSecondOpinion));
+  $('redTeamBtn').addEventListener('click', latestAction(requestRedTeam));
+  $('inspectEvidenceBtn').addEventListener('click', () => selectTurn($('resultsContainer').dataset.turnId));
 
-  if (card.lint_findings && card.lint_findings.length) {
-    html += '<div class="assumptions-warnings">';
-    html += '<div class="assumptions-warning-title">&#9888; Structural Integrity &amp; Lint Diagnostics:</div>';
-    html += '<ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">';
-    card.lint_findings.forEach(f => {
-      html += `<li><strong>[${escapeHtml((f.severity || '').toUpperCase())}]</strong> ${escapeHtml(f.message)}</li>`;
-    });
-    html += '</ul></div>';
-  }
-
-  body.innerHTML = html;
+  document.querySelectorAll('.tab').forEach((button) => button.addEventListener('click', () => selectTab(button)));
+  initUploads();
 }
 
-// -------------------------------------------------------------
-// Pure SVG Dependency-Free Chart Renderer (Bar, Horizontal Bar, Line, KPI)
-// -------------------------------------------------------------
-function renderChart(chartSpec) {
-  const chartCard = document.getElementById('chartCard');
-  const chartBody = document.getElementById('chartBody');
-  const chartTitle = document.getElementById('chartTitle');
-  const chartBadge = document.getElementById('chartTypeBadge');
-  const chartNote = document.getElementById('chartNote');
+function initLayout() {
+  const app = $('app');
+  const compact = () => window.matchMedia('(max-width: 1100px)').matches;
+  try { if (localStorage.getItem('datamind.navCollapsed') === '1') app.classList.add('nav-collapsed'); } catch { /* storage unavailable */ }
+  $('navToggleBtn').addEventListener('click', () => {
+    if (compact()) { app.classList.toggle('nav-open'); return; }
+    app.classList.toggle('nav-collapsed');
+    try { localStorage.setItem('datamind.navCollapsed', app.classList.contains('nav-collapsed') ? '1' : '0'); } catch { /* storage unavailable */ }
+  });
+  $('sidebar').addEventListener('click', (event) => { if (compact() && event.target.closest('button')) app.classList.remove('nav-open'); });
 
-  chartBody.innerHTML = '';
-  chartNote.style.display = 'none';
+  const menu = $('moreMenu');
+  const setMenu = (open) => { menu.hidden = !open; $('moreBtn').setAttribute('aria-expanded', String(open)); };
+  $('moreBtn').addEventListener('click', (event) => { event.stopPropagation(); setMenu(menu.hidden); });
+  menu.addEventListener('click', () => setMenu(false));
+  document.addEventListener('click', (event) => { if (!event.target.closest('.menu')) setMenu(false); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') setMenu(false); });
 
-  if (!chartSpec || chartSpec.type === 'table' || !chartSpec.points || !chartSpec.points.length) {
-    chartCard.style.display = 'none';
+  $('inspectEvidenceBtn').addEventListener('click', () => {
+    const panel = $('evidencePanel');
+    panel.classList.remove('flash'); void panel.offsetWidth; panel.classList.add('flash');
+    if (compact()) app.classList.toggle('evidence-open');
+    else panel.querySelector('.tab.active')?.focus();
+  });
+  $('closeEvidenceBtn').addEventListener('click', () => app.classList.remove('evidence-open'));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') app.classList.remove('evidence-open', 'nav-open');
+    if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest('input, textarea, select, [contenteditable]')) startNewAnalysis();
+  });
+
+  document.addEventListener('click', (event) => {
+    const header = event.target.closest('.data-table th[data-sort]');
+    if (header) sortTable(header);
+  });
+
+  const resizer = $('evidenceResizer');
+  const setWidth = (px) => {
+    const width = Math.min(640, Math.max(300, Math.round(px)));
+    app.style.setProperty('--evidence-w', `${width}px`);
+    return width;
+  };
+  try { const saved = Number(localStorage.getItem('datamind.evidenceWidth')); if (saved) setWidth(saved); } catch { /* storage unavailable */ }
+  resizer.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    resizer.setPointerCapture(event.pointerId);
+    resizer.classList.add('dragging');
+    const move = (e) => setWidth(window.innerWidth - e.clientX);
+    const up = (e) => {
+      resizer.classList.remove('dragging');
+      resizer.removeEventListener('pointermove', move);
+      resizer.removeEventListener('pointerup', up);
+      try { localStorage.setItem('datamind.evidenceWidth', String(setWidth(window.innerWidth - e.clientX))); } catch { /* storage unavailable */ }
+    };
+    resizer.addEventListener('pointermove', move);
+    resizer.addEventListener('pointerup', up);
+  });
+  resizer.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const current = $('evidencePanel').getBoundingClientRect().width;
+    setWidth(current + (event.key === 'ArrowLeft' ? 24 : -24));
+  });
+
+  initPalette();
+}
+
+function initPalette() {
+  const input = $('paletteInput'), list = $('paletteList');
+  let items = [], active = 0;
+  const commands = () => {
+    const entries = [
+      { label: 'New analysis', hint: 'Command', run: startNewAnalysis },
+      { label: 'Open data catalog', hint: 'Command', run: openCatalog },
+      { label: 'Toggle navigation', hint: 'Command', run: () => $('navToggleBtn').click() },
+    ];
+    if (state.config?.uploads_enabled !== false) entries.push({ label: 'Add data', hint: 'Command', run: openUploadModal });
+    if (state.result) {
+      entries.push({ label: 'Copy answer', hint: 'Result', run: copyAnswer }, { label: 'Copy SQL', hint: 'Result', run: copySql }, { label: 'Export CSV', hint: 'Result', run: exportResultCsv });
+    }
+    state.history.forEach((conversation) => entries.push({ label: conversation.title, hint: 'Chat', run: () => openConversation(conversation.id) }));
+    const asked = new Set();
+    (state.config?.sample_questions || []).forEach((question) => {
+      if (asked.has(question)) return;
+      asked.add(question);
+      entries.push({ label: question, hint: 'Ask', run: () => { startNewAnalysis(); $('questionInput').value = question; autoSizeInput(); $('questionInput').focus(); } });
+    });
+    return entries;
+  };
+  const render = () => {
+    const query = input.value.trim().toLowerCase();
+    items = commands().filter((item) => item.label.toLowerCase().includes(query)).slice(0, 12);
+    active = Math.min(active, Math.max(0, items.length - 1));
+    list.innerHTML = items.length ? '' : '<li class="empty">No matches</li>';
+    items.forEach((item, index) => {
+      const row = document.createElement('li');
+      row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(index === active));
+      row.innerHTML = `<span>${escapeHtml(item.label)}</span><span>${item.hint}</span>`;
+      row.addEventListener('click', () => choose(index));
+      list.appendChild(row);
+    });
+  };
+  const choose = (index) => {
+    const item = items[index];
+    if (!item) return;
+    closeModal($('paletteModal'));
+    item.run();
+  };
+  input.addEventListener('input', () => { active = 0; render(); });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      active = (active + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % Math.max(1, items.length);
+      render();
+      list.children[active]?.scrollIntoView({ block: 'nearest' });
+    } else if (event.key === 'Enter') { event.preventDefault(); choose(active); }
+  });
+  openPalette = () => {
+    input.value = ''; active = 0; render();
+    const modal = $('paletteModal');
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    input.focus();
+  };
+}
+
+let openPalette = () => {};
+
+function autoSizeInput() {
+  const input = $('questionInput');
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 190)}px`;
+}
+
+async function loadConfig() {
+  try {
+    const response = await fetch('/api/config');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const config = await response.json();
+    state.config = config;
+    $('backendName').textContent = String(config.backend || 'Connected').toUpperCase();
+    $('backendBadge').classList.add('online');
+    $('privacyStatus').textContent = config.privacy_indicator || (config.is_local ? 'Local-only execution' : 'Metered cloud endpoint');
+    $('executionMode').textContent = config.is_local ? 'Local execution' : 'Cloud execution';
+    $('modelLabel').textContent = config.model_name || 'Configured model';
+    $('tableCount').textContent = (config.tables || []).length;
+    renderSuggestions(config.sample_questions || []);
+    renderCatalog(config.tables || []);
+    renderWelcome(config);
+    $('uploadModalBtn').hidden = config.uploads_enabled === false;
+  } catch (error) {
+    $('backendName').textContent = 'OFFLINE';
+    $('privacyStatus').textContent = 'Server unavailable';
+    renderSuggestions([
+      'What is the total sales revenue?',
+      'Which products declined month over month?',
+    ]);
+    console.error('Could not load Data Mind configuration:', error);
+  }
+}
+
+
+function renderWelcome(config) {
+  const tables = config.tables || [];
+  const fields = tables.reduce((total, table) => total + (table.columns || []).length, 0);
+  $('welcomeMeta').textContent = tables.length
+    ? `${tables.length} tables · ${fields} fields · ${config.semantic_model || 'Semantic model'}`
+    : 'No tables are currently available.';
+  $('datasetTables').innerHTML = '';
+  tables.slice(0, 3).forEach((table) => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'dataset-table';
+    button.innerHTML = `<strong>${escapeHtml(table.name)}</strong><span>${(table.columns || []).length} fields</span>`;
+    button.title = table.description || table.name;
+    button.addEventListener('click', openCatalog);
+    $('datasetTables').appendChild(button);
+  });
+}
+
+function renderSuggestions(questions) {
+  const container = $('chipsList');
+  container.innerHTML = '';
+  questions.slice(0, 4).forEach((question, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'suggestion';
+    button.innerHTML = `<span class="suggestion-index">0${index + 1}</span><span class="suggestion-copy">${escapeHtml(question)}</span><span class="suggestion-arrow" aria-hidden="true">↗</span>`;
+    button.title = question;
+    button.addEventListener('click', () => {
+      $('questionInput').value = question;
+      autoSizeInput();
+      $('questionInput').focus();
+    });
+    container.appendChild(button);
+  });
+}
+
+function renderCatalog(tables) {
+  const container = $('catalogContent');
+  if (!tables.length) {
+    container.innerHTML = '<p class="evidence-empty">No schema information is available.</p>';
     return;
   }
+  container.innerHTML = tables.map((table, index) => `
+    <details class="catalog-table" ${index === 0 ? 'open' : ''}>
+      <summary><strong>${escapeHtml(table.name)}</strong><span>${(table.columns || []).length} fields</span></summary>
+      ${table.description ? `<p>${escapeHtml(table.description)}</p>` : ''}
+      <div class="column-list">${(table.columns || []).map((column) => `<span class="column-chip">${escapeHtml(column)}</span>`).join('')}</div>
+    </details>
+  `).join('');
+}
 
-  chartCard.style.display = 'flex';
-  chartTitle.textContent = chartSpec.title || 'Data Visualization';
-  chartBadge.textContent = (chartSpec.type || 'chart').replace('_', ' ').toUpperCase();
+function openCatalog() {
+  $('catalogDrawer').classList.add('open');
+  $('catalogDrawer').setAttribute('aria-hidden', 'false');
+  $('drawerScrim').hidden = false;
+}
 
-  if (chartSpec.alt_text) {
-    chartBody.setAttribute('aria-label', chartSpec.alt_text);
+function closeCatalog() {
+  $('catalogDrawer').classList.remove('open');
+  $('catalogDrawer').setAttribute('aria-hidden', 'true');
+  $('drawerScrim').hidden = true;
+}
+
+function closeOverlays() {
+  closeCatalog();
+  document.querySelectorAll('.modal:not([hidden])').forEach(closeModal);
+}
+
+function openModal(modal) {
+  modal.hidden = false;
+  document.body.style.overflow = 'hidden';
+  modal.querySelector('.icon-button, button')?.focus();
+}
+
+function closeModal(modal) {
+  if (!modal) return;
+  modal.hidden = true;
+  document.body.style.overflow = '';
+}
+
+// The shader stays behind the workspace; opaque reading surfaces protect results.
+function setView(view) {
+  document.body.dataset.view = view;
+  $('emptyState').hidden = view !== 'empty';
+  $('evidencePlaceholder').hidden = view === 'result';
+  $('evidenceBody').hidden = view !== 'result';
+  $('viewLabel').textContent = view === 'result' ? 'Analysis' : view === 'loading' ? 'Analyzing' : 'New analysis';
+  if (view !== 'result') $('app').classList.remove('evidence-open');
+}
+
+function startNewAnalysis() {
+  state.activeConversationId = null;
+  state.selectedTurnId = null;
+  state.result = null;
+  try { localStorage.removeItem('datamind.activeConversation'); } catch { /* storage unavailable */ }
+  $('questionInput').value = '';
+  autoSizeInput();
+  $('resultsContainer').hidden = true;
+  $('loadingState').hidden = true;
+  $('errorState').hidden = true;
+  $('archivedTurns').replaceChildren();
+  setView('empty');
+  renderHistory();
+  $('questionInput').focus();
+  $('canvasScroll').scrollTo({ top: 0 });
+}
+
+function startTimer() {
+  state.startedAt = performance.now();
+  $('elapsedTimer').textContent = '0.0s';
+  state.timer = window.setInterval(() => {
+    $('elapsedTimer').textContent = `${((performance.now() - state.startedAt) / 1000).toFixed(1)}s`;
+  }, 100);
+}
+
+function stopTimer() {
+  if (state.timer) window.clearInterval(state.timer);
+  state.timer = null;
+}
+
+async function executeQuery(question) {
+  if (state.abortController) return;
+  let conversation = state.history.find((item) => item.id === state.activeConversationId);
+  if (conversation && conversation.dataset !== state.activeUploadSession) {
+    showToast('Start a new analysis to use the currently active dataset.');
+    return;
   }
-
-  if (chartSpec.note) {
-    chartNote.textContent = chartSpec.note;
-    chartNote.style.display = 'block';
+  if (!conversation) {
+    conversation = ConversationHistory.create(question, state.activeUploadSession);
+    state.history.unshift(conversation);
+    state.activeConversationId = conversation.id;
   }
+  const turn = ConversationHistory.append(conversation, question);
+  state.runningConversationId = conversation.id;
+  rememberActiveConversation();
+  persistConversation(conversation);
+  const submit = $('submitBtn');
+  submit.disabled = true;
+  submit.classList.add('loading');
+  submit.querySelector('.btn-text').textContent = 'Analyzing';
+  state.abortController = new AbortController();
+  $('questionInput').value = '';
+  autoSizeInput();
+  renderConversation();
+  renderHistory();
+  scrollToTurn(turn.id);
+  startTimer();
 
   try {
-    if (chartSpec.type === 'kpi') {
-      renderKpiChart(chartBody, chartSpec);
-    } else if (chartSpec.type === 'horizontal_bar') {
-      renderHorizontalBarChart(chartBody, chartSpec);
-    } else if (chartSpec.type === 'diverging_bar') {
-      renderDivergingBarChart(chartBody, chartSpec);
-    } else if (chartSpec.type === 'line') {
-      renderLineChart(chartBody, chartSpec);
-    } else {
-      chartCard.style.display = 'none';
+    const endpoint = state.activeUploadSession ? `/api/uploads/${state.activeUploadSession}/ask` : '/api/ask';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        permissive: !$('strictModeToggle').checked,
+        ...($('modelPresetSelect').value === 'local' ? {} : { preset: $('modelPresetSelect').value }),
+      }),
+      signal: state.abortController.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || data.error || `Server returned HTTP ${response.status}`);
+    ConversationHistory.finish(conversation, turn.id, data);
+  } catch (error) {
+    ConversationHistory.finish(conversation, turn.id, null, error.name === 'AbortError' ? 'Analysis cancelled.' : error.message);
+  } finally {
+    stopTimer();
+    state.abortController = null;
+    state.runningConversationId = null;
+    submit.disabled = false;
+    submit.classList.remove('loading');
+    submit.querySelector('.btn-text').textContent = 'Ask Data Mind';
+    await persistConversation(conversation);
+    renderHistory();
+    if (state.activeConversationId === conversation.id && conversation.turns.at(-1)?.id === turn.id) {
+      renderConversation();
+      scrollToTurn(turn.id);
     }
-  } catch (err) {
-    console.warn('SVG chart render fallback to table:', err);
-    chartBody.innerHTML = '<p class="chart-footer-note">Detailed tabular rows available in the inspector table below.</p>';
   }
 }
 
-function renderKpiChart(container, spec) {
-  const wrap = document.createElement('div');
-  wrap.className = 'chart-kpi-container';
-  wrap.innerHTML = `
-    <div class="chart-kpi-value">${escapeHtml(spec.kpi_value || '0')}</div>
-    <div class="chart-kpi-label">${escapeHtml(spec.kpi_label || spec.title)}</div>
-  `;
-  container.appendChild(wrap);
+function renderResult(data, turnId) {
+  $('questionEcho').textContent = data.question || $('questionInput').value;
+  renderTrust(data);
+  $('answerContent').innerHTML = formatAnswer(data.answer || 'No answer was returned.');
+  const inspectCitation = (citation) => { selectTurn(turnId); showCitation(citation); };
+  $('answerContent').querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => inspectCitation(button.dataset.citation)));
+  renderClarifications(data);
+  renderAssumptions(data.assumptions_card);
+  renderChart(data.chart, null, inspectCitation);
+  renderEvidence(data);
 }
 
-function renderHorizontalBarChart(container, spec) {
-  const points = spec.points || [];
-  if (!points.length) return;
-
-  const width = 760;
-  const barHeight = 24;
-  const barGap = 12;
-  const labelWidth = 140;
-  const valueWidth = 100;
-  const plotWidth = width - labelWidth - valueWidth;
-  const height = points.length * (barHeight + barGap) + 30;
-
-  const maxVal = Math.max(...points.map(p => Number(p.y) || 0), 1);
-
-  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img">`;
-
-  points.forEach((p, idx) => {
-    const y = idx * (barHeight + barGap) + 10;
-    const val = Number(p.y) || 0;
-    const barW = Math.max(4, (val / maxVal) * plotWidth);
-    const label = String(p.x || '');
-    const cleanLabel = label.length > 18 ? label.substring(0, 16) + '...' : label;
-    const safeLabel = escapeHtml(label);
-    const safeCleanLabel = escapeHtml(cleanLabel);
-    const safeRowId = escapeHtml(p.row_id || '');
-    const formattedVal = val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-
-    svg += `
-      <g class="chart-bar-group" data-row-id="${safeRowId}" tabindex="0" role="button" aria-label="${safeLabel}: ${formattedVal}">
-        <title>${safeLabel}: ${formattedVal} (Click to inspect row ${safeRowId})</title>
-        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${safeCleanLabel}</text>
-        <rect x="${labelWidth}" y="${y}" width="${plotWidth}" height="${barHeight}" rx="4" fill="rgba(255,255,255,0.03)" />
-        <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="url(#barGrad)" class="chart-bar-rect" data-row-id="${safeRowId}" />
-        <text x="${labelWidth + barW + 10}" y="${y + 16}" class="chart-bar-value" fill="#38bdf8">${formattedVal}</text>
-      </g>
-    `;
-  });
-
-  svg += `
-    <defs>
-      <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#6366f1" />
-        <stop offset="100%" stop-color="#38bdf8" />
-      </linearGradient>
-    </defs>
-  </svg>`;
-
-  container.innerHTML = svg;
-  bindChartClicks(container);
+function renderTrust(data) {
+  const report = data.citation_report || {};
+  const badge = data.trust_badge || {};
+  const stateName = badge.state || 'NOT_VERIFIED';
+  const tone = stateName === 'VERIFIED' ? 'verified' : stateName === 'PARTIALLY_VERIFIED' || stateName === 'CLARIFICATION' ? 'warning' : 'failed';
+  const verdict = $('trustSummary');
+  verdict.className = `verdict ${tone}`;
+  verdict.textContent = badge.label || stateName.replaceAll('_', ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+  const queries = data.evidence?.queries || [];
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const parts = [
+    plural(report.valid_count || 0, 'citation'),
+    plural(report.verified_numbers_count || 0, 'number') + ' checked',
+    plural(queries.length, 'query').replace('querys', 'queries'),
+  ];
+  if (report.discrepancy_count) parts.push(plural(report.discrepancy_count, 'discrepancy').replace('discrepancys', 'discrepancies'));
+  $('trustMetrics').textContent = parts.join(' · ');
 }
 
-function renderDivergingBarChart(container, spec) {
-  const points = spec.points || [];
-  if (!points.length) return;
-
-  const width = 760;
-  const barHeight = 24;
-  const barGap = 12;
-  const labelWidth = 140;
-  const plotWidth = width - labelWidth - 40;
-  const height = points.length * (barHeight + barGap) + 30;
-
-  const maxAbs = Math.max(...points.map(p => Math.abs(Number(p.y) || 0)), 1);
-  const midX = labelWidth + plotWidth / 2;
-
-  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img">`;
-  svg += `<line x1="${midX}" y1="5" x2="${midX}" y2="${height - 10}" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" />`;
-
-  points.forEach((p, idx) => {
-    const y = idx * (barHeight + barGap) + 10;
-    const val = Number(p.y) || 0;
-    const barW = Math.max(4, (Math.abs(val) / maxAbs) * (plotWidth / 2));
-    const isNeg = val < 0;
-    const barX = isNeg ? midX - barW : midX;
-    const color = isNeg ? '#ef4444' : '#10b981';
-    const label = String(p.x || '');
-    const cleanLabel = label.length > 18 ? label.substring(0, 16) + '...' : label;
-    const safeLabel = escapeHtml(label);
-    const safeCleanLabel = escapeHtml(cleanLabel);
-    const safeRowId = escapeHtml(p.row_id || '');
-    const formattedVal = val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-
-    svg += `
-      <g class="chart-bar-group" data-row-id="${safeRowId}" tabindex="0" role="button" aria-label="${safeLabel}: ${formattedVal}">
-        <title>${safeLabel}: ${formattedVal} (Click to inspect row ${safeRowId})</title>
-        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${safeCleanLabel}</text>
-        <rect x="${barX}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${color}" class="chart-bar-rect ${isNeg ? 'chart-bar-neg' : ''}" data-row-id="${safeRowId}" />
-        <text x="${isNeg ? barX - 8 : barX + barW + 8}" y="${y + 16}" text-anchor="${isNeg ? 'end' : 'start'}" class="chart-bar-value" fill="${color}">${formattedVal}</text>
-      </g>
-    `;
-  });
-
-  svg += '</svg>';
-  container.innerHTML = svg;
-  bindChartClicks(container);
-}
-
-function renderLineChart(container, spec) {
-  const points = spec.points || [];
-  if (!points.length) return;
-
-  const width = 760;
-  const height = 280;
-  const padLeft = 70;
-  const padRight = 30;
-  const padTop = 20;
-  const padBottom = 40;
-
-  const plotW = width - padLeft - padRight;
-  const plotH = height - padTop - padBottom;
-
-  const values = points.map(p => Number(Array.isArray(p.y) ? p.y[0] : p.y) || 0);
-  const minVal = Math.min(0, ...values);
-  const maxVal = Math.max(...values, 1);
-  const valRange = maxVal - minVal || 1;
-
-  const xStep = points.length > 1 ? plotW / (points.length - 1) : plotW / 2;
-
-  const coords = points.map((p, idx) => {
-    const val = Number(Array.isArray(p.y) ? p.y[0] : p.y) || 0;
-    const cx = padLeft + idx * xStep;
-    const cy = padTop + plotH - ((val - minVal) / valRange) * plotH;
-    return { cx, cy, p, val };
-  });
-
-  const pathD = coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.cx.toFixed(1)} ${c.cy.toFixed(1)}`).join(' ');
-
-  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img">`;
-
-  // Grid lines
-  for (let i = 0; i <= 4; i++) {
-    const gy = padTop + (plotH / 4) * i;
-    const gVal = (maxVal - (valRange / 4) * i).toLocaleString(undefined, { maximumFractionDigits: 0 });
-    svg += `
-      <line x1="${padLeft}" y1="${gy}" x2="${width - padRight}" y2="${gy}" class="chart-grid-line" />
-      <text x="${padLeft - 8}" y="${gy + 4}" text-anchor="end" class="chart-axis-text">${gVal}</text>
-    `;
-  }
-
-  // Line path
-  svg += `<path d="${pathD}" class="chart-line-path" stroke="url(#lineGrad)" />`;
-
-  // Data points
-  coords.forEach(c => {
-    const label = String(c.p.x || '');
-    const safeLabel = escapeHtml(label);
-    const safeRowId = escapeHtml(c.p.row_id || '');
-    const formattedVal = c.val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-    svg += `
-      <g data-row-id="${safeRowId}" tabindex="0" role="button" aria-label="${safeLabel}: ${formattedVal}">
-        <title>${safeLabel}: ${formattedVal} (Click to inspect row ${safeRowId})</title>
-        <circle cx="${c.cx}" cy="${c.cy}" r="5" fill="#38bdf8" stroke="#0f172a" stroke-width="2" class="chart-point-circle" data-row-id="${safeRowId}" />
-        <text x="${c.cx}" y="${height - padBottom + 18}" text-anchor="middle" class="chart-axis-text">${safeLabel}</text>
-      </g>
-    `;
-  });
-
-  svg += `
-    <defs>
-      <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#38bdf8" />
-        <stop offset="100%" stop-color="#818cf8" />
-      </linearGradient>
-    </defs>
-  </svg>`;
-
-  container.innerHTML = svg;
-  bindChartClicks(container);
-}
-
-function bindChartClicks(container) {
-  container.querySelectorAll('[data-row-id]').forEach(el => {
-    el.addEventListener('click', () => {
-      const rowId = el.getAttribute('data-row-id');
-      if (rowId) {
-        highlightTableRow(rowId);
-      }
-    });
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        const rowId = el.getAttribute('data-row-id');
-        if (rowId) highlightTableRow(rowId);
-      }
-    });
-  });
-}
-
-function highlightTableRow(rowId) {
-  // 1. Switch to SQL Tab
-  const sqlTabBtn = document.querySelector('[data-tab="sqlTab"]');
-  if (sqlTabBtn) sqlTabBtn.click();
-
-  // 2. Find matching row element
-  const targetRow = document.querySelector(`[data-row-id="${rowId}"]`);
-  if (targetRow) {
-    document.querySelectorAll('.highlighted-row').forEach(r => r.classList.remove('highlighted-row'));
-    targetRow.classList.add('highlighted-row');
-    targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}
-
-function renderUnderTheHood(data) {
-  const hoodMeta = document.getElementById('hoodMeta');
-  if (!hoodMeta) return;
-
-  const hood = data.under_the_hood || {};
-  const queries = (data.evidence && data.evidence.queries) || [];
-  const primaryQ = queries[0] || {};
-  const elapsedMs = Number(primaryQ.elapsed_ms) || 0;
-  const rowsCount = Array.isArray(primaryQ.rows) ? primaryQ.rows.length : 0;
-
-  hoodMeta.innerHTML = `
-    <span class="hood-pill">Dialect: ${escapeHtml(hood.dialect ? hood.dialect.toUpperCase() : 'DUCKDB')}</span>
-    <span class="hood-pill">Rows: ${rowsCount}</span>
-    <span class="hood-pill">Latency: ${elapsedMs ? elapsedMs.toFixed(1) : '<1'}ms</span>
-    <span class="hood-pill">Model: ${escapeHtml(hood.model || 'gemma4:e2b')}</span>
-    <span class="hood-pill">Status: ${escapeHtml(hood.verification_status || 'VERIFIED')}</span>
-  `;
-}
-
-function initActions() {
-  const copyAnswerBtn = document.getElementById('copyAnswerBtn');
-  const copySqlBtn = document.getElementById('copySqlBtn');
-  const exportCsvBtn = document.getElementById('exportCsvBtn');
-
-  if (copyAnswerBtn) {
-    copyAnswerBtn.addEventListener('click', () => {
-      if (!currentResult || !currentResult.answer) return;
-      navigator.clipboard.writeText(currentResult.answer).then(() => {
-        copyAnswerBtn.textContent = '✓ Copied!';
-        setTimeout(() => { copyAnswerBtn.textContent = 'Copy Answer'; }, 2000);
-      });
-    });
-  }
-
-  if (copySqlBtn) {
-    copySqlBtn.addEventListener('click', () => {
-      const queries = (currentResult && currentResult.evidence && currentResult.evidence.queries) || [];
-      if (!queries.length) return;
-      const sqlText = queries.map(q => q.sql).join('\n\n');
-      navigator.clipboard.writeText(sqlText).then(() => {
-        copySqlBtn.textContent = '✓ SQL Copied!';
-        setTimeout(() => { copySqlBtn.textContent = 'Copy SQL'; }, 2000);
-      });
-    });
-  }
-
-  if (exportCsvBtn) {
-    exportCsvBtn.addEventListener('click', () => {
-      exportResultCsv();
-    });
-  }
-
-  // Second Opinion Cross-Model Consensus
-  const secondOpinionBtn = document.getElementById('secondOpinionBtn');
-  if (secondOpinionBtn) {
-    secondOpinionBtn.addEventListener('click', async () => {
-      if (!currentResult) {
-        alert('Please run a query first before requesting a second opinion.');
-        return;
-      }
-      const queries = (currentResult.evidence && currentResult.evidence.queries) || [];
-      const primarySql = queries.length ? queries[0].sql : '';
-      if (!primarySql) {
-        alert('No executed SQL query available for second opinion.');
-        return;
-      }
-      secondOpinionBtn.textContent = '⏳ Comparing...';
-      try {
-        const resp = await fetch('/api/second_opinion', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            primary_sql: primarySql,
-            primary_model: (currentResult.under_the_hood && currentResult.under_the_hood.model) || 'gemma4:e2b',
-            secondary_model: 'gemma4:e4b',
-          }),
-        });
-        const soData = await resp.json();
-        openSecondOpinionModal(soData);
-      } catch (err) {
-        alert('Second opinion error: ' + err);
-      } finally {
-        secondOpinionBtn.textContent = '👥 Second Opinion';
-      }
-    });
-  }
-
-  // Verifiable Cryptographic Receipt
-  const receiptBtn = document.getElementById('receiptBtn');
-  if (receiptBtn) {
-    receiptBtn.addEventListener('click', () => {
-      if (!currentResult) {
-        alert('Please run a query first before viewing the cryptographic receipt.');
-        return;
-      }
-      if (!currentResult.receipt) {
-        alert('No cryptographic receipt available for this result.');
-        return;
-      }
-      openReceiptModal(currentResult.receipt);
-    });
-  }
-
-  // Red-Team Live Adversarial Challenge
-  const redTeamBtn = document.getElementById('redTeamBtn');
-  if (redTeamBtn) {
-    redTeamBtn.addEventListener('click', async () => {
-      redTeamBtn.textContent = '⚔️ Attacking...';
-      try {
-        const resp = await fetch('/api/red_team', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            answer: currentResult ? currentResult.answer : '',
-            evidence: currentResult ? currentResult.evidence : {},
-          }),
-        });
-        const rtData = await resp.json();
-        openRedTeamModal(rtData);
-      } catch (err) {
-        alert('Red-team error: ' + err);
-      } finally {
-        redTeamBtn.textContent = '🛡️ Red-Team Attack';
-      }
-    });
-  }
-
-  // Model & Preset Selector + Cloud Consent
-  const modelSelect = document.getElementById('modelPresetSelect');
-  if (modelSelect) {
-    modelSelect.addEventListener('change', (e) => {
-      const val = e.target.value;
-      if (val === 'cloud_accuracy' || val === 'hybrid_privacy') {
-        const consentModal = document.getElementById('cloudConsentModal');
-        if (consentModal) consentModal.style.display = 'flex';
-      } else {
-        const privacyStatus = document.getElementById('privacyStatus');
-        if (privacyStatus) privacyStatus.textContent = 'Air-Gapped: 0 Egress';
-      }
-    });
-  }
-
-  // Modal Close Handlers
-  const closeSoBtn = document.getElementById('closeSecondOpinionBtn');
-  if (closeSoBtn) closeSoBtn.addEventListener('click', () => {
-    document.getElementById('secondOpinionModal').style.display = 'none';
-  });
-  const closeRcBtn = document.getElementById('closeReceiptBtn');
-  if (closeRcBtn) closeRcBtn.addEventListener('click', () => {
-    document.getElementById('receiptModal').style.display = 'none';
-  });
-  const closeRtBtn = document.getElementById('closeRedTeamBtn');
-  if (closeRtBtn) closeRtBtn.addEventListener('click', () => {
-    document.getElementById('redTeamModal').style.display = 'none';
-  });
-  const closeConsentBtn = document.getElementById('closeConsentBtn');
-  if (closeConsentBtn) closeConsentBtn.addEventListener('click', () => {
-    document.getElementById('cloudConsentModal').style.display = 'none';
-  });
-  const cancelConsentBtn = document.getElementById('cancelConsentBtn');
-  if (cancelConsentBtn) cancelConsentBtn.addEventListener('click', () => {
-    document.getElementById('cloudConsentModal').style.display = 'none';
-    if (modelSelect) modelSelect.value = 'local';
-    const privacyStatus = document.getElementById('privacyStatus');
-    if (privacyStatus) privacyStatus.textContent = 'Air-Gapped: 0 Egress';
-  });
-  const confirmConsentBtn = document.getElementById('confirmConsentBtn');
-  if (confirmConsentBtn) confirmConsentBtn.addEventListener('click', () => {
-    document.getElementById('cloudConsentModal').style.display = 'none';
-    const privacyStatus = document.getElementById('privacyStatus');
-    if (privacyStatus) privacyStatus.textContent = 'Schema-Only Cloud';
-  });
-
-  // Receipt Download Buttons
-  const dlJsonBtn = document.getElementById('downloadReceiptJsonBtn');
-  if (dlJsonBtn) {
-    dlJsonBtn.addEventListener('click', () => {
-      if (!currentResult || !currentResult.receipt) return;
-      const jsonStr = JSON.stringify(currentResult.receipt, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `datamind_receipt_${currentResult.receipt.root_hash.slice(0, 8)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    });
-  }
-
-  const openHtmlBtn = document.getElementById('openReceiptHtmlBtn');
-  if (openHtmlBtn) {
-    openHtmlBtn.addEventListener('click', async () => {
-      if (!currentResult || !currentResult.receipt) return;
-      try {
-        const resp = await fetch('/api/receipt/export', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ receipt: currentResult.receipt }),
-        });
-        const resJson = await resp.json();
-        if (resJson.html) {
-          const blob = new Blob([resJson.html], { type: 'text/html' });
-          const url = URL.createObjectURL(blob);
-          window.open(url, '_blank');
-        }
-      } catch (err) {
-        alert('Failed to open HTML receipt: ' + err);
-      }
-    });
-  }
-}
-
-function openSecondOpinionModal(data) {
-  const modal = document.getElementById('secondOpinionModal');
-  if (!modal) return;
-  modal.style.display = 'flex';
-
-  const badge = document.getElementById('soVerdictBadge');
-  if (badge) {
-    badge.textContent = data.verdict_label || data.verdict || 'Opinion';
-    badge.className = (data.verdict && data.verdict.startsWith('AGREE')) ? 'badge-pill badge-emerald' : 'badge-pill badge-amber';
-  }
-
-  const exp = document.getElementById('soExplanation');
-  if (exp) exp.textContent = data.explanation || '';
-
-  const pTag = document.getElementById('soPrimaryModelTag');
-  if (pTag) pTag.textContent = `Primary: ${data.primary_model || 'Local'}`;
-  const sTag = document.getElementById('soSecondaryModelTag');
-  if (sTag) sTag.textContent = `Secondary: ${data.secondary_model || 'Verifier'}`;
-
-  const pSql = document.getElementById('soPrimarySql');
-  if (pSql) pSql.textContent = data.primary_sql || '';
-  const sSql = document.getElementById('soSecondarySql');
-  if (sSql) sSql.textContent = data.secondary_sql || '';
-
-  const pRows = document.getElementById('soPrimaryRows');
-  if (pRows) pRows.textContent = `Returned ${data.primary_row_count} rows`;
-  const sRows = document.getElementById('soSecondaryRows');
-  if (sRows) sRows.textContent = `Returned ${data.secondary_row_count} rows`;
-
-  const diffContent = document.getElementById('soDiffContent');
-  if (diffContent && data.assumptions_diff) {
-    const diff = data.assumptions_diff;
-    let html = '';
-    if (diff.filters_diff && diff.filters_diff.length) {
-      html += `<div style="margin-bottom:0.4rem;"><strong>Filter Differences:</strong> ${escapeHtml(diff.filters_diff.join('; '))}</div>`;
-    }
-    if (diff.tables_diff && diff.tables_diff.length) {
-      html += `<div style="margin-bottom:0.4rem;"><strong>Table Differences:</strong> ${escapeHtml(diff.tables_diff.join('; '))}</div>`;
-    }
-    if (diff.metrics_diff && diff.metrics_diff.length) {
-      html += `<div style="margin-bottom:0.4rem;"><strong>Metric Expression Differences:</strong> ${escapeHtml(diff.metrics_diff.join('; '))}</div>`;
-    }
-    if (!html) {
-      html = '<div>All query structures, tables, and filters align across both models.</div>';
-    }
-    diffContent.innerHTML = html;
-  }
-}
-
-function openReceiptModal(receipt) {
-  const modal = document.getElementById('receiptModal');
-  if (!modal) return;
-  modal.style.display = 'flex';
-  const rootBox = document.getElementById('modalRootHash');
-  if (rootBox) rootBox.textContent = receipt.root_hash || 'SHA-256 Digest';
-}
-
-function openRedTeamModal(data) {
-  const modal = document.getElementById('redTeamModal');
-  if (!modal) return;
-  modal.style.display = 'flex';
-
-  const rateTag = document.getElementById('redTeamCatchRate');
-  if (rateTag) rateTag.textContent = `${data.caught_count} / ${data.total_mutations} Caught (${data.catch_rate_pct}%)`;
-
-  const list = document.getElementById('redTeamList');
-  if (!list) return;
-  list.innerHTML = '';
-
-  (data.mutations || []).forEach(m => {
-    const card = document.createElement('div');
-    card.className = 'redteam-card';
-    card.innerHTML = `
-      <div class="redteam-card-header">
-        <span class="redteam-mutation-title">${escapeHtml(m.name)}</span>
-        <span class="badge-pill ${m.caught ? 'badge-emerald' : 'badge-amber'}">${m.caught ? '✓ CAUGHT BY VERIFIER' : 'MISSED'}</span>
-      </div>
-      <div class="redteam-mutation-body">${escapeHtml(m.mutated_text)}</div>
-      <div class="redteam-diag">&#9888; <strong>Verifier Catch Diagnostic:</strong> ${escapeHtml(m.diagnostic)}</div>
-    `;
-    list.appendChild(card);
-  });
-}
-
-function exportResultCsv() {
-  const queries = (currentResult && currentResult.evidence && currentResult.evidence.queries) || [];
-  if (!queries.length || !Array.isArray(queries[0].rows)) {
-    alert('No tabular data available to export.');
-    return;
-  }
-
-  const q = queries[0];
-  const cols = q.columns || [];
-  const rows = q.rows || [];
-
-  function sanitizeCell(cell) {
-    if (cell === null || cell === undefined) return '""';
-    let s = String(cell);
-    // Escape formula injection prefixes: =, +, -, @
-    if (/^[=+\-@]/.test(s)) {
-      s = "'" + s;
-    }
-    // Escape quotes
-    return '"' + s.replace(/"/g, '""') + '"';
-  }
-
-  const csvRows = [];
-  csvRows.push(['"Row_ID"', ...cols.map(c => `"${c}"`)].join(','));
-
-  rows.forEach((r, idx) => {
-    const rowId = `"${q.query_label || 'Q1'}:R${idx + 1}"`;
-    const cells = r.map(c => sanitizeCell(c));
-    csvRows.push([rowId, ...cells].join(','));
-  });
-
-  const blob = new Blob([csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.setAttribute('href', url);
-  link.setAttribute('download', `datamind_result_${Date.now()}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-function formatMarkdownWithCitations(text, data) {
-  if (!text) return '<p>No answer text produced.</p>';
-
+function formatAnswer(text) {
   let formatted = escapeHtml(text);
-
-  // Clean raw markdown link syntax around citations if pasted e.g. [\[◆ Q1:R1\]](http...) or [Q1:R1](...)
-  formatted = formatted.replace(/\[\\?\[?[◆\s]*(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\\?\]?\]\([^\)]+\)/g, '[[$1]]');
-
-  // Convert markdown headings
-  formatted = formatted.replace(/(?:^|\n)\s*###\s+(Revenue Decline (?:Details|Analysis)|[A-Z][A-Za-z0-9\s/&,\-]{2,40}?)\s+(?=[A-Z][a-z]+)/g, '\n<h3>$1</h3>\n');
-  formatted = formatted.replace(/(?:^|\n)\s*####\s*([^\n<]+)/g, '\n<h4>$1</h4>\n');
-  formatted = formatted.replace(/(?:^|\n)\s*###\s*([^\n<]+)/g, '\n<h3>$1</h3>\n');
-  formatted = formatted.replace(/(?:^|\n)\s*##\s*([^\n<]+)/g, '\n<h2>$1</h2>\n');
-  formatted = formatted.replace(/(?:^|\n)\s*#\s*([^\n<]+)/g, '\n<h1>$1</h1>\n');
-
-  // Convert markdown tables
-  const lines = formatted.split('\n');
-  let inTable = false;
-  let tableHtml = [];
-  let outputLines = [];
-
-  for (let line of lines) {
-    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-      if (!inTable) {
-        inTable = true;
-        tableHtml.push('<table>');
-      }
-      const cells = line.split('|').slice(1, -1).map(c => c.trim());
-      if (cells.every(c => c.startsWith('---') || c.startsWith(':---') || c.startsWith('---:'))) {
-        continue;
-      }
-      const tag = tableHtml.length === 1 ? 'th' : 'td';
-      tableHtml.push('<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>');
-    } else {
-      if (inTable) {
-        tableHtml.push('</table>');
-        outputLines.push(tableHtml.join(''));
-        tableHtml = [];
-        inTable = false;
-      }
-      outputLines.push(line);
-    }
-  }
-  if (inTable) {
-    tableHtml.push('</table>');
-    outputLines.push(tableHtml.join(''));
-  }
-
-  // Process bullet points and numbered list items into <li>
-  let processedLines = outputLines;
+  formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  formatted = formatted.replace(/\[\[([^\]]+)\]\]/g, '<button class="citation-token" type="button" data-citation="$1">$1</button>');
+  const lines = formatted.split(/\r?\n/);
+  let output = '';
   let inList = false;
-  let finalLines = [];
-
-  for (let l of processedLines) {
-    const listMatch = l.match(/^\s*([*•-]|\d+\.)\s+(.*)$/);
-    if (listMatch) {
-      if (!inList) {
-        inList = true;
-        finalLines.push('<ul class="answer-list">');
-      }
-      finalLines.push(`<li>${listMatch[2]}</li>`);
+  lines.forEach((line) => {
+    const item = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/);
+    if (item) {
+      if (!inList) { output += '<ul>'; inList = true; }
+      output += `<li>${item[1]}</li>`;
     } else {
-      if (inList) {
-        inList = false;
-        finalLines.push('</ul>');
-      }
-      finalLines.push(l);
+      if (inList) { output += '</ul>'; inList = false; }
+      if (line.trim()) output += `<p>${line}</p>`;
     }
-  }
-  if (inList) {
-    finalLines.push('</ul>');
-  }
-  formatted = finalLines.join('\n');
-
-  // Markdown bold, italic, code styling
-  formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  formatted = formatted.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
-  formatted = formatted.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-
-  // Replace [[Q1:R1]] and [[D:...]] citation pills
-  formatted = formatted.replace(/\[\[(Q\d+:R\d+)\]\]/g, (match, id) => {
-    return `<a href="#${id}" class="citation-token token-sql" data-citation="${id}" title="Database row evidence: ${id}">&#9670; ${id}</a>`;
   });
-
-  formatted = formatted.replace(/\[\[(D:[^\]]+)\]\]/g, (match, id) => {
-    return `<a href="#${id}" class="citation-token token-doc" data-citation="${id}" title="Document chunk evidence: ${id}">&#9632; ${id}</a>`;
-  });
-
-  return formatted;
+  if (inList) output += '</ul>';
+  return output;
 }
 
-function handleCitationClick(targetId) {
-  if (!currentResult) return;
+function renderClarifications(data) {
+  const card = $('clarifyCard');
+  if (data.response_type !== 'clarification') { card.hidden = true; return; }
+  const suggestions = state.config?.sample_questions?.slice(0, 4) || [];
+  $('clarifyChips').innerHTML = '';
+  suggestions.forEach((question) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = question;
+    button.addEventListener('click', () => { $('questionInput').value = question; $('questionInput').focus(); });
+    $('clarifyChips').appendChild(button);
+  });
+  card.hidden = false;
+}
 
-  const modal = document.getElementById('citationModal');
-  const modalTitle = document.getElementById('modalTitle');
-  const modalBody = document.getElementById('modalBody');
+function renderAssumptions(card) {
+  const box = $('assumptionsBox');
+  if (!card) { box.hidden = true; return; }
+  const entries = [
+    ['Tables', card.tables], ['Join keys', card.join_keys], ['Filters', card.filters],
+    ['Group by', card.group_by], ['Metrics', card.metrics], ['Date range', card.date_range],
+  ].filter(([, value]) => value && (!Array.isArray(value) || value.length));
+  $('assumptionsBody').innerHTML = entries.map(([label, value]) => `<div class="assumption-row"><strong>${label}</strong>${escapeHtml(Array.isArray(value) ? value.join(' · ') : value)}</div>`).join('');
+  $('assumptionsBadge').textContent = card.badge_status === 'PARTIALLY_VERIFIED' ? 'Review' : 'Checked';
+  box.hidden = false;
+  box.open = card.badge_status === 'PARTIALLY_VERIFIED';
+}
 
-  if (targetId.startsWith('Q')) {
-    modalTitle.textContent = `SQL Row Evidence [${targetId}]`;
-    const queries = (currentResult.evidence && currentResult.evidence.queries) || [];
-    const [qLabel, rLabel] = targetId.split(':');
-    const rowIdx = parseInt(rLabel.replace('R', ''), 10) - 1;
-
-    let targetQuery = queries.find(q => q.query_label === qLabel);
-    if (!targetQuery && queries.length > 0) targetQuery = queries[0];
-
-    if (targetQuery && targetQuery.rows && targetQuery.rows[rowIdx]) {
-      const row = targetQuery.rows[rowIdx];
-      const cols = targetQuery.columns;
-
-      let tableHtml = '<table class="evidence-table"><thead><tr>';
-      cols.forEach(c => tableHtml += `<th>${escapeHtml(c)}</th>`);
-      tableHtml += '</tr></thead><tbody><tr>';
-      row.forEach(val => tableHtml += `<td><strong>${val !== null ? escapeHtml(val) : 'NULL'}</strong></td>`);
-      tableHtml += '</tr></tbody></table>';
-
-      tableHtml += `<div style="margin-top: 1rem;"><span class="badge-mini">SQL Query (${escapeHtml(targetQuery.query_id || 'LOCAL')})</span><pre class="sql-code-block">${escapeHtml(targetQuery.sql)}</pre></div>`;
-      modalBody.innerHTML = tableHtml;
-    } else {
-      modalBody.innerHTML = `<p class="error-msg">Row ${targetId} not found in executed queries.</p>`;
-    }
-  } else if (targetId.startsWith('D:')) {
-    modalTitle.textContent = `Document Chunk [${targetId}]`;
-    const docs = (currentResult.evidence && currentResult.evidence.chunks) || [];
-    const targetDoc = docs.find(d => d.chunk_id === targetId);
-
-    if (targetDoc) {
-      modalBody.innerHTML = `
-        <div class="doc-card modal-doc">
-          <div class="doc-header">
-            <span class="doc-badge">&#9632; ${escapeHtml(targetDoc.chunk_id)}</span>
-            <span class="doc-score">BM25 Relevance: ${escapeHtml(targetDoc.score)}</span>
-          </div>
-          <div class="doc-title">${escapeHtml(targetDoc.doc_name)}</div>
-          <div class="doc-content">${escapeHtml(targetDoc.text)}</div>
-        </div>
-      `;
-    } else {
-      modalBody.innerHTML = `<p class="error-msg">Document ${targetId} not found in retrieved chunks.</p>`;
-    }
-  }
-
-  modal.classList.add('open');
-  highlightTableRow(targetId);
+function renderEvidence(data) {
+  const queries = data.evidence?.queries || [];
+  const docs = data.evidence?.chunks || [];
+  const checks = data.citation_report?.numeric_checks || [];
+  $('sqlCount').textContent = queries.length;
+  $('docsCount').textContent = docs.length;
+  $('numChecksCount').textContent = checks.length;
+  renderQueries(queries);
+  renderDocs(docs);
+  renderNumericChecks(checks);
+  const primary = queries[0] || {};
+  const hood = data.under_the_hood || {};
+  const rowCount = Array.isArray(primary.rows) ? primary.rows.length : 0;
+  const fields = [
+    ['Backend', data.backend || hood.dialect], ['Model', hood.model || state.config?.model_name],
+    ['Rows', rowCount], ['Latency', primary.elapsed_ms ? `${Number(primary.elapsed_ms).toFixed(0)} ms` : null],
+    ['Privacy', data.egress_ledger?.summary || state.config?.privacy_indicator],
+  ].filter(([, value]) => value !== null && value !== undefined && value !== '');
+  $('hoodMeta').textContent = fields.map(([label, value]) => `${label}: ${value}`).join(' · ');
 }
 
 function renderQueries(queries) {
-  const container = document.getElementById('queriesList');
+  const container = $('queriesList');
+  if (!queries.length) { container.innerHTML = '<p class="evidence-empty">This answer did not require a database query.</p>'; return; }
   container.innerHTML = '';
-
-  if (!queries.length) {
-    container.innerHTML = '<p class="text-muted">No SQL queries were required for this answer.</p>';
-    return;
-  }
-
-  queries.forEach(q => {
-    const item = document.createElement('div');
+  queries.forEach((q) => {
+    const rows = q.rows || [];
+    const columns = q.columns || [];
+    const item = document.createElement('section');
     item.className = 'query-item';
-
-    const header = document.createElement('div');
-    header.className = 'query-header';
-    header.innerHTML = `
-      <div class="query-meta">
-        <span class="query-badge">&#9670; ${escapeHtml(q.query_label)}</span>
-        <span class="query-id">${escapeHtml(q.query_id || 'DuckDB')}</span>
-        <span class="query-time">${q.elapsed_ms.toFixed(1)}ms</span>
-        <span class="query-rows">${q.rows.length} rows</span>
-      </div>
-      <button class="btn-copy-sql" title="Copy SQL">Copy</button>
-    `;
-
-    const copyBtn = header.querySelector('.btn-copy-sql');
-    copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(q.sql);
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => copyBtn.textContent = 'Copy', 2000);
-    });
-
-    const purpose = document.createElement('div');
-    purpose.className = 'query-purpose';
-    purpose.textContent = `Purpose: ${q.purpose}`;
-
-    const sqlBlock = document.createElement('pre');
-    sqlBlock.className = 'sql-code-block';
-    sqlBlock.textContent = q.sql;
-
-    item.appendChild(header);
-    item.appendChild(purpose);
-    item.appendChild(sqlBlock);
-
-    if (q.rows && q.rows.length) {
-      const tableWrapper = document.createElement('div');
-      tableWrapper.className = 'table-scroll-wrap';
-
-      const table = document.createElement('table');
-      table.className = 'evidence-table';
-
-      let thead = '<thead><tr><th>Row ID</th>';
-      q.columns.forEach(c => thead += `<th>${escapeHtml(c)}</th>`);
-      thead += '</tr></thead>';
-
-      let tbody = '<tbody>';
-      q.rows.slice(0, 100).forEach((r, idx) => {
-        const rowId = `${q.query_label}:R${idx + 1}`;
-        tbody += `<tr id="query_${q.query_label}_row_${rowId}" data-row-id="${rowId}">`;
-        tbody += `<td class="row-id-cell"><code>${rowId}</code></td>`;
-        r.forEach(val => {
-          tbody += `<td>${val !== null ? escapeHtml(val) : '<span class="null-val">NULL</span>'}</td>`;
-        });
-        tbody += '</tr>';
-      });
-      tbody += '</tbody>';
-
-      table.innerHTML = thead + tbody;
-      tableWrapper.appendChild(table);
-      item.appendChild(tableWrapper);
-    }
-
+    item.innerHTML = `
+      <div class="query-item-head"><span class="query-label">${escapeHtml(q.query_label || 'Q')}</span><span class="query-meta">${escapeHtml(String(q.query_id || "local").slice(0, 8))} · ${rows.length} rows · ${Number(q.elapsed_ms || 0).toFixed(0)} ms</span></div>
+      ${q.purpose ? `<div class="query-purpose">${escapeHtml(q.purpose)}</div>` : ''}
+      <pre class="sql-code">${escapeHtml(q.sql || '')}</pre>
+      ${rows.length ? buildTable(columns, rows, q.query_label || 'Q1') : ''}`;
+    item.querySelectorAll('[data-row-id]').forEach((row) => row.addEventListener('click', () => showCitation(row.dataset.rowId)));
     container.appendChild(item);
   });
+}
+
+const isNumeric = (cell) => cell !== null && cell !== '' && /^[-+$€£]?\s*[\d,]*\.?\d+%?$/.test(String(cell).trim());
+
+function buildTable(columns, rows, queryLabel) {
+  const numeric = columns.map((_, index) => rows.length > 0 && rows.slice(0, 20).every((row) => row[index] === null || isNumeric(row[index])));
+  const head = columns.map((column, index) => `<th data-sort="${index}"${numeric[index] ? ' class="num"' : ''} scope="col">${escapeHtml(column)}</th>`).join('');
+  const body = rows.slice(0, 100).map((row, index) => {
+    const rowId = `${queryLabel}:R${index + 1}`;
+    const cells = row.map((cell, col) => `<td${numeric[col] ? ' class="num"' : ''}>${cell === null ? '<em>NULL</em>' : escapeHtml(cell)}</td>`).join('');
+    return `<tr data-row-id="${escapeHtml(rowId)}"><td><span class="citation-token">${escapeHtml(rowId)}</span></td>${cells}</tr>`;
+  }).join('');
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Source</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function sortTable(header) {
+  const table = header.closest('table');
+  const column = Number(header.dataset.sort) + 1;
+  const direction = header.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+  table.querySelectorAll('th').forEach((th) => th.removeAttribute('aria-sort'));
+  header.setAttribute('aria-sort', direction);
+  const toNumber = (text) => Number(String(text).replace(/[^\d.-]/g, ''));
+  const rows = [...table.tBodies[0].rows];
+  const numeric = rows.every((row) => isNumeric(row.cells[column].textContent) || row.cells[column].textContent === 'NULL');
+  rows.sort((a, b) => {
+    const left = a.cells[column].textContent, right = b.cells[column].textContent;
+    const result = numeric ? toNumber(left) - toNumber(right) : left.localeCompare(right, undefined, { numeric: true });
+    return direction === 'ascending' ? result : -result;
+  });
+  rows.forEach((row) => table.tBodies[0].appendChild(row));
 }
 
 function renderDocs(docs) {
-  const container = document.getElementById('docsList');
-  container.innerHTML = '';
-
-  if (!docs.length) {
-    container.innerHTML = '<p class="text-muted">No document retrievals were performed for this answer.</p>';
-    return;
-  }
-
-  docs.forEach(d => {
-    const item = document.createElement('div');
-    item.className = 'doc-card';
-    item.id = `doc_${d.chunk_id}`;
-    item.innerHTML = `
-      <div class="doc-header">
-        <span class="doc-badge">&#9632; ${escapeHtml(d.chunk_id)}</span>
-        <span class="doc-score">BM25 Score: ${escapeHtml(d.score)}</span>
-      </div>
-      <div class="doc-title">${escapeHtml(d.doc_name)}</div>
-      <div class="doc-content">${escapeHtml(d.text)}</div>
-    `;
-    container.appendChild(item);
-  });
+  const container = $('docsList');
+  if (!docs.length) { container.innerHTML = '<p class="evidence-empty">No documents were retrieved for this answer.</p>'; return; }
+  container.innerHTML = docs.map((doc) => `<article class="doc-item" data-chunk-id="${escapeHtml(doc.chunk_id)}"><div class="doc-item-head"><span class="query-label">${escapeHtml(doc.chunk_id)}</span><span class="query-meta">Relevance ${escapeHtml(doc.score)}</span></div><strong>${escapeHtml(doc.doc_name)}</strong><p class="doc-text">${escapeHtml(doc.text)}</p></article>`).join('');
 }
 
 function renderNumericChecks(checks) {
-  const container = document.getElementById('numericList');
-  container.innerHTML = '';
+  const container = $('numericList');
+  if (!checks.length) { container.innerHTML = '<p class="evidence-empty">No numeric claims required reconciliation.</p>'; return; }
+  container.innerHTML = checks.map((check) => {
+    const passed = check.status === 'VERIFIED';
+    return `<article class="audit-item"><span class="audit-status ${passed ? '' : 'fail'}">${passed ? '✓' : '!'}</span><div><p>${escapeHtml(check.message || check.status)}</p><small>${escapeHtml(check.row_id || '')} · ${escapeHtml(check.matched_column || '')}</small></div><span class="audit-value">${escapeHtml(check.claimed_value)}</span></article>`;
+  }).join('');
+}
 
-  if (!checks.length) {
-    container.innerHTML = '<p class="text-muted">No numeric assertions requiring deterministic reconciliation.</p>';
+function selectTab(button) {
+  document.querySelectorAll('.tab').forEach((tab) => { tab.classList.remove('active'); tab.setAttribute('aria-selected', 'false'); });
+  document.querySelectorAll('.tab-pane').forEach((pane) => pane.classList.remove('active'));
+  button.classList.add('active');
+  button.setAttribute('aria-selected', 'true');
+  $(button.dataset.tab).classList.add('active');
+}
+
+function activateTab(name) {
+  const tab = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (tab) selectTab(tab);
+}
+
+// Clicking a citation jumps to the source row (or document) in the evidence panel and highlights it.
+function showCitation(citationId) {
+  const panel = $('evidencePanel');
+  if (window.matchMedia('(max-width: 1100px)').matches) $('app').classList.add('evidence-open');
+  document.querySelectorAll('.highlighted').forEach((el) => el.classList.remove('highlighted'));
+  let target = null;
+  if (citationId.startsWith('D:')) {
+    activateTab('docsTab');
+    target = [...document.querySelectorAll('.doc-item')].find((el) => el.dataset.chunkId === citationId);
+  } else {
+    activateTab('sqlTab');
+    target = [...document.querySelectorAll('#queriesList tr[data-row-id]')].find((el) => el.dataset.rowId === citationId);
+  }
+  if (!target) return showToast(`${citationId} is not present in this result`);
+  target.classList.add('highlighted');
+  target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  panel.classList.remove('flash'); void panel.offsetWidth; panel.classList.add('flash');
+}
+
+function copyAnswer() {
+  if (!state.result?.answer) return;
+  copyText(state.result.answer, 'Answer copied');
+}
+
+function copySql() {
+  const sql = (state.result?.evidence?.queries || []).map((query) => query.sql).filter(Boolean).join('\n\n');
+  if (!sql) return showToast('No SQL to copy');
+  copyText(sql, 'SQL copied');
+}
+
+async function copyText(text, message) {
+  try { await navigator.clipboard.writeText(text); showToast(message); }
+  catch { showToast('Clipboard access was unavailable'); }
+}
+
+function exportResultCsv() {
+  const q = state.result?.evidence?.queries?.[0];
+  if (!q?.rows?.length) return showToast('No tabular rows to export');
+  const rows = q.rows || [];
+  const sanitize = (value) => {
+    let cell = value === null || value === undefined ? '' : String(value);
+    if (/^[=+\-@]/.test(cell)) cell = `'${cell}`;
+    return `"${cell.replace(/"/g, '""')}"`;
+  };
+  const csv = [[...(q.columns || [])].map(sanitize).join(','), ...rows.map((row) => row.map(sanitize).join(','))].join('\r\n');
+  downloadBlob(csv, 'text/csv;charset=utf-8', 'datamind-result.csv');
+}
+
+function showReceipt() {
+  const receipt = state.result?.receipt;
+  if (!receipt) return showToast('No receipt is available for this result');
+  $('detailModalTitle').textContent = 'Verifiable answer receipt';
+  $('detailModalBody').innerHTML = `<div class="detail-block"><h4>SHA-256 root hash</h4><div class="hash-box">${escapeHtml(receipt.root_hash || 'Unavailable')}</div></div><div class="detail-block"><p>This receipt binds the question, answer, evidence and verification state into one tamper-evident record.</p><button class="button button-dark" id="downloadReceiptBtn" type="button">Download JSON receipt</button></div>`;
+  openModal($('detailModal'));
+  $('downloadReceiptBtn').addEventListener('click', () => downloadBlob(JSON.stringify(receipt, null, 2), 'application/json', `datamind-receipt-${String(receipt.root_hash || 'result').slice(0, 8)}.json`));
+}
+
+async function requestSecondOpinion() {
+  const query = state.result?.evidence?.queries?.[0];
+  if (!query?.sql) return showToast('Run a SQL-backed analysis first');
+  const button = $('secondOpinionBtn');
+  button.disabled = true; button.textContent = 'Comparing…';
+  try {
+    const response = await fetch('/api/second_opinion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ primary_sql: query.sql, primary_model: state.result?.under_the_hood?.model, secondary_model: 'gemma4:e4b' }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Second opinion failed');
+    $('detailModalTitle').textContent = data.verdict_label || data.verdict || 'Second opinion';
+    $('detailModalBody').innerHTML = `<div class="detail-block"><h4>Consensus</h4><p>${escapeHtml(data.explanation || 'The comparison completed.')}</p></div><div class="detail-block"><h4>Primary SQL</h4><pre class="sql-code">${escapeHtml(data.primary_sql || query.sql)}</pre></div><div class="detail-block"><h4>Secondary SQL</h4><pre class="sql-code">${escapeHtml(data.secondary_sql || '')}</pre></div>`;
+    openModal($('detailModal'));
+  } catch (error) { showToast(error.message); }
+  finally { button.disabled = false; button.textContent = 'Second opinion'; }
+}
+
+async function requestRedTeam() {
+  if (!state.result) return showToast('Run an analysis first');
+  const button = $('redTeamBtn');
+  button.disabled = true; button.textContent = 'Challenging…';
+  try {
+    const response = await fetch('/api/red_team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answer: state.result.answer, evidence: state.result.evidence }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Challenge failed');
+    $('detailModalTitle').textContent = 'Adversarial verifier challenge';
+    $('detailModalBody').innerHTML = `<div class="detail-block"><h4>${escapeHtml(data.caught_count)} of ${escapeHtml(data.total_mutations)} mutations caught · ${escapeHtml(data.catch_rate_pct)}%</h4></div>${(data.mutations || []).map((mutation) => `<article class="audit-item"><span class="audit-status ${mutation.caught ? '' : 'fail'}">${mutation.caught ? '✓' : '!'}</span><div><p>${escapeHtml(mutation.name)}</p><small>${escapeHtml(mutation.diagnostic)}</small></div></article>`).join('')}`;
+    openModal($('detailModal'));
+  } catch (error) { showToast(error.message); }
+  finally { button.disabled = false; button.textContent = 'Challenge'; }
+}
+
+function downloadBlob(content, type, filename) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(`${filename} downloaded`);
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'toast'; toast.textContent = message; $('toastRegion').appendChild(toast);
+  window.setTimeout(() => toast.remove(), 2800);
+}
+
+async function restoreHistory() {
+  try {
+    state.history = (await conversationStore.load()).filter((item) => item && typeof item.id === 'string' && Array.isArray(item.turns));
+    if (!state.history.length) {
+      const old = JSON.parse(localStorage.getItem('datamind.history') || '[]');
+      if (Array.isArray(old)) {
+        state.history = ConversationHistory.migrate(old);
+        for (const conversation of state.history) await conversationStore.save(conversation);
+      }
+    }
+    // A reload cannot resume an HTTP request from the previous document.
+    for (const conversation of state.history) {
+      let interrupted = false;
+      conversation.turns.forEach((turn) => {
+        if (turn.status === 'pending') { turn.status = 'error'; turn.error = 'This analysis was interrupted before its answer was saved.'; interrupted = true; }
+      });
+      if (interrupted) await conversationStore.save(conversation);
+    }
+    const activeId = localStorage.getItem('datamind.activeConversation');
+    if (state.history.some((item) => item.id === activeId)) openConversation(activeId);
+  } catch (error) {
+    console.error('Could not restore conversations:', error);
+    showToast('Saved conversations could not be loaded in this browser.');
+  }
+  renderHistory();
+}
+
+function rememberActiveConversation() {
+  try { localStorage.setItem('datamind.activeConversation', state.activeConversationId); } catch { /* storage unavailable */ }
+}
+
+async function persistConversation(conversation) {
+  if (!state.history.some((item) => item.id === conversation.id)) return;
+  try { await conversationStore.save(conversation); }
+  catch (error) {
+    console.error('Could not save conversation:', error);
+    showToast('This conversation is available now, but could not be saved for reopening.');
+  }
+}
+
+function openConversation(id) {
+  const conversation = state.history.find((item) => item.id === id);
+  if (!conversation) return;
+  state.activeConversationId = id;
+  state.selectedTurnId = null;
+  $('questionInput').value = '';
+  autoSizeInput();
+  rememberActiveConversation();
+  renderConversation();
+  renderHistory();
+  $('app').classList.remove('nav-open');
+  $('canvasScroll').scrollTo({ top: 0 });
+}
+
+async function clearHistory() {
+  const previous = state.history;
+  state.history = [];
+  try {
+    await conversationStore.clear();
+    localStorage.removeItem('datamind.history');
+    localStorage.removeItem('datamind.activeConversation');
+    startNewAnalysis();
+    showToast('Saved conversations cleared');
+  } catch (error) { state.history = previous; renderHistory(); showToast('Could not clear conversations: ' + error.message); }
+}
+
+function renderHistory() {
+  $('recentList').replaceChildren();
+  const container = $('historyList');
+  container.replaceChildren();
+  if (!state.history.length) {
+    container.innerHTML = '<p class="history-empty">Your conversations will appear here.</p>';
     return;
   }
-
-  let tableHtml = `
-    <div class="table-scroll-wrap">
-      <table class="evidence-table">
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th>Claimed in Answer</th>
-            <th>Database Cell</th>
-            <th>Evidence Row</th>
-            <th>Matched Column</th>
-            <th>Verification Note</th>
-          </tr>
-        </thead>
-        <tbody>
-  `;
-
-  checks.forEach(nc => {
-    const isPass = nc.status === 'VERIFIED';
-    const statusClass = isPass ? 'badge-clean-pass' : 'badge-clean-fail';
-    const statusIcon = isPass ? '&#10003; VERIFIED' : '&#9888; DISCREPANCY';
-
-    tableHtml += `
-      <tr>
-        <td><span class="trust-badge ${statusClass}" style="font-size: 0.72rem;">${statusIcon}</span></td>
-        <td><strong>${escapeHtml(nc.claimed_value)}</strong></td>
-        <td><code>${nc.cell_value !== null ? escapeHtml(nc.cell_value) : 'N/A'}</code></td>
-        <td><a href="#${escapeHtml(nc.row_id)}" class="citation-token token-sql" data-citation="${escapeHtml(nc.row_id)}">${escapeHtml(nc.row_id)}</a></td>
-        <td><code>${escapeHtml(nc.matched_column || 'N/A')}</code></td>
-        <td><span class="check-msg">${escapeHtml(nc.message)}</span></td>
-      </tr>
-    `;
-  });
-
-  tableHtml += '</tbody></table></div>';
-  container.innerHTML = tableHtml;
-  container.querySelectorAll('[data-citation]').forEach(link => {
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      handleCitationClick(link.getAttribute('data-citation'));
-    });
+  [...state.history].sort((a, b) => b.updatedAt - a.updatedAt).forEach((conversation) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'history-item';
+    button.classList.toggle('active', conversation.id === state.activeConversationId);
+    if (conversation.id === state.activeConversationId) button.setAttribute('aria-current', 'page');
+    const count = conversation.turns.length;
+    const legacy = conversation.turns.every((turn) => turn.status === 'legacy');
+    const summary = legacy ? 'Older question only' : count + (count === 1 ? ' question' : ' questions');
+    button.innerHTML = '<strong>' + escapeHtml(conversation.title) + '</strong><small>' + summary + ' · ' + formatRelativeTime(conversation.updatedAt) + '</small>';
+    button.title = conversation.title;
+    button.addEventListener('click', () => openConversation(conversation.id));
+    container.appendChild(button);
   });
 }
 
-function initTabs() {
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      tabBtns.forEach(b => {
-        b.classList.remove('active');
-        b.setAttribute('aria-selected', 'false');
-      });
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+function renderConversation() {
+  const conversation = state.history.find((item) => item.id === state.activeConversationId);
+  if (!conversation) return;
+  const last = conversation.turns.at(-1);
+  const completed = conversation.turns.filter((turn) => turn.result);
+  const archived = $('archivedTurns');
+  archived.replaceChildren();
+  $('resultsContainer').hidden = !last?.result;
+  $('errorState').hidden = true;
+  const pending = conversation.turns.find((turn) => turn.status === 'pending');
+  $('loadingState').hidden = !pending;
+  if (pending) {
+    $('pendingQuestion').textContent = pending.question;
+    $('loadingState').dataset.turnId = pending.id;
+  }
+  conversation.turns.forEach((turn) => {
+    if (turn.status !== 'pending' && !(last === turn && turn.result)) archived.appendChild(renderArchivedTurn(turn));
+  });
+  const latestResult = completed.at(-1);
+  state.result = latestResult?.result || null;
+  state.selectedTurnId = latestResult?.id || null;
+  if (last?.result) {
+    $('resultsContainer').dataset.turnId = last.id;
+    renderResult(last.result, last.id);
+  } else if (latestResult) {
+    renderAssumptions(latestResult.result.assumptions_card);
+    renderEvidence(latestResult.result);
+  }
+  setView(completed.length || !pending ? 'result' : 'loading');
+  $('evidencePlaceholder').hidden = Boolean(state.result);
+  $('evidenceBody').hidden = !state.result;
+  if (state.result) selectTurn(state.selectedTurnId);
+}
 
-      btn.classList.add('active');
-      btn.setAttribute('aria-selected', 'true');
-      const targetId = btn.getAttribute('data-tab');
-      const targetPane = document.getElementById(targetId);
-      if (targetPane) targetPane.classList.add('active');
-    });
+function renderArchivedTurn(turn) {
+  const article = document.createElement('article');
+  article.className = 'chat-turn results';
+  article.dataset.turnId = turn.id;
+  if (!turn.result) {
+    article.innerHTML = '<header class="result-head"><h2>' + escapeHtml(turn.question) + '</h2></header><p class="saved-turn-notice">' + escapeHtml(turn.error || 'This older history entry only saved the question. Its answer and evidence were not stored.') + '</p>';
+    return article;
+  }
+  const data = turn.result;
+  const badge = data.trust_badge || {};
+  const tone = badge.state === 'VERIFIED' ? 'verified' : badge.state === 'PARTIALLY_VERIFIED' || badge.state === 'CLARIFICATION' ? 'warning' : 'failed';
+  article.innerHTML = '<header class="result-head"><h2>' + escapeHtml(turn.question) + '</h2><div class="verdict-row"><span class="verdict ' + tone + '">' + escapeHtml(badge.label || 'Saved answer') + '</span><span class="verdict-meta">Saved with source evidence</span></div></header>' +
+    '<div class="answer-content">' + formatAnswer(data.answer || 'No answer was returned.') + '</div>' +
+    '<section class="chart-block" data-chart-card hidden><h3 data-chart-title></h3><div class="chart-body" data-chart-body role="img"></div><p class="chart-note" data-chart-note hidden></p></section>' +
+    '<div class="result-actions"><button class="ghost-btn" type="button" data-turn-action="copy">Copy</button><button class="ghost-btn" type="button" data-turn-action="csv">Export CSV</button><button class="ghost-btn" type="button" data-turn-action="evidence">Inspect evidence</button></div>';
+  const inspect = (citation) => { selectTurn(turn.id); showCitation(citation); };
+  article.querySelectorAll('[data-citation]').forEach((button) => button.addEventListener('click', () => inspect(button.dataset.citation)));
+  renderChart(data.chart, {
+    card: article.querySelector('[data-chart-card]'), body: article.querySelector('[data-chart-body]'),
+    title: article.querySelector('[data-chart-title]'), note: article.querySelector('[data-chart-note]'),
+  }, inspect);
+  article.querySelectorAll('[data-turn-action]').forEach((button) => button.addEventListener('click', () => {
+    selectTurn(turn.id);
+    if (button.dataset.turnAction === 'copy') copyAnswer();
+    else if (button.dataset.turnAction === 'csv') exportResultCsv();
+    else if (matchMedia('(max-width: 1100px)').matches) $('app').classList.add('evidence-open');
+    else $('evidencePanel').querySelector('.tab.active')?.focus();
+  }));
+  return article;
+}
+
+function selectTurn(id) {
+  const conversation = state.history.find((item) => item.id === state.activeConversationId);
+  const turn = conversation?.turns.find((item) => item.id === id);
+  if (!turn?.result) return;
+  state.result = turn.result;
+  state.selectedTurnId = turn.id;
+  renderAssumptions(turn.result.assumptions_card);
+  renderEvidence(turn.result);
+  document.querySelectorAll('[data-turn-id]').forEach((element) => element.classList.toggle('evidence-selected', element.dataset.turnId === id));
+}
+
+function scrollToTurn(id) {
+  requestAnimationFrame(() => {
+    const turn = [...document.querySelectorAll('[data-turn-id]')].find((item) => !item.hidden && item.dataset.turnId === id);
+    if (!turn) return;
+    const scroller = $('canvasScroll');
+    scroller.scrollTo({ top: Math.max(0, turn.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 24), behavior: 'smooth' });
   });
 }
 
-function initModal() {
-  const modal = document.getElementById('citationModal');
-  const closeBtn = document.getElementById('modalClose');
-
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      modal.classList.remove('open');
-    });
-  }
-
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.classList.remove('open');
-      }
-    });
-  }
+function formatRelativeTime(timestamp) {
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+  return new Date(timestamp).toLocaleDateString();
 }
 
 function initUploads() {
-  const modalBtn = document.getElementById('uploadModalBtn');
-  const modal = document.getElementById('uploadModal');
-  const closeBtn = document.getElementById('uploadModalClose');
-  const cancelBtn = document.getElementById('cancelUploadBtn');
-  const confirmBtn = document.getElementById('confirmUploadBtn');
-  const browseBtn = document.getElementById('browseFilesBtn');
-  const fileInput = document.getElementById('filePickerInput');
-  const dropzone = document.getElementById('fileDropzone');
-  const deleteBtn = document.getElementById('deleteDatasetBtn');
+  $('uploadModalBtn').addEventListener('click', openUploadModal);
+  $('browseFilesBtn').addEventListener('click', () => $('filePickerInput').click());
+  $('filePickerInput').addEventListener('change', (event) => event.target.files?.[0] && processUpload(event.target.files[0]));
+  const dropzone = $('fileDropzone');
+  ['dragenter', 'dragover'].forEach((name) => dropzone.addEventListener(name, (event) => { event.preventDefault(); dropzone.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach((name) => dropzone.addEventListener(name, (event) => { event.preventDefault(); dropzone.classList.remove('dragover'); }));
+  dropzone.addEventListener('drop', (event) => event.dataTransfer.files?.[0] && processUpload(event.dataTransfer.files[0]));
+  dropzone.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') $('filePickerInput').click(); });
+  $('confirmUploadBtn').addEventListener('click', confirmUpload);
+  $('deleteDatasetBtn').addEventListener('click', deleteDataset);
+}
 
-  let currentSessionId = null;
-
-  if (modalBtn) {
-    modalBtn.addEventListener('click', async () => {
-      try {
-        const statusRes = await fetch('/api/uploads/status').then(r => r.json()).catch(() => ({ enabled: false }));
-        if (!statusRes.enabled) {
-          alert('User uploads are currently disabled.\nStart the server with --enable-uploads to enable dataset uploads.');
-          return;
-        }
-        document.getElementById('uploadDropzoneSection').style.display = 'block';
-        document.getElementById('uploadReviewSection').style.display = 'none';
-        document.getElementById('uploadProgress').style.display = 'none';
-        document.getElementById('uploadError').style.display = 'none';
-        modal.classList.add('open');
-      } catch (err) {
-        alert('Could not connect to uploads service: ' + err.message);
-      }
-    });
-  }
-
-  const closeModal = () => {
-    if (modal) modal.classList.remove('open');
-  };
-
-  if (closeBtn) closeBtn.addEventListener('click', closeModal);
-  if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
-  }
-
-  if (browseBtn && fileInput) {
-    browseBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        processSelectedFile(e.target.files[0]);
-      }
-    });
-  }
-
-  if (dropzone) {
-    dropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropzone.classList.add('dragover');
-    });
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropzone.classList.remove('dragover');
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        processSelectedFile(e.dataTransfer.files[0]);
-      }
-    });
-  }
-
-  async function processSelectedFile(file) {
-    const errorEl = document.getElementById('uploadError');
-    const progressEl = document.getElementById('uploadProgress');
-    const dropzoneSection = document.getElementById('uploadDropzoneSection');
-
-    errorEl.style.display = 'none';
-    progressEl.style.display = 'flex';
-    dropzone.style.display = 'none';
-
-    try {
-      // 1. Create session
-      const sessRes = await fetch('/api/uploads/session/create', { method: 'POST' });
-      const sessData = await sessRes.json();
-      if (!sessRes.ok) {
-        throw new Error(sessData.error || 'Failed to initialize session');
-      }
-      currentSessionId = sessData.session_id;
-
-      // 2. Read file to Base64
-      const b64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const res = reader.result;
-          const commaIdx = res.indexOf(',');
-          resolve(commaIdx >= 0 ? res.substring(commaIdx + 1) : res);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      // 3. Upload and profile
-      const upRes = await fetch(`/api/uploads/${currentSessionId}/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: file.name,
-          content_base64: b64,
-        }),
-      });
-
-      const upData = await upRes.json();
-      if (!upRes.ok) {
-        throw new Error(upData.error || 'Upload ingestion failed');
-      }
-
-      currentUploadTableMeta = upData.table;
-
-      // Render review screen
-      renderUploadReviewScreen(upData.table);
-      progressEl.style.display = 'none';
-      dropzoneSection.style.display = 'none';
-      document.getElementById('uploadReviewSection').style.display = 'block';
-
-    } catch (err) {
-      console.error('Upload error:', err);
-      progressEl.style.display = 'none';
-      dropzone.style.display = 'flex';
-      errorEl.textContent = 'Upload failed: ' + (err.message || 'Unknown error');
-      errorEl.style.display = 'block';
+async function openUploadModal() {
+  $('uploadStatus').textContent = '';
+  $('uploadStatus').className = 'upload-status';
+  $('fileDropzone').hidden = false; $('uploadProgress').hidden = true; $('uploadReview').hidden = true;
+  openModal($('uploadModal'));
+  try {
+    const response = await fetch('/api/uploads/status'); const status = await response.json();
+    if (!status.enabled) {
+      $('uploadStatus').textContent = 'Uploads are disabled. Restart Data Mind with --enable-uploads to use this feature.';
+      $('uploadStatus').classList.add('error'); $('fileDropzone').hidden = true;
+    } else {
+      $('uploadStatus').textContent = `CSV or Parquet · up to ${Math.round(status.max_file_size_bytes / 1048576)} MB · ${Number(status.max_rows).toLocaleString()} rows`;
     }
+  } catch { $('uploadStatus').textContent = 'Could not check upload availability.'; $('uploadStatus').classList.add('error'); }
+}
+
+async function processUpload(file) {
+  $('fileDropzone').hidden = true; $('uploadProgress').hidden = false; $('uploadReview').hidden = true;
+  try {
+    const sessionResponse = await fetch('/api/uploads/session/create', { method: 'POST' });
+    const session = await sessionResponse.json();
+    if (!sessionResponse.ok) throw new Error(session.error || 'Could not create an upload session');
+    state.activeUploadSession = session.session_id;
+    const contentBase64 = await fileToBase64(file);
+    const response = await fetch(`/api/uploads/${session.session_id}/upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, content_base64: contentBase64 }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Upload failed');
+    state.uploadTable = data.table;
+    renderUploadReview(data.table);
+    $('uploadProgress').hidden = true; $('uploadReview').hidden = false;
+  } catch (error) {
+    $('uploadProgress').hidden = true; $('fileDropzone').hidden = false;
+    $('uploadStatus').textContent = error.message; $('uploadStatus').classList.add('error');
   }
+}
 
-  function renderUploadReviewScreen(tableMeta) {
-    document.getElementById('reviewTableName').textContent = `Table: ${tableMeta.table_name}`;
-    document.getElementById('reviewTableStats').textContent =
-      `${tableMeta.total_rows.toLocaleString()} rows • ${tableMeta.total_columns} columns (${tableMeta.original_filename})`;
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader(); reader.onerror = reject;
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.readAsDataURL(file);
+  });
+}
 
-    // Preview table
-    const previewContainer = document.getElementById('uploadPreviewTableContainer');
-    if (tableMeta.preview && tableMeta.preview.columns) {
-      let pHtml = '<table class="data-table"><thead><tr>';
-      tableMeta.preview.columns.forEach(col => {
-        pHtml += `<th>${escapeHtml(col)}</th>`;
-      });
-      pHtml += '</tr></thead><tbody>';
-      (tableMeta.preview.rows || []).forEach(row => {
-        pHtml += '<tr>';
-        row.forEach(val => {
-          pHtml += `<td>${val !== null && val !== undefined ? escapeHtml(val) : '<em class="text-dim">null</em>'}</td>`;
-        });
-        pHtml += '</tr>';
-      });
-      pHtml += '</tbody></table>';
-      previewContainer.innerHTML = pHtml;
-    }
+function renderUploadReview(table) {
+  $('reviewTableName').textContent = table.table_name;
+  $('reviewTableStats').textContent = `${Number(table.total_rows).toLocaleString()} rows · ${table.total_columns} columns · ${table.original_filename}`;
+  $('uploadColumnsTbody').innerHTML = (table.columns || []).map((column) => `<tr><td><input type="checkbox" data-upload-use="${escapeHtml(column.name)}" checked></td><td><strong>${escapeHtml(column.name)}</strong>${column.pii_warning ? `<br><small>${escapeHtml(column.pii_warning)}</small>` : ''}</td><td><code>${escapeHtml(column.inferred_type)}</code></td><td><input class="review-description" data-upload-description="${escapeHtml(column.name)}" value="${escapeHtml(column.original_name || column.name)} column"></td></tr>`).join('');
+}
 
-    // Columns profiling table
-    const tbody = document.getElementById('uploadColumnsTbody');
-    tbody.innerHTML = '';
-    (tableMeta.columns || []).forEach(col => {
-      const tr = document.createElement('tr');
-      const sampleText = (col.sample_values || []).join(', ') || '-';
-      const piiHtml = col.pii_warning ? `<div class="pii-tag" title="${escapeHtml(col.pii_warning)}">⚠ PII: ${escapeHtml(col.pii_warning)}</div>` : '';
-
-      tr.innerHTML = `
-        <td style="text-align:center;">
-          <input type="checkbox" id="col_${col.name}_enabled" checked>
-        </td>
-        <td>
-          <strong>${escapeHtml(col.name)}</strong>
-          ${col.original_name !== col.name ? `<div class="meta-sub">Original: ${escapeHtml(col.original_name)}</div>` : ''}
-          ${piiHtml}
-        </td>
-        <td><code>${escapeHtml(col.inferred_type)}</code></td>
-        <td>${(col.null_rate * 100).toFixed(1)}%</td>
-        <td>${col.distinct_count.toLocaleString()}</td>
-        <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(sampleText)}">
-          ${escapeHtml(sampleText)}
-        </td>
-        <td>
-          <input type="text" class="input-cell" id="col_${escapeHtml(col.name)}_desc" value="${escapeHtml(col.original_name)} column">
-        </td>
-        <td style="text-align:center;">
-          <input type="checkbox" id="col_${col.name}_pk" ${col.is_id ? 'checked' : ''}>
-        </td>
-        <td style="text-align:center;">
-          <input type="checkbox" id="col_${col.name}_doc" ${col.is_document ? 'checked' : ''}>
-        </td>
-      `;
-      tbody.appendChild(tr);
+async function confirmUpload() {
+  if (!state.activeUploadSession || !state.uploadTable) return;
+  const button = $('confirmUploadBtn'); button.disabled = true; button.textContent = 'Activating…';
+  try {
+    const columns = {};
+    (state.uploadTable.columns || []).forEach((column) => {
+      columns[column.name] = {
+        enabled: document.querySelector(`[data-upload-use="${CSS.escape(column.name)}"]`)?.checked !== false,
+        description: document.querySelector(`[data-upload-description="${CSS.escape(column.name)}"]`)?.value || column.name,
+        is_primary_key: Boolean(column.is_id),
+        is_document: Boolean(column.is_document),
+      };
     });
+    const reviewConfig = { default_currency: 'USD', tables: { [state.uploadTable.table_name]: { description: `Uploaded dataset: ${state.uploadTable.original_filename}`, columns } } };
+    const response = await fetch(`/api/uploads/${state.activeUploadSession}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_config: reviewConfig }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Dataset activation failed');
+    $('activeDatasetName').textContent = `${state.uploadTable.original_filename} · ${Number(state.uploadTable.total_rows).toLocaleString()} rows`;
+    $('activeDatasetBanner').hidden = false; $('backendName').textContent = 'DUCKDB · UPLOAD';
+    if (data.sample_questions?.length) renderSuggestions(data.sample_questions);
+    closeModal($('uploadModal')); startNewAnalysis(); showToast('Dataset activated');
+  } catch (error) { $('uploadStatus').textContent = error.message; $('uploadStatus').classList.add('error'); }
+  finally { button.disabled = false; button.textContent = 'Activate dataset'; }
+}
+
+async function deleteDataset() {
+  if (!state.activeUploadSession) return;
+  if (!window.confirm('Remove this isolated upload and return to the default dataset?')) return;
+  try {
+    await fetch(`/api/uploads/${state.activeUploadSession}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    state.activeUploadSession = null; state.uploadTable = null; $('activeDatasetBanner').hidden = true;
+    await loadConfig(); startNewAnalysis(); showToast('Uploaded dataset removed');
+  } catch (error) { showToast(`Could not remove dataset: ${error.message}`); }
+}
+
+function renderChart(spec, refs = null, onCitation = showCitation) {
+  const card = refs?.card || $('chartCard'); const body = refs?.body || $('chartBody'); const note = refs?.note || $('chartNote');
+  body.innerHTML = ''; note.hidden = true;
+  if (!spec || spec.type === 'table' || (!spec.points?.length && spec.type !== 'kpi')) { card.hidden = true; return; }
+  card.hidden = false; (refs?.title || $('chartTitle')).textContent = spec.title || 'Visual summary';
+  if (spec.alt_text) body.setAttribute('aria-label', spec.alt_text);
+  if (spec.note) { note.textContent = spec.note; note.hidden = false; }
+  if (spec.type === 'kpi') {
+    body.innerHTML = `<div class="kpi-chart"><div><strong>${escapeHtml(spec.kpi_value ?? spec.points?.[0]?.y ?? '—')}</strong><span>${escapeHtml(spec.kpi_label || spec.title || '')}</span></div></div>`;
+    return;
   }
+  const points = spec.points || [];
+  if (spec.type === 'line') renderLineChart(body, points, onCitation);
+  else renderBarChart(body, points, spec.type === 'diverging_bar', onCitation);
+}
 
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', async () => {
-      if (!currentSessionId || !currentUploadTableMeta) return;
+function renderBarChart(container, points, diverging, onCitation = showCitation) {
+  const width = 840, rowHeight = 42, left = 180, right = 100, height = Math.max(170, points.length * rowHeight + 35);
+  const values = points.map((point) => Number(Array.isArray(point.y) ? point.y[0] : point.y) || 0);
+  const max = Math.max(...values.map(Math.abs), 1); const plotWidth = width - left - right; const mid = diverging ? left + plotWidth / 2 : left;
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">`;
+  points.forEach((point, index) => {
+    const value = values[index]; const y = 15 + index * rowHeight; const available = diverging ? plotWidth / 2 : plotWidth;
+    const barWidth = Math.max(3, Math.abs(value) / max * available); const x = diverging && value < 0 ? mid - barWidth : mid;
+    svg += `<g data-row-id="${escapeHtml(point.row_id || '')}"><text class="chart-label" x="${left - 12}" y="${y + 15}" text-anchor="end">${escapeHtml(String(point.x || '').slice(0, 26))}</text><rect class="chart-bar" x="${x}" y="${y}" width="${barWidth}" height="22" rx="5"></rect><text class="chart-value" x="${diverging && value < 0 ? x - 8 : x + barWidth + 8}" y="${y + 15}" text-anchor="${diverging && value < 0 ? 'end' : 'start'}">${escapeHtml(value.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</text></g>`;
+  });
+  container.innerHTML = `${svg}</svg>`;
+  bindChartRows(container, onCitation);
+}
 
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = 'Activating...';
+function renderLineChart(container, points, onCitation = showCitation) {
+  const width = 840, height = 300, left = 60, right = 35, top = 20, bottom = 50;
+  const values = points.map((point) => Number(Array.isArray(point.y) ? point.y[0] : point.y) || 0); const min = Math.min(0, ...values), max = Math.max(1, ...values), range = max - min || 1;
+  const coords = points.map((point, index) => ({ point, value: values[index], x: left + (points.length > 1 ? index * (width - left - right) / (points.length - 1) : (width - left - right) / 2), y: top + (height - top - bottom) * (1 - (values[index] - min) / range) }));
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">`;
+  for (let index = 0; index <= 4; index += 1) { const y = top + index * (height - top - bottom) / 4; svg += `<line class="chart-grid" x1="${left}" y1="${y}" x2="${width - right}" y2="${y}"></line>`; }
+  svg += `<path class="chart-line" d="${coords.map((coord, index) => `${index ? 'L' : 'M'} ${coord.x} ${coord.y}`).join(' ')}"></path>`;
+  coords.forEach(({ point, value, x, y }, index) => { svg += `<g data-row-id="${escapeHtml(point.row_id || '')}"><circle class="chart-point" cx="${x}" cy="${y}" r="5"></circle><text class="chart-label" x="${x}" y="${height - 20}" text-anchor="middle">${escapeHtml(String(point.x || '').slice(0, 15))}</text>${index === coords.length - 1 ? `<text class="chart-value" x="${x - 6}" y="${y - 12}" text-anchor="end">${escapeHtml(value.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</text>` : ''}</g>`; });
+  container.innerHTML = `${svg}</svg>`; bindChartRows(container, onCitation);
+}
 
-      try {
-        const colsConfig = {};
-        (currentUploadTableMeta.columns || []).forEach(col => {
-          const enCb = document.getElementById(`col_${col.name}_enabled`);
-          const descInp = document.getElementById(`col_${col.name}_desc`);
-          const pkCb = document.getElementById(`col_${col.name}_pk`);
-          const docCb = document.getElementById(`col_${col.name}_doc`);
-
-          colsConfig[col.name] = {
-            enabled: enCb ? enCb.checked : true,
-            description: descInp ? descInp.value.trim() : col.name,
-            is_primary_key: pkCb ? pkCb.checked : false,
-            is_document: docCb ? docCb.checked : false,
-          };
-        });
-
-        const reviewConfig = {
-          default_currency: document.getElementById('reviewCurrency').value,
-          tables: {
-            [currentUploadTableMeta.table_name]: {
-              description: `Uploaded dataset: ${currentUploadTableMeta.original_filename}`,
-              columns: colsConfig,
-            },
-          },
-        };
-
-        const confRes = await fetch(`/api/uploads/${currentSessionId}/confirm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ review_config: reviewConfig }),
-        });
-
-        const confData = await confRes.json();
-        if (!confRes.ok) {
-          throw new Error(confData.error || 'Activation failed');
-        }
-
-        activeUploadSession = currentSessionId;
-        closeModal();
-
-        // Show active dataset banner
-        const banner = document.getElementById('activeDatasetBanner');
-        const nameEl = document.getElementById('activeDatasetName');
-        if (banner && nameEl) {
-          nameEl.textContent = `${currentUploadTableMeta.original_filename} (${currentUploadTableMeta.table_name})`;
-          banner.style.display = 'flex';
-        }
-
-        // Update backend badge
-        document.getElementById('backendName').textContent = 'DUCKDB (UPLOAD)';
-
-        // Populate sample questions from confirmed model
-        const chipsList = document.getElementById('chipsList');
-        if (chipsList && confData.sample_questions && confData.sample_questions.length) {
-          chipsList.innerHTML = '';
-          confData.sample_questions.forEach(q => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'chip';
-            btn.textContent = q.length > 55 ? q.substring(0, 52) + '...' : q;
-            btn.title = q;
-            btn.addEventListener('click', () => {
-              document.getElementById('questionInput').value = q;
-              document.getElementById('askForm').dispatchEvent(new Event('submit'));
-            });
-            chipsList.appendChild(btn);
-          });
-        }
-
-        resetConversation();
-
-      } catch (err) {
-        alert('Failed to activate dataset: ' + err.message);
-      } finally {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Confirm & Activate Dataset';
-      }
-    });
-  }
-
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', async () => {
-      if (!activeUploadSession) return;
-      const ok = confirm('Are you sure you want to purge this uploaded dataset session and all its isolated database files?');
-      if (!ok) return;
-
-      try {
-        await fetch(`/api/uploads/${activeUploadSession}/delete`, { method: 'POST' });
-        activeUploadSession = null;
-        currentUploadTableMeta = null;
-        const banner = document.getElementById('activeDatasetBanner');
-        if (banner) banner.style.display = 'none';
-
-        await loadConfig();
-        resetConversation();
-      } catch (err) {
-        alert('Failed to delete dataset: ' + err.message);
-      }
-    });
-  }
+function bindChartRows(container, onCitation = showCitation) {
+  container.querySelectorAll('[data-row-id]').forEach((element) => { element.style.cursor = element.dataset.rowId ? 'pointer' : 'default'; element.addEventListener('click', () => element.dataset.rowId && onCitation(element.dataset.rowId)); });
 }
 

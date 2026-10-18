@@ -59,7 +59,7 @@ def test_server_static_assets(server_url):
         assert res.status == 200
         content = res.read().decode("utf-8")
         assert "<!DOCTYPE html>" in content
-        assert "DataMind" in content
+        assert "Data Mind" in content
 
     # CSS
     with urlopen(f"{server_url}/index.css") as res:

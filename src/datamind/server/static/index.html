@@ -3,510 +3,161 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DataMind — Verifiable AI Data Agent</title>
-  <meta name="description" content="Talk to your data with verifiable citations, deterministic numeric checks, interactive SVG charts, and Snowflake/DuckDB execution.">
-  <!-- 100% Local Self-Contained System Fonts (No CDN / No External Tracking) -->
+  <meta name="theme-color" content="#01030D">
+  <meta name="description" content="Data Mind turns natural-language questions into verified, inspectable answers from your business data.">
+  <title>Data Mind — Ask. Verify. Decide.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
   <link rel="stylesheet" href="/index.css">
+  <script src="/smoke.js" defer></script>
+  <script src="/conversations.js" defer></script>
+  <script src="/app.js" defer></script>
 </head>
-<body>
-  <!-- Background Glow Accents -->
-  <div class="bg-glow bg-glow-1"></div>
-  <div class="bg-glow bg-glow-2"></div>
+<body data-view="empty">
+  <div id="shaderFallback" class="shader-fallback" hidden aria-hidden="true"></div>
+  <canvas id="smokeCanvas" class="smoke-canvas" aria-hidden="true"></canvas>
 
-  <!-- Header -->
-  <header class="app-header">
-    <div class="header-brand">
-      <div class="brand-logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9"/>
-          <path d="M12 3v18"/>
-          <path d="M3 12h18"/>
-          <circle cx="12" cy="12" r="4" fill="currentColor"/>
-        </svg>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn" type="button" id="navToggleBtn" aria-label="Toggle navigation" aria-controls="sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <a class="wordmark" href="#" aria-label="Data Mind home"><svg class="brand-symbol" viewBox="0 0 28 28" aria-hidden="true"><path d="M6 4h7a10 10 0 0 1 0 20H6V4Z"/><path d="M6 10h7a4 4 0 0 1 0 8H6M6 4v20"/></svg>Data Mind</a>
+        <span class="topbar-divider"></span><span class="workspace-name">Personal workspace</span>
       </div>
-      <div>
-        <h1 class="brand-title">DataMind</h1>
-        <p class="brand-subtitle">Verifiable AI Data Agent &bull; Powered by Gemma</p>
+      <div class="topbar-right">
+        <span class="connection" id="backendBadge" title="Active data connection"><i class="connection-dot"></i><span id="backendName">Connecting</span></span>
+        <button class="ghost-btn" type="button" id="paletteBtn" aria-label="Open command palette"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><span class="desktop-only">Search</span></button>
+        <button class="ghost-btn desktop-only" type="button" id="catalogBtn">Data catalog</button>
+        <button class="ghost-btn" type="button" id="uploadModalBtn" aria-label="Add data"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="desktop-only">Add data</span></button>
       </div>
-    </div>
+    </header>
 
-    <div class="header-badges">
-      <div class="status-badge" id="backendBadge" title="Active Database Backend">
-        <span class="status-dot"></span>
-        <span id="backendName">Connecting...</span>
+    <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
+      <div class="workspace-switch"><div><strong>Data workspace</strong><small>Local environment</small></div><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 8 3-3 3 3m-6 8 3 3 3-3"/></svg></div>
+      <button class="primary-btn new-analysis" type="button" id="sidebarNewBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New analysis<kbd>N</kbd></button>
+      <nav class="side-nav" aria-label="Primary">
+        <button class="side-nav-item active" type="button" id="workspaceBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Workspace</button>
+        <button class="side-nav-item" type="button" id="sidebarCatalogBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Data catalog<span class="count" id="tableCount">—</span></button>
+      </nav>
+      <div class="side-section">
+        <div class="side-heading"><span>Recent</span><button type="button" id="clearHistoryBtn">Clear</button></div>
+        <div class="history-list" id="historyList"><p class="history-empty">Your recent questions will appear here.</p></div>
       </div>
-      <div class="model-select-wrap" title="Active Model & Privacy Preset">
-        <select id="modelPresetSelect" class="header-select">
-          <option value="local">🔒 Local Air-Gapped (Gemma 4 e2b)</option>
-          <option value="hybrid_privacy">🛡️ Hybrid Privacy (Schema-Only Cloud)</option>
-          <option value="cloud_accuracy">☁️ Cloud Accuracy (Bedrock Metered)</option>
-          <option value="second_opinion">👥 Second Opinion Mode</option>
-        </select>
-      </div>
-      <div class="status-badge privacy-badge" id="privacyBadge" title="Data Egress Sentinel">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-        </svg>
-        <span id="privacyStatus">Air-Gapped: 0 Egress</span>
-      </div>
-      <button type="button" id="uploadModalBtn" class="btn-secondary-sm" title="Upload custom CSV or Parquet dataset">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
-        </svg>
-        Upload Dataset
-      </button>
-      <button type="button" id="newChatBtn" class="btn-secondary-sm" title="Start a fresh conversation thread">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-          <path d="M12 5v14M5 12h14"></path>
-        </svg>
-        New Thread
-      </button>
-      <label class="toggle-container" title="Strict Mode: Fails answers with any unverified numbers or fake citations">
-        <input type="checkbox" id="strictModeToggle" checked>
-        <span class="toggle-slider"></span>
-        <span class="toggle-label">Strict Verification</span>
-      </label>
-    </div>
-  </header>
+      <div class="side-note"><span class="execution-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v5c0 5-8 9-8 9s-8-4-8-9V7l8-4Z"/><path d="m8 12 3 3 5-6"/></svg></span><div><strong id="executionMode">Execution</strong><span id="privacyStatus">Checking execution mode…</span></div></div>
+      <div class="sidebar-bottom"><span>Data Mind</span><span class="model-label" id="modelLabel">Connecting</span></div>
+    </aside>
 
-  <!-- Main Container -->
-  <main class="app-main">
-    <!-- Prompt & Input Section -->
-    <section class="search-section">
-      <!-- Active Upload Dataset Banner -->
-      <div id="activeDatasetBanner" class="active-dataset-banner" style="display:none;">
-        <div class="active-dataset-left">
-          <span class="active-dataset-tag">Active Uploaded Dataset: <strong id="activeDatasetName">Custom Upload</strong></span>
-          <span class="badge-pill badge-emerald">Isolated DuckDB</span>
-        </div>
-        <button type="button" class="btn-danger-xs" id="deleteDatasetBtn" title="Purge session files and return to default database">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-          Delete My Data
-        </button>
-      </div>
+    <main class="canvas" id="canvas">
+      <div class="workspace-heading"><div><span>Workspace</span><span class="breadcrumb-divider">/</span><strong id="viewLabel">New analysis</strong></div><span class="workspace-hint"><i></i> Read-only queries</span></div>
+      <div class="canvas-scroll" id="canvasScroll">
+        <div class="canvas-inner">
+          <div class="active-dataset" id="activeDatasetBanner" hidden><div><span class="label">Active dataset</span><strong id="activeDatasetName">Uploaded data</strong></div><button class="text-button danger" id="deleteDatasetBtn" type="button">Remove dataset</button></div>
 
-      <form id="askForm" class="ask-box">
-        <div class="input-wrapper">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon" aria-hidden="true">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          <input
-            type="text"
-            id="questionInput"
-            placeholder="Ask a question about your revenue, sales trends, products, or customer support..."
-            autocomplete="off"
-            required
-            aria-label="Natural language data query"
-          />
-        </div>
-        <button type="submit" id="submitBtn" class="btn-primary" aria-label="Run Query">
-          <span class="btn-text">Run Query</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="send-icon" aria-hidden="true">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-          <div class="spinner" id="btnSpinner"></div>
-        </button>
-      </form>
+          <section class="welcome" id="emptyState">
+            <div class="welcome-label"><span></span> READY TO QUERY</div>
+            <h1>Explore your data.</h1>
+            <p>Ask a question. Follow the evidence.</p>
+          </section>
 
-      <!-- Dynamic Suggestion Chips from Verified Queries -->
-      <div class="chips-row" id="chipsContainer">
-        <span class="chips-label">Sample Questions:</span>
-        <div id="chipsList" class="chips-list"></div>
-      </div>
-    </section>
-
-    <!-- Multi-stage Interactive Loading Indicator -->
-    <section class="loading-card" id="loadingState" style="display: none;" aria-live="polite">
-      <div class="loading-pulse-ring"></div>
-      <div class="loading-text-wrap">
-        <div class="loading-header-row">
-          <h3 class="loading-title" id="loadingTitle">Processing Query...</h3>
-          <span class="loading-timer" id="elapsedTimer">0.0s</span>
-        </div>
-        <div class="loading-stages">
-          <span class="stage-pill active" id="stagePlanning">1. Planning</span>
-          <span class="stage-arrow">&rarr;</span>
-          <span class="stage-pill" id="stageGuard">2. SQL Guard</span>
-          <span class="stage-arrow">&rarr;</span>
-          <span class="stage-pill" id="stageExec">3. Executing</span>
-          <span class="stage-arrow">&rarr;</span>
-          <span class="stage-pill" id="stageAudit">4. Verifying</span>
-        </div>
-      </div>
-      <button type="button" id="cancelQueryBtn" class="btn-cancel" title="Cancel in-flight query">Cancel</button>
-    </section>
-
-    <!-- Error & Notice Callout State -->
-    <section class="error-card" id="errorState" style="display: none;" role="alert">
-      <div class="error-icon-box" id="errorIconBox">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-      </div>
-      <div class="error-body">
-        <h3 class="error-title" id="errorTitle">Notice</h3>
-        <p class="error-message" id="errorMessage"></p>
-        <div id="clarificationButtons" class="clarification-buttons" style="display: none;"></div>
-      </div>
-    </section>
-
-    <!-- Conversation Thread Container (Previous Turns) -->
-    <div id="conversationThread" class="conversation-thread"></div>
-
-    <!-- Active Results Section -->
-    <section class="results-container" id="resultsContainer" style="display: none;">
-      <!-- Answer Header & Trust Card -->
-      <div class="answer-card">
-        <div class="answer-top-bar">
-          <div class="question-echo" id="questionEcho"></div>
-          <div class="trust-summary" id="trustSummary">
-            <!-- Dynamically populated 3-state badges -->
-          </div>
-        </div>
-
-        <!-- Result Action Bar: CSV Download, Copy SQL, Copy Answer -->
-        <div class="result-actions-bar">
-          <button type="button" class="action-btn" id="copyAnswerBtn" title="Copy formatted answer with citations">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            Copy Answer
-          </button>
-          <button type="button" class="action-btn" id="copySqlBtn" title="Copy executed audited SQL query">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-              <polyline points="16 18 22 12 16 6"></polyline>
-              <polyline points="8 6 2 12 8 18"></polyline>
-            </svg>
-            Copy SQL
-          </button>
-          <button type="button" class="action-btn" id="exportCsvBtn" title="Download result table as CSV (formula-injection escaped)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            Download CSV
-          </button>
-          <button type="button" class="action-btn action-btn-accent" id="secondOpinionBtn" title="Compare against secondary model for cross-model query consensus">
-            👥 Second Opinion
-          </button>
-          <button type="button" class="action-btn action-btn-accent" id="receiptBtn" title="Export cryptographic SHA-256 tamper-evident answer receipt">
-            📜 Verifiable Receipt
-          </button>
-          <button type="button" class="action-btn action-btn-danger" id="redTeamBtn" title="Test answer against 6 live adversarial mutations to prove verifier catch rate">
-            🛡️ Red-Team Attack
-          </button>
-        </div>
-
-        <!-- Clarification quick-replies when question is ambiguous -->
-        <div id="clarifyCard" class="clarify-card" style="display: none;">
-          <h4 class="clarify-title">&#9432; Suggested Clarifications:</h4>
-          <div id="clarifyChips" class="clarify-chips"></div>
-        </div>
-
-        <!-- Query Assumptions & Method Card (AST Linter Integrity) -->
-        <details class="assumptions-box" id="assumptionsBox" style="display: none;">
-          <summary class="assumptions-summary">
-            <span class="assumptions-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-                <polyline points="10 9 9 9 8 9"></polyline>
-              </svg>
-              <span>Query Method &amp; Assumptions</span>
-            </span>
-            <span class="assumptions-badge" id="assumptionsBadge">Verified Method</span>
-          </summary>
-          <div class="assumptions-body" id="assumptionsBody"></div>
-        </details>
-
-        <!-- Markdown formatted answer -->
-        <div class="answer-content" id="answerContent"></div>
-      </div>
-
-      <!-- Visual Data Chart Container (Deterministic SVG Renderer) -->
-      <div class="chart-card" id="chartCard" style="display: none;">
-        <div class="chart-header">
-          <div class="chart-title-wrap">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon" aria-hidden="true">
-              <line x1="18" y1="20" x2="18" y2="10"></line>
-              <line x1="12" y1="20" x2="12" y2="4"></line>
-              <line x1="6" y1="20" x2="6" y2="14"></line>
-            </svg>
-            <h3 class="chart-title" id="chartTitle">Data Visualization</h3>
-          </div>
-          <span class="chart-badge" id="chartTypeBadge">SVG Chart</span>
-        </div>
-        <div class="chart-body" id="chartBody" role="img" aria-label="Query result chart"></div>
-        <div class="chart-footer-note" id="chartNote" style="display: none;"></div>
-      </div>
-
-      <!-- Under The Hood Drawer & Evidence Inspector Panels -->
-      <div class="inspector-card">
-        <div class="under-hood-header">
-          <div class="hood-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mini-icon">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-            <span>Under The Hood Evidence &amp; Provenance</span>
-          </div>
-          <div class="hood-meta" id="hoodMeta">
-            <!-- Dynamic stats: Dialect, Rows, Latency, Model, Tokens -->
-          </div>
-        </div>
-
-        <div class="inspector-tabs" role="tablist">
-          <button class="tab-btn active" data-tab="sqlTab" role="tab" aria-selected="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
-              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-            </svg>
-            Executed SQL &amp; Rows (<span id="sqlCount">0</span>)
-          </button>
-          <button class="tab-btn" data-tab="docsTab" role="tab" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            Retrieved Documents (<span id="docsCount">0</span>)
-          </button>
-          <button class="tab-btn" data-tab="numericTab" role="tab" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-            Deterministic Numeric Audit (<span id="numChecksCount">0</span>)
-          </button>
-        </div>
-
-        <!-- Tab 1: SQL Queries -->
-        <div class="tab-pane active" id="sqlTab" role="tabpanel">
-          <div id="queriesList"></div>
-        </div>
-
-        <!-- Tab 2: Document Chunks -->
-        <div class="tab-pane" id="docsTab" role="tabpanel">
-          <div id="docsList"></div>
-        </div>
-
-        <!-- Tab 3: Numeric Reconciliation -->
-        <div class="tab-pane" id="numericTab" role="tabpanel">
-          <div id="numericList"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Empty State -->
-    <section class="empty-state" id="emptyState">
-      <div class="empty-icon-wrapper">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="empty-hero-icon" aria-hidden="true">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-          <line x1="8" y1="21" x2="16" y2="21"></line>
-          <line x1="12" y1="17" x2="12" y2="21"></line>
-        </svg>
-      </div>
-      <h2>Every Claim Grounded &bull; Zero Hallucination</h2>
-      <p>DataMind executes audited SQL queries and BM25 document retrievals to answer business questions. Click on any citation tag like <code>[[Q1:R1]]</code> or chart point to inspect the exact underlying database row.</p>
-    </section>
-  </main>
-
-  <!-- Citation Detail Modal -->
-  <div class="modal-overlay" id="citationModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="modalTitle">Evidence Citation</h3>
-        <button class="modal-close" id="modalClose" aria-label="Close modal">&times;</button>
-      </div>
-      <div class="modal-body" id="modalBody"></div>
-    </div>
-  </div>
-
-  <!-- Upload Dataset Modal -->
-  <div class="modal-overlay" id="uploadModal" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
-    <div class="modal-card modal-card-lg">
-      <div class="modal-header">
-        <h3 id="uploadModalTitle">Upload Your Dataset</h3>
-        <button class="modal-close" id="uploadModalClose" aria-label="Close modal">&times;</button>
-      </div>
-      <div class="modal-body" id="uploadModalBody">
-        <!-- Step 1: File dropzone -->
-        <div id="uploadDropzoneSection">
-          <div class="dropzone" id="fileDropzone">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="dropzone-icon">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
-            </svg>
-            <h4>Drag & drop your CSV, TSV, or Parquet file here</h4>
-            <p class="dropzone-sub">Files up to 50 MB, 2,000,000 rows. Queried locally in an isolated DuckDB instance.</p>
-            <input type="file" id="filePickerInput" accept=".csv,.tsv,.parquet" style="display:none;">
-            <button type="button" class="btn-primary-sm" id="browseFilesBtn">Browse Files</button>
-          </div>
-          <div id="uploadProgress" class="upload-progress-container" style="display:none;">
-            <div class="spinner"></div>
-            <span id="uploadProgressText">Ingesting and profiling dataset in DuckDB...</span>
-          </div>
-          <div id="uploadError" class="alert-banner alert-crimson" style="display:none;"></div>
-        </div>
-
-        <!-- Step 2: Human Review & Profiling Screen -->
-        <div id="uploadReviewSection" style="display:none;">
-          <div class="review-header-row">
-            <div>
-              <h4 id="reviewTableName">Table Review</h4>
-              <p class="meta-sub" id="reviewTableStats">0 rows &bull; 0 columns</p>
+          <div class="archived-turns" id="archivedTurns"></div>
+          <section class="results" id="resultsContainer" hidden>
+            <header class="result-head">
+              <h2 id="questionEcho"></h2>
+              <div class="verdict-row"><span class="verdict" id="trustSummary"></span><span class="verdict-meta" id="trustMetrics"></span></div>
+            </header>
+            <article class="answer">
+              <div class="answer-content" id="answerContent"></div>
+              <div class="clarify-card" id="clarifyCard" hidden><span>Try a more specific question</span><div id="clarifyChips"></div></div>
+            </article>
+            <article class="chart-block" id="chartCard" hidden>
+              <h3 id="chartTitle">Visual summary</h3>
+              <div id="chartBody" class="chart-body" role="img"></div>
+              <p id="chartNote" class="chart-note" hidden></p>
+            </article>
+            <div class="result-actions">
+              <button class="ghost-btn" type="button" id="copyAnswerBtn">Copy</button>
+              <button class="ghost-btn" type="button" id="exportCsvBtn">Export CSV</button>
+              <button class="ghost-btn" type="button" id="inspectEvidenceBtn">Inspect evidence</button>
+              <div class="menu">
+                <button class="ghost-btn icon-only" type="button" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="More actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+                <div class="menu-list" id="moreMenu" role="menu" hidden>
+                  <button type="button" role="menuitem" id="copySqlBtn">Copy SQL</button>
+                  <button type="button" role="menuitem" id="receiptBtn">Receipt</button>
+                  <button type="button" role="menuitem" id="secondOpinionBtn">Second opinion</button>
+                  <button type="button" role="menuitem" id="redTeamBtn">Challenge</button>
+                </div>
+              </div>
             </div>
-            <div class="review-currency-select">
-              <label for="reviewCurrency">Currency:</label>
-              <select id="reviewCurrency" class="input-select">
-                <option value="USD">$ USD</option>
-                <option value="GBP">£ GBP</option>
-                <option value="EUR">€ EUR</option>
-                <option value="INR">₹ INR</option>
-              </select>
+          </section>
+          <section class="loading" id="loadingState" hidden aria-live="polite">
+            <h2 class="pending-question" id="pendingQuestion"></h2>
+            <div class="loading-head"><span>Analyzing<span class="elapsed" id="elapsedTimer">0.0s</span></span><button class="text-button" id="cancelQueryBtn" type="button">Cancel</button></div>
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton"></div><div class="skeleton skeleton-short"></div>
+          </section>
+          <section class="notice" id="errorState" hidden role="alert"><div><strong id="errorTitle">Analysis could not be completed</strong><p id="errorMessage"></p></div><button class="text-button" type="button" id="dismissErrorBtn">Dismiss</button></section>
+        </div>
+      </div>
+
+      <div class="composer-zone">
+        <section class="composer" aria-label="Ask a question">
+          <form id="askForm" class="query-form">
+            <label id="queryLabel" for="questionInput" class="sr-only">What do you want to understand?</label>
+            <textarea id="questionInput" rows="2" required placeholder="Ask Data Mind…"></textarea>
+            <div class="query-form-footer">
+              <div class="query-controls">
+                <select id="modelPresetSelect" aria-label="Analysis mode"><option value="local">Local private</option><option value="hybrid_privacy">Hybrid privacy</option><option value="cloud_accuracy">Cloud accuracy</option><option value="second_opinion">Second opinion</option></select>
+                <label class="strict-toggle" title="Reject answers containing unverified claims"><input type="checkbox" id="strictModeToggle" checked><span></span>Strict</label>
+              </div>
+              <span class="shortcut-hint"><kbd>Enter</kbd> to ask · <kbd>Shift</kbd> + <kbd>Enter</kbd> new line</span>
+              <button class="ask-button" type="submit" id="submitBtn" aria-label="Ask Data Mind"><span class="btn-text sr-only">Ask Data Mind</span><span class="button-spinner" id="btnSpinner" aria-hidden="true"></span><svg class="send-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></button>
             </div>
-          </div>
+          </form>
+        </section>
 
-          <!-- Preview Table -->
-          <h5 class="section-subheading">Data Preview (First 10 Rows)</h5>
-          <div class="table-scroll-container mb-4" id="uploadPreviewTableContainer"></div>
-
-          <!-- Column Profiling & Configuration -->
-          <h5 class="section-subheading">Column Profiling & Model Configuration</h5>
-          <div class="table-scroll-container mb-4">
-            <table class="data-table" id="uploadColumnsTable">
-              <thead>
-                <tr>
-                  <th style="width:40px;">Use</th>
-                  <th>Column</th>
-                  <th>Inferred Type</th>
-                  <th>Null %</th>
-                  <th>Distinct</th>
-                  <th>Sample Values</th>
-                  <th>Description</th>
-                  <th>ID</th>
-                  <th>Doc</th>
-                </tr>
-              </thead>
-              <tbody id="uploadColumnsTbody"></tbody>
-            </table>
-          </div>
-
-          <div class="review-actions-row">
-            <button type="button" class="btn-secondary" id="cancelUploadBtn">Cancel</button>
-            <button type="button" class="btn-primary" id="confirmUploadBtn">Confirm & Activate Dataset</button>
-          </div>
-        </div>
+        <section class="empty-detail" id="emptyDetail">
+          <div class="section-heading"><h3>A place to start</h3><span>From your connected model</span></div>
+          <div class="suggestion-list" id="chipsList"><button type="button" class="suggestion-skeleton" disabled></button><button type="button" class="suggestion-skeleton" disabled></button></div>
+          <section class="dataset-overview"><div class="section-heading"><h3>Connected data</h3><button type="button" class="text-button" id="overviewCatalogBtn">View schema <span aria-hidden="true">↗</span></button></div><div id="datasetTables" class="dataset-tables"></div><p id="welcomeMeta" class="dataset-meta">Loading data model…</p></section>
+          <div class="workspace-footnote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v5c0 5-8 9-8 9s-8-4-8-9V7l8-4Z"/><path d="m8 12 3 3 5-6"/></svg><span>Read-only execution. Source citations. Numbers checked against results.</span></div>
+          <div id="recentList" hidden></div>
+        </section>
       </div>
-    </div>
+    </main>
+
+    <aside class="evidence" id="evidencePanel" aria-label="Evidence">
+      <div class="resizer" id="evidenceResizer" role="separator" aria-orientation="vertical" aria-label="Resize evidence panel" tabindex="0"></div>
+      <div class="evidence-head"><div><span class="label">Source of truth</span><h2>Evidence</h2></div><span class="evidence-indicator" title="Evidence from the current analysis"></span><button class="icon-button evidence-close" id="closeEvidenceBtn" type="button" aria-label="Close evidence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      <div class="evidence-placeholder" id="evidencePlaceholder"><p>SQL, source rows, documents and numeric checks for each answer appear here.</p></div>
+      <div class="evidence-body" id="evidenceBody" hidden>
+        <p class="meta-line" id="hoodMeta"></p>
+        <div class="tabs" role="tablist" aria-label="Evidence views"><button class="tab active" type="button" data-tab="sqlTab" role="tab" aria-selected="true">SQL &amp; rows <span id="sqlCount">0</span></button><button class="tab" type="button" data-tab="docsTab" role="tab" aria-selected="false">Documents <span id="docsCount">0</span></button><button class="tab" type="button" data-tab="numericTab" role="tab" aria-selected="false">Numeric audit <span id="numChecksCount">0</span></button></div>
+        <div class="tab-pane active" id="sqlTab" role="tabpanel"><div id="queriesList"></div></div>
+        <div class="tab-pane" id="docsTab" role="tabpanel"><div id="docsList"></div></div>
+        <div class="tab-pane" id="numericTab" role="tabpanel"><div id="numericList"></div></div>
+        <details class="assumptions" id="assumptionsBox" hidden><summary>Method &amp; assumptions <span id="assumptionsBadge">Checked</span></summary><div id="assumptionsBody"></div></details>
+      </div>
+    </aside>
   </div>
 
-  <!-- Second Opinion Modal -->
-  <div class="modal-backdrop" id="secondOpinionModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="secondOpinionTitle">
-    <div class="modal-card modal-lg">
-      <div class="modal-header">
-        <div class="modal-title-wrap">
-          <h3 id="secondOpinionTitle">👥 Cross-Model Second Opinion</h3>
-          <span class="badge-pill" id="soVerdictBadge">Consensus</span>
-        </div>
-        <button type="button" class="btn-close" id="closeSecondOpinionBtn">&times;</button>
-      </div>
-      <div class="modal-body" id="secondOpinionBody">
-        <p class="modal-sub" id="soExplanation">Comparing independent queries generated by distinct models for this question.</p>
-        
-        <div class="so-grid">
-          <div class="so-column">
-            <h4 class="so-model-tag" id="soPrimaryModelTag">Primary Model (Local)</h4>
-            <pre class="so-sql-box"><code id="soPrimarySql">SELECT ...</code></pre>
-            <div class="so-rows-box" id="soPrimaryRows"></div>
-          </div>
-          <div class="so-column">
-            <h4 class="so-model-tag" id="soSecondaryModelTag">Secondary Model</h4>
-            <pre class="so-sql-box"><code id="soSecondarySql">SELECT ...</code></pre>
-            <div class="so-rows-box" id="soSecondaryRows"></div>
-          </div>
-        </div>
+  <aside class="drawer" id="catalogDrawer" aria-labelledby="catalogTitle" aria-hidden="true">
+    <div class="drawer-header"><div><span class="label">Connected model</span><h2 id="catalogTitle">Data catalog</h2></div><button class="icon-button" type="button" data-close="catalogDrawer" aria-label="Close data catalog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+    <p class="drawer-intro">These are the tables and fields Data Mind is allowed to reason over.</p><div id="catalogContent" class="catalog-content"></div>
+  </aside>
+  <div class="scrim" id="drawerScrim" hidden></div>
 
-        <div class="so-assumptions-diff" id="soAssumptionsDiff">
-          <h4 class="section-subheading">Assumptions &amp; Method Diff</h4>
-          <div id="soDiffContent">No divergent assumptions detected. Both models executed aligned query logic.</div>
-        </div>
-      </div>
-    </div>
+  <div class="modal" id="detailModal" hidden role="dialog" aria-modal="true" aria-labelledby="detailModalTitle"><div class="modal-card"><div class="modal-header"><div><span class="label">Inspect</span><h2 id="detailModalTitle">Evidence detail</h2></div><button class="icon-button" data-modal-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div id="detailModalBody" class="modal-body"></div></div></div>
+
+  <div class="modal palette" id="paletteModal" hidden role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="palette-card"><input id="paletteInput" type="text" placeholder="Type a command or question…" autocomplete="off" aria-controls="paletteList"><ul id="paletteList" role="listbox"></ul></div>
   </div>
 
-  <!-- Verifiable Receipt Modal -->
-  <div class="modal-backdrop" id="receiptModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="receiptModalTitle">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="receiptModalTitle">📜 Verifiable Cryptographic Receipt</h3>
-        <button type="button" class="btn-close" id="closeReceiptBtn">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="modal-sub">Tamper-evident SHA-256 hash chain covering question, SQL queries, evidence rows, verifier report, and data egress manifest.</p>
-        <div class="label">Root Receipt SHA-256 Digest</div>
-        <div class="hash-box" id="modalRootHash">Computing...</div>
-
-        <div class="receipt-actions-row">
-          <button type="button" class="btn-primary" id="downloadReceiptJsonBtn">Download receipt.json</button>
-          <button type="button" class="btn-secondary" id="openReceiptHtmlBtn">Open Standalone WebCrypto HTML</button>
-        </div>
-      </div>
+  <div class="modal" id="uploadModal" hidden role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
+    <div class="modal-card modal-wide">
+      <div class="modal-header"><div><span class="label">Private workspace</span><h2 id="uploadTitle">Add your own dataset</h2></div><button class="icon-button" data-modal-close type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      <div class="modal-body"><div class="upload-status" id="uploadStatus"></div><div class="dropzone" id="fileDropzone" tabindex="0"><input id="filePickerInput" type="file" accept=".csv,.parquet" hidden><strong>Drop a CSV or Parquet file here</strong><p>Your file stays in an isolated local session and can be deleted at any time.</p><button class="primary-btn" type="button" id="browseFilesBtn">Choose a file</button></div><div class="upload-progress" id="uploadProgress" hidden><span></span><p>Profiling columns and preparing a safe semantic model…</p></div><div class="upload-review" id="uploadReview" hidden><div class="upload-review-heading"><div><span class="label">Ready to review</span><h3 id="reviewTableName">Dataset</h3></div><span id="reviewTableStats"></span></div><div class="review-table-wrap"><table><thead><tr><th>Use</th><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody id="uploadColumnsTbody"></tbody></table></div><div class="modal-actions"><button class="ghost-btn" data-modal-close type="button">Cancel</button><button class="primary-btn" type="button" id="confirmUploadBtn">Activate dataset</button></div></div></div>
     </div>
   </div>
-
-  <!-- Red-Team Attack Modal -->
-  <div class="modal-backdrop" id="redTeamModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="redTeamTitle">
-    <div class="modal-card modal-lg">
-      <div class="modal-header">
-        <div class="modal-title-wrap">
-          <h3 id="redTeamTitle">🛡️ Red-Team Adversarial Challenge</h3>
-          <span class="badge-pill badge-emerald" id="redTeamCatchRate">100% Caught</span>
-        </div>
-        <button type="button" class="btn-close" id="closeRedTeamBtn">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="modal-sub">Executing 6 live adversarial corruptions (number perturbation, currency swap, magnitude skew, fabricated citation, deleted citation, direction flip) against the deterministic verifier.</p>
-        <div class="redteam-list" id="redTeamList"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cloud Consent Modal -->
-  <div class="modal-backdrop" id="cloudConsentModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="consentTitle">☁️ Cloud Model Consent &amp; Egress Notice</h3>
-        <button type="button" class="btn-close" id="closeConsentBtn">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="modal-sub" id="consentNoticeText">You have selected a cloud-assisted preset. Please confirm outbound transmission:</p>
-        <ul style="margin: 0.5rem 0 1rem 1.25rem; font-size: 0.88rem; line-height: 1.6;">
-          <li><strong>Transmitted:</strong> Question text and sanitized schema summaries.</li>
-          <li><strong>Never Transmitted:</strong> Zero database rows, zero document passages, zero credentials.</li>
-          <li><strong>Requirements:</strong> Set <code>DATAMIND_ALLOW_CLOUD=1</code> and <code>BEDROCK_API_KEY=&lt;key&gt;</code> in <code>.env</code>.</li>
-        </ul>
-        <div class="review-actions-row">
-          <button type="button" class="btn-secondary" id="cancelConsentBtn">Stay Local (Air-Gapped)</button>
-          <button type="button" class="btn-primary" id="confirmConsentBtn">I Consent &amp; Proceed</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="/app.js"></script>
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
