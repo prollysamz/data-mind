@@ -116,3 +116,32 @@ def test_assumptions_card_markdown():
     assert "Assumptions & Query Verification Card" in md
     assert "VERIFIED" in md
     assert "olist_order_items" in md
+
+
+def test_unrequested_grouping_flags_extra_dimension():
+    from datamind.guardrails.query_lint import QueryLinter
+
+    sql = ("SELECT product_name, order_month, SUM(amount) AS monthly_revenue FROM SALES "
+           "GROUP BY product_name, order_month ORDER BY order_month")
+    findings, card = QueryLinter().lint_query(sql, question="What was the total sales revenue for each month?")
+    flagged = [f for f in findings if f.check_name == "unrequested_grouping"]
+    assert [f.message.split("'")[1] for f in flagged] == ["product_name"]
+    assert card.badge_status == "PARTIALLY_VERIFIED"
+
+
+def test_requested_grouping_is_not_flagged():
+    from datamind.guardrails.query_lint import QueryLinter
+
+    cases = [
+        ("SELECT order_month, SUM(amount) FROM SALES GROUP BY order_month",
+         "What is the total revenue per month across all products?"),
+        ("SELECT order_month, SUM(amount) FROM SALES GROUP BY order_month", "Show monthly sales totals."),
+        ("SELECT p.category, SUM(s.amount) FROM SALES s JOIN PRODUCTS p ON s.product_id = p.product_id GROUP BY p.category",
+         "What is revenue by product categories?"),
+        ("WITH m AS (SELECT product_name, order_month, SUM(amount) AS v FROM SALES GROUP BY product_name, order_month) "
+         "SELECT product_name, v - LAG(v) OVER (PARTITION BY product_name ORDER BY order_month) FROM m",
+         "Which products experienced the largest month-over-month revenue decline?"),
+    ]
+    for sql, question in cases:
+        findings, _ = QueryLinter().lint_query(sql, question=question)
+        assert not [f for f in findings if f.check_name == "unrequested_grouping"], (sql, question)

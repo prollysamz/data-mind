@@ -129,6 +129,9 @@ def handle_ask(args: argparse.Namespace) -> int:
     print("EVIDENCE & DETERMINISTIC VERIFICATION REPORT")
     print("-" * 70)
     print(f"Turns: {result.turns}")
+    print(f"Verification: {result.citation_report.badge_status} - {result.citation_report.badge_reason}")
+    for finding in result.citation_report.lint_findings:
+        print(f"  [{finding.severity}] {finding.check_name}: {finding.message}")
     print(
         f"Citations: {result.citation_report.valid_count} valid, "
         f"{result.citation_report.invalid_count} invalid "

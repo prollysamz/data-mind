@@ -6,6 +6,8 @@ Analyzes executed SQL queries against the Semantic Model AST to catch
 2. Default-Filter Echo: Missing declared business filters (e.g. order_status = 'delivered').
 3. Empty or Null-Heavy Results: Zero rows returned or >50% null values.
 4. Row-Limit Truncation: Results truncated by limit ceiling.
+5. Unrequested Grouping: GROUP BY on a dimension the question never mentions
+   (e.g. per-product rows for "total revenue for each month").
 
 Downgrades verification badge to "Partially verified" with plain-language diagnostic reasons.
 """
@@ -97,6 +99,39 @@ class AssumptionsCard:
                 lines.append(f"- **[{f.check_name}]** {f.message}")
 
         return "\n".join(lines)
+
+
+# Column-name parts that say nothing about which dimension a user asked for
+_GENERIC_COLUMN_PARTS = {"name", "id", "date", "at", "no", "num", "number", "key", "code", "value", "dt", "ts"}
+
+
+def _question_mentions(part: str, question_words: set[str]) -> bool:
+    """True if a column-name part (e.g. 'product', 'month', 'category') appears in the question."""
+    forms = {part, part + "s", part + "es", part + "ly"}
+    if part.endswith("y"):
+        forms.add(part[:-1] + "ies")
+    if forms & question_words:
+        return True
+    for w in question_words:
+        stem = w[:-1] if w.endswith("s") else w
+        # "monthly" for month; "invoice" for invoiceno, "customers" for customerid
+        if (len(part) >= 4 and w.startswith(part)) or (len(stem) >= 5 and part.startswith(stem)):
+            return True
+    return False
+
+
+def unrequested_group_columns(group_columns: list[str], question: str) -> list[str]:
+    """Return GROUP BY columns whose meaningful name parts never appear in the question."""
+    question_words = set(re.findall(r"[a-z0-9]+", question.lower()))
+    flagged = []
+    for col in group_columns:
+        bare = col.split(".")[-1].strip('"').lower()
+        parts = [p for p in re.split(r"[^a-z0-9]+", bare) if p]
+        if all(p in _GENERIC_COLUMN_PARTS for p in parts):
+            continue  # nothing specific enough to judge
+        if not any(_question_mentions(p, question_words) for p in parts):
+            flagged.append(col)
+    return flagged
 
 
 class QueryLinter:
@@ -270,6 +305,27 @@ class QueryLinter:
                         severity="WARNING",
                         message=f"Row-limit reached: Query returned exactly {limit_val} rows (limit ceiling reached).",
                         remediation="Increase LIMIT or apply more specific filtering.",
+                    )
+                )
+
+        # ----------------------------------------------------------------------
+        # Check E: Unrequested Grouping Dimension
+        # ----------------------------------------------------------------------
+        # Prefer the outermost query's GROUP BY; fall back to the first one (e.g. inside a CTE).
+        top_group = ast.args.get("group") if isinstance(ast, exp.Select) else None
+        grain_columns = [g.sql() for g in top_group.expressions] if top_group else grouping
+        group_columns = [c for c in grain_columns if re.fullmatch(r'[\w."]+', c)]
+        if question.strip():
+            for col in unrequested_group_columns(group_columns, question):
+                findings.append(
+                    QueryLintFinding(
+                        check_name="unrequested_grouping",
+                        severity="WARNING",
+                        message=(
+                            f"The query groups by '{col}', which the question does not ask for, so the rows "
+                            f"may be a breakdown rather than the requested total."
+                        ),
+                        remediation=f"Remove '{col}' from GROUP BY unless a per-{col.split('.')[-1]} breakdown was intended.",
                     )
                 )
 
