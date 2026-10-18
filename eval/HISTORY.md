@@ -62,3 +62,8 @@ This document reconstructs every evaluation run in DataMind's development trajec
 - Business suite, commit `f74f3d0`: 20/21 (`Q_MONTHLY_REVENUE_TREND` failed); trust 6/6. Results now store each item's answer, executed SQL and query IDs.
 - One earlier run on commit `cc47ea5` scored business 21/21 and trust 6/6. Its result files were discarded because the trust file was wrongly labelled `-dirty` (fixed in the same session); it is mentioned here so the range quoted in the README (19-21 of 21 over five runs) is complete.
 
+
+### J. Phrase-List Refusal/Clarification Lanes Replaced (2026-10-18)
+- **Finding:** `_check_unanswerable` and `_is_ambiguous` in the orchestrator decided refusals and clarifications from phrase lists written for the dev questions (e.g. "profit margin", "gps coordinates", "top products", "what was our revenue in 2017"), and returned canned Olist-specific refusal texts.
+- **Action:** Replaced by `agent/answerability.py`, which matches the question against the semantic model's vocabulary and asks the orchestrator model for a JSON verdict only when that is inconclusive. Trust suite on commit `3a4fac1`: 6/6.
+- **Expected effect on `olist_dev`:** the four ambiguous items ("What were our top products?", "What was our revenue in 2017?", "Who are the best sellers?", "How did sales perform recently?") passed only through the phrase list; they name schema attributes, so they now go to the SQL agent and are likely to fail the clarification check. Olist dev scores before this commit are not comparable.
