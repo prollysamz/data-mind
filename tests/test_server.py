@@ -3,11 +3,12 @@
 import json
 import threading
 import time
+from http.client import HTTPConnection
 from urllib.request import Request, urlopen
 import pytest
 
 from datamind.config import load_config
-from datamind.server.server import create_server
+from datamind.server.server import MAX_HTTP_BODY_BYTES, create_server
 
 
 @pytest.fixture(scope="module")
@@ -70,12 +71,75 @@ def test_server_static_assets(server_url):
         assert res.status == 200
         content = res.read().decode("utf-8")
         assert "executeQuery" in content
+        assert "let formatted = escapeHtml(text)" in content
+        assert "const rows = q.rows || []" in content
+
+
+def test_server_blocks_static_path_traversal(server_url):
+    host_port = server_url.removeprefix("http://")
+    connection = HTTPConnection(host_port)
+    try:
+        connection.request("GET", "/../../../../README.md")
+        response = connection.getresponse()
+        assert response.status == 404
+        assert b"DataMind: Verifiable Enterprise AI Data Agent" not in response.read()
+    finally:
+        connection.close()
+
+
+def test_server_rejects_oversized_request_before_reading_body(server_url):
+    host_port = server_url.removeprefix("http://")
+    connection = HTTPConnection(host_port)
+    try:
+        connection.putrequest("POST", "/api/ask")
+        connection.putheader("Content-Type", "application/json")
+        connection.putheader("Content-Length", str(MAX_HTTP_BODY_BYTES + 1))
+        connection.endheaders()
+        response = connection.getresponse()
+        assert response.status == 413
+    finally:
+        connection.close()
+
+
+def test_server_does_not_allow_cross_origin_browser_access(server_url):
+    req = Request(
+        f"{server_url}/api/health",
+        headers={"Origin": "https://attacker.example"},
+    )
+    with urlopen(req) as res:
+        assert res.headers.get("Access-Control-Allow-Origin") is None
+
+
+def test_server_rejects_untrusted_host_header(server_url):
+    host_port = server_url.removeprefix("http://")
+    connection = HTTPConnection(host_port)
+    try:
+        connection.putrequest("GET", "/api/health", skip_host=True)
+        connection.putheader("Host", "attacker.example")
+        connection.endheaders()
+        response = connection.getresponse()
+        assert response.status == 421
+    finally:
+        connection.close()
 
 
 def test_server_ask_validation_error(server_url):
     req = Request(
         f"{server_url}/api/ask",
         data=json.dumps({"question": ""}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with pytest.raises(Exception) as exc:
+        urlopen(req)
+    assert "400" in str(exc.value)
+
+
+@pytest.mark.parametrize("max_turns", ["not-a-number", 0, 999])
+def test_server_rejects_invalid_max_turns(server_url, max_turns):
+    req = Request(
+        f"{server_url}/api/ask",
+        data=json.dumps({"question": "test", "max_turns": max_turns}).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )

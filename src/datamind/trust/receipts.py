@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import logging
 from dataclasses import asdict
@@ -142,14 +143,16 @@ class ReceiptGenerator:
     @classmethod
     def export_html(cls, receipt: dict[str, Any]) -> str:
         """Generate a self-contained, dependency-free HTML document with offline WebCrypto verification."""
-        receipt_json = json.dumps(receipt, indent=2, default=str)
-        escaped_json = receipt_json.replace("</script>", "<\\/script>")
+        receipt_json = html_lib.escape(json.dumps(receipt, indent=2, default=str))
+        root_hash = html_lib.escape(str(receipt.get("root_hash", "")))
+        question = html_lib.escape(str(receipt.get("metadata", {}).get("question", "")))
+        answer = html_lib.escape(str(receipt.get("answer", ""))).replace("\n", "<br>")
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>DataMind Verifiable Answer Receipt - {receipt.get('root_hash', '')[:12]}</title>
+  <title>DataMind Verifiable Answer Receipt - {root_hash[:12]}</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; background: #0b0f19; color: #e2e8f0; margin: 0; padding: 2rem; }}
     .container {{ max-width: 900px; margin: 0 auto; background: #131b2e; border: 1px solid #1e293b; border-radius: 12px; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
@@ -170,13 +173,13 @@ class ReceiptGenerator:
       <span class="badge badge-pass" id="statusBadge">Tamper-Evident</span>
     </div>
     <div class="label">Root Receipt SHA-256 Digest</div>
-    <div class="hash-box" id="rootHash">{receipt.get('root_hash', '')}</div>
+    <div class="hash-box" id="rootHash">{root_hash}</div>
 
     <div class="section">
       <div class="label">Question</div>
-      <p style="font-size: 1.1rem; font-weight: 600;">{receipt.get('metadata', {}).get('question', '')}</p>
+      <p style="font-size: 1.1rem; font-weight: 600;">{question}</p>
       <div class="label">Answer</div>
-      <div style="line-height: 1.6; margin: 0.5rem 0;">{receipt.get('answer', '')}</div>
+      <div style="line-height: 1.6; margin: 0.5rem 0;">{answer}</div>
     </div>
 
     <div class="section">
@@ -266,7 +269,7 @@ class ReceiptVerifier:
         }
 
     @classmethod
-    def replay(cls, receipt: dict[str, Any], adapter: DatabaseAdapter, guard: SQLGuard) -> dict[str, Any]:
+    def replay(cls, receipt: dict[str, Any], adapter: DBAdapter, guard: SQLGuard) -> dict[str, Any]:
         """Re-execute the SQL queries on active database backend to detect data drift."""
         drift_findings = []
         is_consistent = True
@@ -275,8 +278,8 @@ class ReceiptVerifier:
             sql = step.get("sql", "")
             orig_hash = step.get("rows_sha256", "")
             try:
-                audit = guard.validate(sql)
-                res = adapter.execute(audit.guarded_sql or sql)
+                guarded_sql = guard.validate(sql)
+                res = adapter.execute(guarded_sql)
                 new_hash = compute_sha256(res.rows)
                 if new_hash != orig_hash:
                     is_consistent = False

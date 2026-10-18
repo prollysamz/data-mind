@@ -28,7 +28,7 @@ jobs:
 
       - name: Run Secret Scan (detect-secrets)
         run: |
-          detect-secrets-hook --baseline .secrets.baseline $(git ls-files) || true
+          detect-secrets-hook --baseline .secrets.baseline $(git ls-files)
 
       - name: Run Pytest (Offline with no credentials)
         run: |

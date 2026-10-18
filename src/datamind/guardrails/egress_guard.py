@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import logging
 from dataclasses import dataclass, field, asdict
-from typing import Any, Sequence
+from typing import Any, ClassVar, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +15,9 @@ class DataEgressViolation(Exception):
     pass
 
 
-SENTINEL_ROW_SECRET = "SENTINEL_ROW_SECRET"
+SENTINEL_ROW_SECRET = "SENTINEL_ROW_SECRET"  # pragma: allowlist secret -- planted test canary
 SENTINEL_DOC_PASSCODE = "SENTINEL_DOC_PASSCODE"
-SENTINEL_HIDDEN_COL_SECRET = "SENTINEL_HIDDEN_COL_SECRET"
+SENTINEL_HIDDEN_COL_SECRET = "SENTINEL_HIDDEN_COL_SECRET"  # pragma: allowlist secret -- planted test canary
 SENTINEL_PII_LEAK = "SENTINEL_PII_LEAK"
 
 
@@ -76,12 +76,12 @@ class EgressLedger:
 class EgressSentinelGuard:
     """Enforces strict air-gap and schema-only isolation on outbound payloads."""
 
-    KNOWN_SENTINELS = [
+    KNOWN_SENTINELS: ClassVar[tuple[str, ...]] = (
         "SENTINEL_ROW_SECRET",
         "SENTINEL_DOC_PASSCODE",
         "SENTINEL_HIDDEN_COL_SECRET",
         "SENTINEL_PII_LEAK",
-    ]
+    )
 
     @classmethod
     def scan_text(cls, text: str) -> list[str]:

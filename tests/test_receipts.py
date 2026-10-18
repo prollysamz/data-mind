@@ -5,6 +5,8 @@ import pytest
 from datamind.agent.evidence import EvidenceStore
 from datamind.agent.verifier import verify_citations
 from datamind.adapters.base import QueryResult
+from datamind.adapters.duckdb_adapter import DuckDBAdapter
+from datamind.guardrails.sql_guard import SQLGuard
 from datamind.trust.receipts import ReceiptGenerator, ReceiptVerifier
 
 
@@ -76,3 +78,35 @@ def test_receipt_html_export(sample_receipt):
     assert "<!DOCTYPE html>" in html
     assert sample_receipt["root_hash"] in html
     assert "DataMind Cryptographic Receipt" in html
+
+
+def test_receipt_html_export_escapes_untrusted_content(sample_receipt):
+    receipt = dict(sample_receipt)
+    receipt["answer"] = '<img src=x onerror="alert(1)">'
+    receipt["metadata"] = dict(sample_receipt["metadata"])
+    receipt["metadata"]["question"] = "<script>alert(1)</script>"
+
+    html_output = ReceiptGenerator.export_html(receipt)
+
+    assert "<script>alert(1)</script>" not in html_output
+    assert '<img src=x onerror="alert(1)">' not in html_output
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_output
+
+
+def test_receipt_replay_executes_guarded_sql(sample_receipt):
+    adapter = DuckDBAdapter(":memory:")
+    try:
+        adapter.conn.execute("CREATE TABLE sales (product_name VARCHAR, amount DOUBLE)")
+        adapter.conn.executemany(
+            "INSERT INTO sales VALUES (?, ?)",
+            [("Novaship", 28357.22), ("SecureVault", 68100.00)],
+        )
+        guard = SQLGuard(approved_tables={"sales"})
+
+        result = ReceiptVerifier.replay(sample_receipt, adapter, guard)
+
+        assert result["replay_success"] is True
+        assert result["status"] == "DATA_IDENTICAL"
+        assert result["findings"][0]["status"] == "MATCH"
+    finally:
+        adapter.close()

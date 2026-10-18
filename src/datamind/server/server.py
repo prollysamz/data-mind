@@ -24,6 +24,7 @@ from datamind.uploads.manager import UploadError, UploadManager, UploadSession
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+MAX_HTTP_BODY_BYTES = 70 * 1024 * 1024
 
 
 def format_orchestrator_result(
@@ -241,10 +242,27 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
     backend_name: str
     upload_manager: UploadManager
 
+    def _is_allowed_host(self) -> bool:
+        host_header = self.headers.get("Host", "")
+        hostname = urlparse(f"//{host_header}").hostname
+        return (hostname or "").lower() in {"localhost", "127.0.0.1", "::1"}
+
+    def _reject_untrusted_host(self) -> bool:
+        if self._is_allowed_host():
+            return False
+        self._send_json(421, {"error": "Untrusted Host header; DataMind is restricted to loopback access"})
+        return True
+
     def _set_cors_headers(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        origin = self.headers.get("Origin")
+        host = self.headers.get("Host")
+        if origin and host:
+            parsed_origin = urlparse(origin)
+            if parsed_origin.scheme in {"http", "https"} and parsed_origin.netloc == host:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def _send_json(self, status_code: int, data: dict[str, Any]) -> None:
         payload = json.dumps(data, default=str).encode("utf-8")
@@ -256,11 +274,15 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_OPTIONS(self) -> None:
+        if self._reject_untrusted_host():
+            return
         self.send_response(204)
         self._set_cors_headers()
         self.end_headers()
 
     def do_GET(self) -> None:
+        if self._reject_untrusted_host():
+            return
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -350,7 +372,12 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
 
         # Serve static assets
         filename = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
-        file_path = STATIC_DIR / filename
+        static_root = STATIC_DIR.resolve()
+        file_path = (static_root / filename).resolve()
+
+        if not file_path.is_relative_to(static_root):
+            self.send_error(404, "File not found")
+            return
 
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404, f"File not found: {path}")
@@ -375,10 +402,22 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def do_POST(self) -> None:
+        if self._reject_untrusted_host():
+            return
         parsed = urlparse(self.path)
         path = parsed.path
 
-        content_length = int(self.headers.get("Content-Length", 0))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "Invalid Content-Length header"})
+            return
+
+        if content_length > MAX_HTTP_BODY_BYTES:
+            self._send_json(413, {
+                "error": f"Request body exceeds the {MAX_HTTP_BODY_BYTES // (1024 * 1024)} MB limit",
+            })
+            return
         if content_length <= 0 and path != "/api/uploads/session/create":
             self._send_json(400, {"error": "Missing request body"})
             return
@@ -425,7 +464,16 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                             return
 
             is_permissive = bool(payload.get("permissive", False))
-            max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
+            try:
+                max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
+            except (TypeError, ValueError):
+                self._send_json(400, {"error": "max_turns must be an integer"})
+                return
+            if not 1 <= max_turns <= self.config.agent.max_steps:
+                self._send_json(400, {
+                    "error": f"max_turns must be between 1 and {self.config.agent.max_steps}",
+                })
+                return
 
             try:
                 result = self.orchestrator.run(question, max_turns=max_turns)
@@ -740,7 +788,16 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
                     return
 
                 is_permissive = bool(payload.get("permissive", False))
-                max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
+                try:
+                    max_turns = int(payload.get("max_turns", self.config.agent.max_steps))
+                except (TypeError, ValueError):
+                    self._send_json(400, {"error": "max_turns must be an integer"})
+                    return
+                if not 1 <= max_turns <= self.config.agent.max_steps:
+                    self._send_json(400, {
+                        "error": f"max_turns must be between 1 and {self.config.agent.max_steps}",
+                    })
+                    return
 
                 try:
                     orchestrator, adapter, retriever = self.upload_manager.create_session_orchestrator(
@@ -779,7 +836,10 @@ class DataMindRequestHandler(BaseHTTPRequestHandler):
             parts = path.strip("/").split("/")
             if len(parts) == 4:
                 session_id = parts[2]
-                self.upload_manager.delete_session(session_id)
+                deleted = self.upload_manager.delete_session(session_id)
+                if not deleted:
+                    self._send_json(404, {"error": "Session not found or invalid session ID"})
+                    return
                 self._send_json(200, {
                     "session_id": session_id,
                     "deleted": True,

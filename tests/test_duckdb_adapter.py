@@ -37,6 +37,16 @@ def test_duckdb_truncation():
         assert res.truncated is True
 
 
+def test_duckdb_metadata_methods_quote_table_names():
+    with DuckDBAdapter(":memory:") as adapter:
+        adapter.conn.execute("CREATE TABLE safe_table (id INT)")
+
+        with pytest.raises(duckdb.Error):
+            adapter.sample_rows("safe_table; CREATE TABLE injected(id INT); --")
+
+        assert adapter.list_tables() == ["safe_table"]
+
+
 def test_duckdb_read_only_demo_db():
     demo_db_path = Path("examples/primary/demo.duckdb")
     assert demo_db_path.exists(), "demo.duckdb should exist from build_demo_data"

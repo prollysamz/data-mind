@@ -454,8 +454,8 @@ function renderKpiChart(container, spec) {
   const wrap = document.createElement('div');
   wrap.className = 'chart-kpi-container';
   wrap.innerHTML = `
-    <div class="chart-kpi-value">${spec.kpi_value || '0'}</div>
-    <div class="chart-kpi-label">${spec.kpi_label || spec.title}</div>
+    <div class="chart-kpi-value">${escapeHtml(spec.kpi_value || '0')}</div>
+    <div class="chart-kpi-label">${escapeHtml(spec.kpi_label || spec.title)}</div>
   `;
   container.appendChild(wrap);
 }
@@ -482,14 +482,17 @@ function renderHorizontalBarChart(container, spec) {
     const barW = Math.max(4, (val / maxVal) * plotWidth);
     const label = String(p.x || '');
     const cleanLabel = label.length > 18 ? label.substring(0, 16) + '...' : label;
+    const safeLabel = escapeHtml(label);
+    const safeCleanLabel = escapeHtml(cleanLabel);
+    const safeRowId = escapeHtml(p.row_id || '');
     const formattedVal = val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
     svg += `
-      <g class="chart-bar-group" data-row-id="${p.row_id}" tabindex="0" role="button" aria-label="${label}: ${formattedVal}">
-        <title>${label}: ${formattedVal} (Click to inspect row ${p.row_id})</title>
-        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${cleanLabel}</text>
+      <g class="chart-bar-group" data-row-id="${safeRowId}" tabindex="0" role="button" aria-label="${safeLabel}: ${formattedVal}">
+        <title>${safeLabel}: ${formattedVal} (Click to inspect row ${safeRowId})</title>
+        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${safeCleanLabel}</text>
         <rect x="${labelWidth}" y="${y}" width="${plotWidth}" height="${barHeight}" rx="4" fill="rgba(255,255,255,0.03)" />
-        <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="url(#barGrad)" class="chart-bar-rect" data-row-id="${p.row_id}" />
+        <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="url(#barGrad)" class="chart-bar-rect" data-row-id="${safeRowId}" />
         <text x="${labelWidth + barW + 10}" y="${y + 16}" class="chart-bar-value" fill="#38bdf8">${formattedVal}</text>
       </g>
     `;
@@ -534,13 +537,16 @@ function renderDivergingBarChart(container, spec) {
     const color = isNeg ? '#ef4444' : '#10b981';
     const label = String(p.x || '');
     const cleanLabel = label.length > 18 ? label.substring(0, 16) + '...' : label;
+    const safeLabel = escapeHtml(label);
+    const safeCleanLabel = escapeHtml(cleanLabel);
+    const safeRowId = escapeHtml(p.row_id || '');
     const formattedVal = val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
     svg += `
-      <g class="chart-bar-group" data-row-id="${p.row_id}" tabindex="0" role="button" aria-label="${label}: ${formattedVal}">
-        <title>${label}: ${formattedVal} (Click to inspect row ${p.row_id})</title>
-        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${cleanLabel}</text>
-        <rect x="${barX}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${color}" class="chart-bar-rect ${isNeg ? 'chart-bar-neg' : ''}" data-row-id="${p.row_id}" />
+      <g class="chart-bar-group" data-row-id="${safeRowId}" tabindex="0" role="button" aria-label="${safeLabel}: ${formattedVal}">
+        <title>${safeLabel}: ${formattedVal} (Click to inspect row ${safeRowId})</title>
+        <text x="${labelWidth - 10}" y="${y + 16}" text-anchor="end" class="chart-axis-text">${safeCleanLabel}</text>
+        <rect x="${barX}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${color}" class="chart-bar-rect ${isNeg ? 'chart-bar-neg' : ''}" data-row-id="${safeRowId}" />
         <text x="${isNeg ? barX - 8 : barX + barW + 8}" y="${y + 16}" text-anchor="${isNeg ? 'end' : 'start'}" class="chart-bar-value" fill="${color}">${formattedVal}</text>
       </g>
     `;
@@ -599,12 +605,14 @@ function renderLineChart(container, spec) {
   // Data points
   coords.forEach(c => {
     const label = String(c.p.x || '');
+    const safeLabel = escapeHtml(label);
+    const safeRowId = escapeHtml(c.p.row_id || '');
     const formattedVal = c.val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     svg += `
-      <g data-row-id="${c.p.row_id}" tabindex="0" role="button" aria-label="${label}: ${formattedVal}">
-        <title>${label}: ${formattedVal} (Click to inspect row ${c.p.row_id})</title>
-        <circle cx="${c.cx}" cy="${c.cy}" r="5" fill="#38bdf8" stroke="#0f172a" stroke-width="2" class="chart-point-circle" data-row-id="${c.p.row_id}" />
-        <text x="${c.cx}" y="${height - padBottom + 18}" text-anchor="middle" class="chart-axis-text">${label}</text>
+      <g data-row-id="${safeRowId}" tabindex="0" role="button" aria-label="${safeLabel}: ${formattedVal}">
+        <title>${safeLabel}: ${formattedVal} (Click to inspect row ${safeRowId})</title>
+        <circle cx="${c.cx}" cy="${c.cy}" r="5" fill="#38bdf8" stroke="#0f172a" stroke-width="2" class="chart-point-circle" data-row-id="${safeRowId}" />
+        <text x="${c.cx}" y="${height - padBottom + 18}" text-anchor="middle" class="chart-axis-text">${safeLabel}</text>
       </g>
     `;
   });
@@ -661,15 +669,15 @@ function renderUnderTheHood(data) {
   const hood = data.under_the_hood || {};
   const queries = (data.evidence && data.evidence.queries) || [];
   const primaryQ = queries[0] || {};
-  const elapsedMs = primaryQ.result ? primaryQ.result.elapsed_ms : 0;
-  const rowsCount = primaryQ.result && primaryQ.result.rows ? primaryQ.result.rows.length : 0;
+  const elapsedMs = Number(primaryQ.elapsed_ms) || 0;
+  const rowsCount = Array.isArray(primaryQ.rows) ? primaryQ.rows.length : 0;
 
   hoodMeta.innerHTML = `
-    <span class="hood-pill">Dialect: ${hood.dialect ? hood.dialect.toUpperCase() : 'DUCKDB'}</span>
+    <span class="hood-pill">Dialect: ${escapeHtml(hood.dialect ? hood.dialect.toUpperCase() : 'DUCKDB')}</span>
     <span class="hood-pill">Rows: ${rowsCount}</span>
     <span class="hood-pill">Latency: ${elapsedMs ? elapsedMs.toFixed(1) : '<1'}ms</span>
-    <span class="hood-pill">Model: ${hood.model || 'gemma4:e2b'}</span>
-    <span class="hood-pill">Status: ${hood.verification_status || 'VERIFIED'}</span>
+    <span class="hood-pill">Model: ${escapeHtml(hood.model || 'gemma4:e2b')}</span>
+    <span class="hood-pill">Status: ${escapeHtml(hood.verification_status || 'VERIFIED')}</span>
   `;
 }
 
@@ -953,14 +961,14 @@ function openRedTeamModal(data) {
 
 function exportResultCsv() {
   const queries = (currentResult && currentResult.evidence && currentResult.evidence.queries) || [];
-  if (!queries.length || !queries[0].result) {
+  if (!queries.length || !Array.isArray(queries[0].rows)) {
     alert('No tabular data available to export.');
     return;
   }
 
   const q = queries[0];
-  const cols = q.result.columns || [];
-  const rows = q.result.rows || [];
+  const cols = q.columns || [];
+  const rows = q.rows || [];
 
   function sanitizeCell(cell) {
     if (cell === null || cell === undefined) return '""';
@@ -995,7 +1003,7 @@ function exportResultCsv() {
 function formatMarkdownWithCitations(text, data) {
   if (!text) return '<p>No answer text produced.</p>';
 
-  let formatted = text;
+  let formatted = escapeHtml(text);
 
   // Clean raw markdown link syntax around citations if pasted e.g. [\[◆ Q1:R1\]](http...) or [Q1:R1](...)
   formatted = formatted.replace(/\[\\?\[?[◆\s]*(Q\d+:R\d+|D:[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+)\\?\]?\]\([^\)]+\)/g, '[[$1]]');
@@ -1104,12 +1112,12 @@ function handleCitationClick(targetId) {
       const cols = targetQuery.columns;
 
       let tableHtml = '<table class="evidence-table"><thead><tr>';
-      cols.forEach(c => tableHtml += `<th>${c}</th>`);
+      cols.forEach(c => tableHtml += `<th>${escapeHtml(c)}</th>`);
       tableHtml += '</tr></thead><tbody><tr>';
-      row.forEach(val => tableHtml += `<td><strong>${val !== null ? val : 'NULL'}</strong></td>`);
+      row.forEach(val => tableHtml += `<td><strong>${val !== null ? escapeHtml(val) : 'NULL'}</strong></td>`);
       tableHtml += '</tr></tbody></table>';
 
-      tableHtml += `<div style="margin-top: 1rem;"><span class="badge-mini">SQL Query (${targetQuery.query_id || 'LOCAL'})</span><pre class="sql-code-block">${targetQuery.sql}</pre></div>`;
+      tableHtml += `<div style="margin-top: 1rem;"><span class="badge-mini">SQL Query (${escapeHtml(targetQuery.query_id || 'LOCAL')})</span><pre class="sql-code-block">${escapeHtml(targetQuery.sql)}</pre></div>`;
       modalBody.innerHTML = tableHtml;
     } else {
       modalBody.innerHTML = `<p class="error-msg">Row ${targetId} not found in executed queries.</p>`;
@@ -1123,11 +1131,11 @@ function handleCitationClick(targetId) {
       modalBody.innerHTML = `
         <div class="doc-card modal-doc">
           <div class="doc-header">
-            <span class="doc-badge">&#9632; ${targetDoc.chunk_id}</span>
-            <span class="doc-score">BM25 Relevance: ${targetDoc.score}</span>
+            <span class="doc-badge">&#9632; ${escapeHtml(targetDoc.chunk_id)}</span>
+            <span class="doc-score">BM25 Relevance: ${escapeHtml(targetDoc.score)}</span>
           </div>
-          <div class="doc-title">${targetDoc.doc_name}</div>
-          <div class="doc-content">${targetDoc.text}</div>
+          <div class="doc-title">${escapeHtml(targetDoc.doc_name)}</div>
+          <div class="doc-content">${escapeHtml(targetDoc.text)}</div>
         </div>
       `;
     } else {
@@ -1156,8 +1164,8 @@ function renderQueries(queries) {
     header.className = 'query-header';
     header.innerHTML = `
       <div class="query-meta">
-        <span class="query-badge">&#9670; ${q.query_label}</span>
-        <span class="query-id">${q.query_id || 'DuckDB'}</span>
+        <span class="query-badge">&#9670; ${escapeHtml(q.query_label)}</span>
+        <span class="query-id">${escapeHtml(q.query_id || 'DuckDB')}</span>
         <span class="query-time">${q.elapsed_ms.toFixed(1)}ms</span>
         <span class="query-rows">${q.rows.length} rows</span>
       </div>
@@ -1191,7 +1199,7 @@ function renderQueries(queries) {
       table.className = 'evidence-table';
 
       let thead = '<thead><tr><th>Row ID</th>';
-      q.columns.forEach(c => thead += `<th>${c}</th>`);
+      q.columns.forEach(c => thead += `<th>${escapeHtml(c)}</th>`);
       thead += '</tr></thead>';
 
       let tbody = '<tbody>';
@@ -1200,7 +1208,7 @@ function renderQueries(queries) {
         tbody += `<tr id="query_${q.query_label}_row_${rowId}" data-row-id="${rowId}">`;
         tbody += `<td class="row-id-cell"><code>${rowId}</code></td>`;
         r.forEach(val => {
-          tbody += `<td>${val !== null ? val : '<span class="null-val">NULL</span>'}</td>`;
+          tbody += `<td>${val !== null ? escapeHtml(val) : '<span class="null-val">NULL</span>'}</td>`;
         });
         tbody += '</tr>';
       });
@@ -1230,11 +1238,11 @@ function renderDocs(docs) {
     item.id = `doc_${d.chunk_id}`;
     item.innerHTML = `
       <div class="doc-header">
-        <span class="doc-badge">&#9632; ${d.chunk_id}</span>
-        <span class="doc-score">BM25 Score: ${d.score}</span>
+        <span class="doc-badge">&#9632; ${escapeHtml(d.chunk_id)}</span>
+        <span class="doc-score">BM25 Score: ${escapeHtml(d.score)}</span>
       </div>
-      <div class="doc-title">${d.doc_name}</div>
-      <div class="doc-content">${d.text}</div>
+      <div class="doc-title">${escapeHtml(d.doc_name)}</div>
+      <div class="doc-content">${escapeHtml(d.text)}</div>
     `;
     container.appendChild(item);
   });
@@ -1273,17 +1281,23 @@ function renderNumericChecks(checks) {
     tableHtml += `
       <tr>
         <td><span class="trust-badge ${statusClass}" style="font-size: 0.72rem;">${statusIcon}</span></td>
-        <td><strong>${nc.claimed_value}</strong></td>
-        <td><code>${nc.cell_value !== null ? nc.cell_value : 'N/A'}</code></td>
-        <td><a href="#${nc.row_id}" class="citation-token token-sql" onclick="highlightTableRow('${nc.row_id}'); return false;">${nc.row_id}</a></td>
-        <td><code>${nc.matched_column || 'N/A'}</code></td>
-        <td><span class="check-msg">${nc.message}</span></td>
+        <td><strong>${escapeHtml(nc.claimed_value)}</strong></td>
+        <td><code>${nc.cell_value !== null ? escapeHtml(nc.cell_value) : 'N/A'}</code></td>
+        <td><a href="#${escapeHtml(nc.row_id)}" class="citation-token token-sql" data-citation="${escapeHtml(nc.row_id)}">${escapeHtml(nc.row_id)}</a></td>
+        <td><code>${escapeHtml(nc.matched_column || 'N/A')}</code></td>
+        <td><span class="check-msg">${escapeHtml(nc.message)}</span></td>
       </tr>
     `;
   });
 
   tableHtml += '</tbody></table></div>';
   container.innerHTML = tableHtml;
+  container.querySelectorAll('[data-citation]').forEach(link => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      handleCitationClick(link.getAttribute('data-citation'));
+    });
+  });
 }
 
 function initTabs() {
@@ -1464,13 +1478,13 @@ function initUploads() {
     if (tableMeta.preview && tableMeta.preview.columns) {
       let pHtml = '<table class="data-table"><thead><tr>';
       tableMeta.preview.columns.forEach(col => {
-        pHtml += `<th>${col}</th>`;
+        pHtml += `<th>${escapeHtml(col)}</th>`;
       });
       pHtml += '</tr></thead><tbody>';
       (tableMeta.preview.rows || []).forEach(row => {
         pHtml += '<tr>';
         row.forEach(val => {
-          pHtml += `<td>${val !== null && val !== undefined ? String(val) : '<em class="text-dim">null</em>'}</td>`;
+          pHtml += `<td>${val !== null && val !== undefined ? escapeHtml(val) : '<em class="text-dim">null</em>'}</td>`;
         });
         pHtml += '</tr>';
       });
@@ -1484,25 +1498,25 @@ function initUploads() {
     (tableMeta.columns || []).forEach(col => {
       const tr = document.createElement('tr');
       const sampleText = (col.sample_values || []).join(', ') || '-';
-      const piiHtml = col.pii_warning ? `<div class="pii-tag" title="${col.pii_warning}">⚠ PII: ${col.pii_warning}</div>` : '';
+      const piiHtml = col.pii_warning ? `<div class="pii-tag" title="${escapeHtml(col.pii_warning)}">⚠ PII: ${escapeHtml(col.pii_warning)}</div>` : '';
 
       tr.innerHTML = `
         <td style="text-align:center;">
           <input type="checkbox" id="col_${col.name}_enabled" checked>
         </td>
         <td>
-          <strong>${col.name}</strong>
-          ${col.original_name !== col.name ? `<div class="meta-sub">Original: ${col.original_name}</div>` : ''}
+          <strong>${escapeHtml(col.name)}</strong>
+          ${col.original_name !== col.name ? `<div class="meta-sub">Original: ${escapeHtml(col.original_name)}</div>` : ''}
           ${piiHtml}
         </td>
-        <td><code>${col.inferred_type}</code></td>
+        <td><code>${escapeHtml(col.inferred_type)}</code></td>
         <td>${(col.null_rate * 100).toFixed(1)}%</td>
         <td>${col.distinct_count.toLocaleString()}</td>
-        <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${sampleText}">
-          ${sampleText}
+        <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(sampleText)}">
+          ${escapeHtml(sampleText)}
         </td>
         <td>
-          <input type="text" class="input-cell" id="col_${col.name}_desc" value="${col.original_name} column">
+          <input type="text" class="input-cell" id="col_${escapeHtml(col.name)}_desc" value="${escapeHtml(col.original_name)} column">
         </td>
         <td style="text-align:center;">
           <input type="checkbox" id="col_${col.name}_pk" ${col.is_id ? 'checked' : ''}>

@@ -61,6 +61,16 @@ def sanitize_identifier(raw: str, default_prefix: str = "item") -> str:
     return cleaned[:60]
 
 
+def quote_identifier(identifier: str) -> str:
+    """Return a DuckDB-safe quoted identifier."""
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def quote_sql_string(value: str) -> str:
+    """Return a SQL string literal with embedded quotes escaped."""
+    return "'" + value.replace("'", "''") + "'"
+
+
 class UploadSession:
     """Represents an isolated uploaded dataset session."""
 
@@ -201,9 +211,15 @@ class UploadManager:
 
     def delete_session(self, session_id: str) -> bool:
         """Securely delete all files associated with a session."""
-        session = self.get_session(session_id)
         clean_id = re.sub(r"[^a-zA-Z0-9_-]", "", session_id)
-        sess_dir = self.base_dir / clean_id
+        if not clean_id or clean_id != session_id:
+            return False
+
+        sess_dir = (self.base_dir / clean_id).resolve()
+        if not sess_dir.is_relative_to(self.base_dir):
+            return False
+
+        existed = clean_id in self._active_sessions or sess_dir.exists()
         if sess_dir.exists():
             try:
                 shutil.rmtree(sess_dir, ignore_errors=True)
@@ -211,7 +227,7 @@ class UploadManager:
                 logger.warning(f"Error deleting session dir {sess_dir}: {e}")
         if clean_id in self._active_sessions:
             del self._active_sessions[clean_id]
-        return True
+        return existed
 
     def cleanup_expired(self) -> int:
         """Remove all expired sessions."""
@@ -265,6 +281,7 @@ class UploadManager:
         while sanitized_table in session.tables_meta:
             sanitized_table = f"{original_table_name}_{counter}"
             counter += 1
+        table_ident = quote_identifier(sanitized_table)
 
         # 3. Detect format and binary content
         is_parquet = filename.lower().endswith(".parquet") or file_bytes[:4] == b"PAR1"
@@ -308,9 +325,10 @@ class UploadManager:
         # 4. Ingest into DuckDB
         conn = duckdb.connect(str(session.db_path))
         try:
+            input_path_literal = quote_sql_string(temp_input.as_posix())
             # First, check header and sanitize column names
             if is_parquet:
-                desc_df = conn.execute(f"DESCRIBE SELECT * FROM read_parquet('{temp_input.as_posix()}')").fetchall()
+                desc_df = conn.execute(f"DESCRIBE SELECT * FROM read_parquet({input_path_literal})").fetchall()
                 raw_columns = [row[0] for row in desc_df]
             else:
                 # Sniff CSV delimiter (skipping comments)
@@ -358,34 +376,35 @@ class UploadManager:
             # Create table in DuckDB
             if is_parquet:
                 conn.execute(
-                    f"CREATE TABLE {sanitized_table} AS SELECT * FROM read_parquet('{temp_input.as_posix()}');"
+                    f"CREATE TABLE {table_ident} AS SELECT * FROM read_parquet({input_path_literal});"
                 )
             else:
                 try:
                     conn.execute(
-                        f"CREATE TABLE {sanitized_table} AS SELECT * FROM read_csv('{temp_input.as_posix()}', auto_detect=true, header=true);"
+                        f"CREATE TABLE {table_ident} AS SELECT * FROM read_csv({input_path_literal}, auto_detect=true, header=true);"
                     )
                 except Exception:
                     try:
                         conn.execute(
-                            f"CREATE TABLE {sanitized_table} AS SELECT * FROM read_csv('{temp_input.as_posix()}', auto_detect=true, header=true, sample_size=-1);"
+                            f"CREATE TABLE {table_ident} AS SELECT * FROM read_csv({input_path_literal}, auto_detect=true, header=true, sample_size=-1);"
                         )
                     except Exception:
                         # Robust fallback for heterogeneous or mixed-format columns (e.g. mixed date formats)
                         conn.execute(
-                            f"CREATE TABLE {sanitized_table} AS SELECT * FROM read_csv('{temp_input.as_posix()}', auto_detect=true, header=true, all_varchar=true);"
+                            f"CREATE TABLE {table_ident} AS SELECT * FROM read_csv({input_path_literal}, auto_detect=true, header=true, all_varchar=true);"
                         )
                         # Refine numeric columns
                         db_cols_raw = [r[1] for r in conn.execute(f"PRAGMA table_info('{sanitized_table}')").fetchall()]
                         for c_col in db_cols_raw:
+                            col_ident = quote_identifier(c_col)
                             try:
-                                can_dbl = conn.execute(f'SELECT COUNT(*) FROM {sanitized_table} WHERE TRY_CAST("{c_col}" AS DOUBLE) IS NULL AND "{c_col}" IS NOT NULL;').fetchone()[0] == 0
+                                can_dbl = conn.execute(f"SELECT COUNT(*) FROM {table_ident} WHERE TRY_CAST({col_ident} AS DOUBLE) IS NULL AND {col_ident} IS NOT NULL;").fetchone()[0] == 0
                                 if can_dbl:
-                                    has_frac = conn.execute(f'SELECT COUNT(*) FROM {sanitized_table} WHERE TRY_CAST("{c_col}" AS DOUBLE) != FLOOR(TRY_CAST("{c_col}" AS DOUBLE));').fetchone()[0] > 0
+                                    has_frac = conn.execute(f"SELECT COUNT(*) FROM {table_ident} WHERE TRY_CAST({col_ident} AS DOUBLE) != FLOOR(TRY_CAST({col_ident} AS DOUBLE));").fetchone()[0] > 0
                                     if has_frac:
-                                        conn.execute(f'ALTER TABLE {sanitized_table} ALTER "{c_col}" TYPE DOUBLE USING TRY_CAST("{c_col}" AS DOUBLE);')
+                                        conn.execute(f"ALTER TABLE {table_ident} ALTER {col_ident} TYPE DOUBLE USING TRY_CAST({col_ident} AS DOUBLE);")
                                     else:
-                                        conn.execute(f'ALTER TABLE {sanitized_table} ALTER "{c_col}" TYPE BIGINT USING TRY_CAST("{c_col}" AS BIGINT);')
+                                        conn.execute(f"ALTER TABLE {table_ident} ALTER {col_ident} TYPE BIGINT USING TRY_CAST({col_ident} AS BIGINT);")
                             except Exception:
                                 pass
 
@@ -394,14 +413,16 @@ class UploadManager:
             for orig, clean in zip(db_cols, sanitized_cols):
                 if orig != clean:
                     try:
-                        conn.execute(f'ALTER TABLE {sanitized_table} RENAME COLUMN "{orig}" TO {clean};')
+                        conn.execute(
+                            f"ALTER TABLE {table_ident} RENAME COLUMN {quote_identifier(orig)} TO {quote_identifier(clean)};"
+                        )
                     except Exception:
                         pass
 
             # 5. Row count check
-            total_rows = conn.execute(f"SELECT COUNT(*) FROM {sanitized_table}").fetchone()[0]
+            total_rows = conn.execute(f"SELECT COUNT(*) FROM {table_ident}").fetchone()[0]
             if total_rows > self.max_rows:
-                conn.execute(f"DROP TABLE {sanitized_table};")
+                conn.execute(f"DROP TABLE {table_ident};")
                 raise UploadError(
                     f"File contains {total_rows:,} rows, exceeding maximum allowed {self.max_rows:,}.", 400
                 )
@@ -410,7 +431,7 @@ class UploadManager:
             col_profiles = self._profile_table(conn, sanitized_table, col_mapping, total_rows)
 
             # 7. Generate preview rows (first 10)
-            preview_query = f"SELECT * FROM {sanitized_table} LIMIT 10"
+            preview_query = f"SELECT * FROM {table_ident} LIMIT 10"
             preview_rows = conn.execute(preview_query).fetchall()
             preview_cols = [r[1] for r in conn.execute(f"PRAGMA table_info('{sanitized_table}')").fetchall()]
 
@@ -453,19 +474,21 @@ class UploadManager:
         """Profile table columns for types, nulls, distinct counts, and PII patterns."""
         cols_info = conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
         profiles = []
+        table_ident = quote_identifier(table_name)
 
         for c in cols_info:
             col_name = c[1]
+            col_ident = quote_identifier(col_name)
             col_type = c[2].upper()
             orig_name = col_mapping.get(col_name, col_name)
 
             stats = conn.execute(f"""
                 SELECT
-                    COUNT({col_name}) AS non_null_count,
-                    COUNT(DISTINCT {col_name}) AS distinct_count,
-                    MIN({col_name})::VARCHAR AS min_val,
-                    MAX({col_name})::VARCHAR AS max_val
-                FROM {table_name}
+                    COUNT({col_ident}) AS non_null_count,
+                    COUNT(DISTINCT {col_ident}) AS distinct_count,
+                    MIN({col_ident})::VARCHAR AS min_val,
+                    MAX({col_ident})::VARCHAR AS max_val
+                FROM {table_ident}
             """).fetchone()
 
             non_null = stats[0] if stats else 0
@@ -477,9 +500,9 @@ class UploadManager:
 
             # Fetch up to 3 distinct sample values
             samples = conn.execute(f"""
-                SELECT DISTINCT {col_name}::VARCHAR
-                FROM {table_name}
-                WHERE {col_name} IS NOT NULL
+                SELECT DISTINCT {col_ident}::VARCHAR
+                FROM {table_ident}
+                WHERE {col_ident} IS NOT NULL
                 LIMIT 3
             """).fetchall()
             sample_values = [str(s[0])[:100] for s in samples if s[0] is not None]
@@ -540,12 +563,13 @@ class UploadManager:
         """Generate deterministic candidate verified queries checked against SQLGuard."""
         guard = SQLGuard(approved_tables=[table_name], dialect="duckdb")
         candidates: list[dict[str, str]] = []
+        table_ident = quote_identifier(table_name)
 
         # 1. Total records
         cand1 = {
             "name": f"total_{table_name}_count",
             "question": f"What is the total number of records in {table_name}?",
-            "sql": f"SELECT COUNT(*) AS total_count FROM {table_name}",
+            "sql": f"SELECT COUNT(*) AS total_count FROM {table_ident}",
         }
         candidates.append(cand1)
 
@@ -556,10 +580,12 @@ class UploadManager:
         if num_cols and cat_cols:
             n_col = num_cols[0]["name"]
             c_col = cat_cols[0]["name"]
+            n_ident = quote_identifier(n_col)
+            c_ident = quote_identifier(c_col)
             cand2 = {
                 "name": f"top_{c_col}_by_{n_col}",
                 "question": f"Which {c_col} has the highest total {n_col}?",
-                "sql": f"SELECT {c_col}, SUM({n_col}) AS total_{n_col} FROM {table_name} GROUP BY {c_col} ORDER BY total_{n_col} DESC LIMIT 5",
+                "sql": f"SELECT {c_ident}, SUM({n_ident}) AS total_{n_col} FROM {table_ident} GROUP BY {c_ident} ORDER BY total_{n_col} DESC LIMIT 5",
             }
             candidates.append(cand2)
 
@@ -568,10 +594,12 @@ class UploadManager:
         if date_cols and num_cols:
             d_col = date_cols[0]["name"]
             n_col = num_cols[0]["name"]
+            d_ident = quote_identifier(d_col)
+            n_ident = quote_identifier(n_col)
             cand3 = {
                 "name": f"{n_col}_over_time",
                 "question": f"What is the trend of {n_col} over time?",
-                "sql": f"SELECT CAST({d_col} AS DATE) AS period, SUM({n_col}) AS total_{n_col} FROM {table_name} WHERE {d_col} IS NOT NULL GROUP BY period ORDER BY period LIMIT 12",
+                "sql": f"SELECT CAST({d_ident} AS DATE) AS period, SUM({n_ident}) AS total_{n_col} FROM {table_ident} WHERE {d_ident} IS NOT NULL GROUP BY period ORDER BY period LIMIT 12",
             }
             candidates.append(cand3)
 
@@ -700,7 +728,10 @@ class UploadManager:
                 text_col = item["text_col"]
                 pk_col = item["pk_col"]
 
-                query = f"SELECT {pk_col}::VARCHAR AS pk, {text_col}::VARCHAR AS txt FROM {tbl} WHERE {text_col} IS NOT NULL LIMIT 5000"
+                pk_ident = quote_identifier(pk_col)
+                text_ident = quote_identifier(text_col)
+                table_ident = quote_identifier(tbl)
+                query = f"SELECT {pk_ident}::VARCHAR AS pk, {text_ident}::VARCHAR AS txt FROM {table_ident} WHERE {text_ident} IS NOT NULL LIMIT 5000"
                 rows = conn_duck.execute(query).fetchall()
 
                 for row in rows:

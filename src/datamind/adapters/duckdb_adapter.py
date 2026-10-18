@@ -11,6 +11,14 @@ import duckdb
 from datamind.adapters.base import DBAdapter, QueryResult
 
 
+def _quote_identifier_path(identifier: str) -> str:
+    """Quote each component of a potentially qualified SQL identifier."""
+    parts = identifier.split(".")
+    if not parts or any(not part for part in parts):
+        raise ValueError("Table identifier must not be empty")
+    return ".".join('"' + part.replace('"', '""') + '"' for part in parts)
+
+
 class DuckDBAdapter(DBAdapter):
     """Adapter for local DuckDB database."""
 
@@ -68,7 +76,7 @@ class DuckDBAdapter(DBAdapter):
 
     def describe_table(self, table: str) -> list[dict[str, Any]]:
         """Return column metadata: name, type, nullable."""
-        res = self.conn.execute(f"DESCRIBE {table}").fetchall()
+        res = self.conn.execute(f"DESCRIBE {_quote_identifier_path(table)}").fetchall()
         columns_meta: list[dict[str, Any]] = []
         for r in res:
             # DuckDB DESCRIBE returns: column_name, column_type, null, key, default, extra
@@ -84,7 +92,8 @@ class DuckDBAdapter(DBAdapter):
 
     def sample_rows(self, table: str, n: int = 5) -> QueryResult:
         """Fetch sample rows from table."""
-        return self.execute(f"SELECT * FROM {table} LIMIT {n}")
+        safe_limit = max(0, min(int(n), self.max_rows))
+        return self.execute(f"SELECT * FROM {_quote_identifier_path(table)} LIMIT {safe_limit}")
 
     def close(self) -> None:
         """Close connection."""

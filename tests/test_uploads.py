@@ -154,6 +154,17 @@ def test_path_traversal_guards(upload_mgr):
         assert (session.session_dir / "data.duckdb").exists()
 
 
+def test_sql_identifiers_from_uploads_are_quoted(upload_mgr):
+    session = upload_mgr.create_session()
+    csv_data = 'id,"value""; DROP TABLE select; --"\n1,10\n'
+
+    meta = upload_mgr.ingest_file(session, "select.csv", csv_data.encode("utf-8"))
+
+    assert meta["table_name"] == "select"
+    assert meta["total_rows"] == 1
+    assert meta["columns"][1]["name"].startswith("value_drop_table_select")
+
+
 # 9. Session Isolation
 def test_session_isolation(upload_mgr):
     s1 = upload_mgr.create_session()
@@ -267,3 +278,21 @@ def test_ttl_cleanup_and_delete(upload_mgr):
     assert upload_mgr.delete_session(session_id) is True
     assert not (upload_mgr.base_dir / session_id).exists()
     assert upload_mgr.get_session(session_id) is None
+
+
+def test_invalid_session_id_cannot_delete_upload_root(upload_mgr):
+    session = upload_mgr.create_session()
+    session_dir = session.session_dir
+
+    assert upload_mgr.delete_session("..") is False
+    assert upload_mgr.delete_session("!!!") is False
+    assert upload_mgr.base_dir.exists()
+    assert session_dir.exists()
+
+
+def test_expired_session_cleanup_does_not_recurse(upload_mgr):
+    session = upload_mgr.create_session()
+    session.created_at -= session.ttl_seconds + 1
+
+    assert upload_mgr.get_session(session.session_id) is None
+    assert not session.session_dir.exists()

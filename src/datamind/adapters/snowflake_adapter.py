@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -10,6 +11,14 @@ from datamind.adapters.base import DBAdapter, QueryResult
 from datamind.config import SnowflakeConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _quote_identifier_path(identifier: str) -> str:
+    """Quote each component of a potentially qualified SQL identifier."""
+    parts = identifier.split(".")
+    if not parts or any(not part for part in parts):
+        raise ValueError("Table identifier must not be empty")
+    return ".".join('"' + part.replace('"', '""') + '"' for part in parts)
 
 
 class SnowflakeAdapter(DBAdapter):
@@ -24,10 +33,10 @@ class SnowflakeAdapter(DBAdapter):
         account: str | None = None,
         user: str | None = None,
         password: str | None = None,
-        role: str = "DATAMIND_READONLY",
-        warehouse: str = "DATAMIND_XS",
-        database: str = "DATAMIND",
-        schema: str = "PUBLIC",
+        role: str | None = None,
+        warehouse: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
         max_rows: int = 1000,
         timeout_seconds: float = 30.0,
         connection: Any = None,
@@ -126,7 +135,7 @@ class SnowflakeAdapter(DBAdapter):
         """Describe column metadata for table."""
         cur = self._conn.cursor()
         try:
-            cur.execute(f"DESCRIBE TABLE {table}")
+            cur.execute(f"DESCRIBE TABLE {_quote_identifier_path(table)}")
             rows = cur.fetchall()
             # Snowflake DESCRIBE TABLE: [name, type, kind, null?, default, primary key, unique key, ...]
             meta: list[dict[str, Any]] = []
@@ -145,7 +154,8 @@ class SnowflakeAdapter(DBAdapter):
 
     def sample_rows(self, table: str, n: int = 5) -> QueryResult:
         """Fetch sample rows from table."""
-        return self.execute(f"SELECT * FROM {table} LIMIT {n}")
+        safe_limit = max(0, min(int(n), self.max_rows))
+        return self.execute(f"SELECT * FROM {_quote_identifier_path(table)} LIMIT {safe_limit}")
 
     def close(self) -> None:
         """Close connection."""

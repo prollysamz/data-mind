@@ -1,8 +1,9 @@
 """Unit tests for SnowflakeAdapter using mocked cursor/connection."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import pytest
 from datamind.adapters.snowflake_adapter import SnowflakeAdapter
+from datamind.config import SnowflakeConfig
 
 
 def test_snowflake_adapter_execute():
@@ -42,6 +43,20 @@ def test_snowflake_adapter_truncation():
     assert res.truncated is True
 
 
+def test_snowflake_metadata_methods_quote_table_names():
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value = mock_cur
+    mock_cur.description = [("ID",)]
+    mock_cur.fetchmany.return_value = []
+
+    adapter = SnowflakeAdapter(connection=mock_conn, max_rows=10)
+    adapter.sample_rows('SALES"; DROP TABLE USERS; --', n=100)
+
+    executed_sql = mock_cur.execute.call_args.args[0]
+    assert executed_sql == 'SELECT * FROM "SALES""; DROP TABLE USERS; --" LIMIT 10'
+
+
 def test_snowflake_adapter_describe_and_list():
     mock_conn = MagicMock()
     mock_cur = MagicMock()
@@ -66,3 +81,30 @@ def test_snowflake_adapter_describe_and_list():
     assert meta[0]["nullable"] is False
     assert meta[1]["name"] == "AMOUNT"
     assert meta[1]["nullable"] is True
+
+
+def test_snowflake_adapter_resolves_config_and_environment(monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_ACCOUNT", "test-account")
+    monkeypatch.setenv("SNOWFLAKE_USER", "test-user")
+    monkeypatch.setenv("SNOWFLAKE_PASSWORD", "test-password")
+    monkeypatch.setenv("SNOWFLAKE_DATABASE", "ENV_DB")
+    monkeypatch.setenv("SNOWFLAKE_SCHEMA", "ENV_SCHEMA")
+
+    mock_conn = MagicMock()
+    with patch("snowflake.connector.connect", return_value=mock_conn) as connect:
+        adapter = SnowflakeAdapter(
+            config=SnowflakeConfig(role="CUSTOM_READONLY", warehouse="CUSTOM_XS"),
+        )
+
+    connect.assert_called_once_with(
+        account="test-account",
+        user="test-user",
+        password="test-password",  # pragma: allowlist secret -- mock test value
+        role="CUSTOM_READONLY",
+        warehouse="CUSTOM_XS",
+        database="ENV_DB",
+        schema="ENV_SCHEMA",
+        network_timeout=30,
+    )
+    mock_conn.cursor.return_value.execute.assert_called_once_with("USE SECONDARY ROLES NONE")
+    adapter.close()
