@@ -502,8 +502,14 @@ def _save_eval_results(
 
     try:
         commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
-        # Results from a tree with uncommitted changes must not be attributed to the bare commit
-        if subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], text=True).strip():
+        # Results from a tree with uncommitted changes must not be attributed to the bare commit.
+        # Result files written by earlier eval runs do not count as code changes.
+        dirty = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=no", "--", ".",
+             ":(exclude)eval/results", ":(exclude)eval/run_ledger.jsonl"],
+            text=True,
+        ).strip()
+        if dirty:
             commit_hash += "-dirty"
     except Exception:
         commit_hash = "head"
