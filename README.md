@@ -52,8 +52,8 @@ User Question (Browser UI / CLI / MCP)
 
 ### 1. Clone & Setup Virtual Environment
 ```bash
-git clone https://github.com/DARK-1926/MAD-2-LABS.git
-cd MAD-2-LABS
+git clone https://github.com/prollysamz/data-mind.git
+cd data-mind
 
 # Create virtual environment
 python -m venv .venv

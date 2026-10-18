@@ -11,6 +11,15 @@ This guide walks you through setting up DataMind from a clean repository.
 
 ---
 
+## 0. Get the Code
+
+```bash
+git clone https://github.com/prollysamz/data-mind.git
+cd data-mind
+```
+
+---
+
 ## 1. Setup Virtual Environment & Install
 
 ### Windows (PowerShell)
