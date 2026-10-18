@@ -1,9 +1,9 @@
 # WP-F0 Report: Integrity Reset & Authenticity Charter
 
 **Work Package:** WP-F0  
-**Status:** Completed & Certified  
+**Status:** Completed (self-reported)  
 **Key Commits:** `3560b80`, `1c47a34`  
-**Artifacts:** [`eval/HISTORY.md`](file:///d:/HackOctober/eval/HISTORY.md), [`.secrets.baseline`](file:///d:/HackOctober/.secrets.baseline)
+**Artifacts:** [`eval/HISTORY.md`](../eval/HISTORY.md), [`.secrets.baseline`](../.secrets.baseline)
 
 ---
 
@@ -21,15 +21,15 @@ WP-F0 established a strict **Authenticity Charter** and performed a clean reposi
 ## 2. Key Actions Taken
 
 ### 2.1 Evaluation Ledger & Git History Reconstruction
-* Created [`eval/HISTORY.md`](file:///d:/HackOctober/eval/HISTORY.md), cataloging every historical run commit-by-commit (`c8cbd68`, `28edeb1`, `6823fa0`, `ca6b005`, `1a34ab2`).
-* Built an append-only JSONL run ledger ([`eval/run_ledger.jsonl`](file:///d:/HackOctober/eval/run_ledger.jsonl)) with timestamp, commit SHA, question set, model name, and citation pass rates.
+* Created [`eval/HISTORY.md`](../eval/HISTORY.md), cataloging every historical run commit-by-commit (`c8cbd68`, `28edeb1`, `6823fa0`, `ca6b005`, `1a34ab2`).
+* Built an append-only JSONL run ledger ([`eval/run_ledger.jsonl`](../eval/run_ledger.jsonl)) with timestamp, commit SHA, question set, model name, and citation pass rates.
 
 ### 2.2 Removal of Unverifiable Claims
 * Purged unverified claims from `README.md` and documentation.
 * Clarified that demo data (`examples/primary/demo.duckdb`) is a 1,450-row synthetic demonstration, while real enterprise benchmarking is executed on the 100,000-order Olist E-Commerce dataset.
 
 ### 2.3 Secret Scanning & Hygiene
-* Configured `detect-secrets` baseline ([`.secrets.baseline`](file:///d:/HackOctober/.secrets.baseline)) to prevent credential leakage.
+* Configured `detect-secrets` baseline ([`.secrets.baseline`](../.secrets.baseline)) to prevent credential leakage.
 * Added `.env` to `.gitignore` and enforced that cloud access fails closed (`DATAMIND_ALLOW_CLOUD=0` by default).
 
 ---

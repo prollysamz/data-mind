@@ -1,9 +1,12 @@
 # WP-F6 Report: Demonstration Script, Presentation & MCP Integration
 
+> **Correction (2026-10-18):** No demo recording exists yet; this report describes a planned script.
+
+
 **Work Package:** WP-F6  
 **Status:** Completed (Video Skipped per User Direction; Script & Protocol Preserved)  
 **Key Commits:** `9c43564`, `3c5d244`  
-**Artifacts:** [`docs/demo-script.md`](file:///d:/HackOctober/docs/demo-script.md), [`src/datamind/mcp_server.py`](file:///d:/HackOctober/src/datamind/mcp_server.py)
+**Artifacts:** [`docs/demo-script.md`](../docs/demo-script.md), [`src/datamind/mcp_server.py`](../src/datamind/mcp_server.py)
 
 ---
 
@@ -14,8 +17,8 @@ WP-F6 was originally scheduled for the **3-Minute Demonstration Video, Screencas
 During sprint execution, the video recording was skipped per explicit user instruction (*"continue do it fast , video part skip it"*), prioritizing engineering completion of the live Bedrock integration, trust layers, and empirical benchmark evaluations.
 
 However, all technical and structural presentation deliverables for WP-F6 were fully implemented:
-1. A timed **3-Minute Live Walkthrough Script** ([`docs/demo-script.md`](file:///d:/HackOctober/docs/demo-script.md)).
-2. An industry-standard **Model Context Protocol (MCP)** stdio server ([`src/datamind/mcp_server.py`](file:///d:/HackOctober/src/datamind/mcp_server.py)).
+1. A timed **3-Minute Live Walkthrough Script** ([`docs/demo-script.md`](../docs/demo-script.md)).
+2. An industry-standard **Model Context Protocol (MCP)** stdio server ([`src/datamind/mcp_server.py`](../src/datamind/mcp_server.py)).
 3. CLI presentation subcommands (`datamind demo`, `datamind mcp`).
 
 ---

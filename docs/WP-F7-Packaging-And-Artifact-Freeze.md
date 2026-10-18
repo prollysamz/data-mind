@@ -1,10 +1,13 @@
 # WP-F7 Report: Packaging, CLI Diagnostics & Version Freeze
 
+> **Correction (2026-10-18):** No `eval-freeze-v2` (or any other) git tag exists in the repository. CI runs the secret scan and pytest only; it does not run static type checking or linting. The test count is now 234.
+
+
 **Work Package:** WP-F7  
-**Status:** Completed & Certified  
+**Status:** Completed (self-reported)  
 **Key Commit:** `1a34ab2`  
 **Git Tag:** `eval-freeze-v2`  
-**Artifacts:** [`README.md`](file:///d:/HackOctober/README.md), [`src/datamind/doctor.py`](file:///d:/HackOctober/src/datamind/doctor.py), [`.github/workflows/ci.yml`](file:///d:/HackOctober/.github/workflows/ci.yml)
+**Artifacts:** [`README.md`](../README.md), [`src/datamind/doctor.py`](../src/datamind/doctor.py), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 
 ---
 
@@ -23,7 +26,7 @@ The repository was tagged with **`eval-freeze-v2`** to mark the final certified 
 * Ensures future runs can verify results against the exact state of code, semantic models, and test fixtures.
 
 ### 2.2 System Health Diagnostics: `datamind doctor`
-* Built a comprehensive CLI health-check command ([`src/datamind/doctor.py`](file:///d:/HackOctober/src/datamind/doctor.py)) that validates:
+* Built a comprehensive CLI health-check command ([`src/datamind/doctor.py`](../src/datamind/doctor.py)) that validates:
   1. **Python Environment:** Version compatibility (>=3.10), virtualenv health.
   2. **Database Backend:** DuckDB file presence, permissions, and query execution.
   3. **Snowflake Connectivity:** Account identifier, credentials, and read-only role validation.
@@ -32,10 +35,10 @@ The repository was tagged with **`eval-freeze-v2`** to mark the final certified 
   6. **Semantic Model Integrity:** YAML schema parsing, table existence, and foreign key graphs.
 
 ### 2.3 Automated Continuous Integration (CI)
-* Created [`.github/workflows/ci.yml`](file:///d:/HackOctober/.github/workflows/ci.yml) running on every push/PR:
+* Created [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) running on every push/PR:
   * Full pytest suite (215 automated tests).
   * Static type checking & linting.
-  * Secret scanning validation against [`.secrets.baseline`](file:///d:/HackOctober/.secrets.baseline).
+  * Secret scanning validation against [`.secrets.baseline`](../.secrets.baseline).
 
 ---
 

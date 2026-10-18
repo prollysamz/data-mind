@@ -1,8 +1,8 @@
 # DataMind Benchmark Evaluation Results
 
-- **Provenance Git Commit:** `b08c8c9`
-- **Model Used:** `gemma4-e2b-16k` (Local 16k context Ollama)
-- **Backend:** DuckDB (`examples/primary/demo.duckdb`) & Snowflake Data Warehouse
+- **Provenance Git Commit:** `b08c8c9` plus uncommitted changes (later committed as `373c016`)
+- **Model Used:** `gemma4-e2b-16k`
+- **Backend:** DuckDB (`examples/primary/demo.duckdb`)
 - **Evaluation Timestamp:** 2026-10-18T10:48:49.578093
 - **Suite Evaluated:** `trust`
 - **Latency (Uncached):** Median: 669.3ms | p90: 2800.7ms

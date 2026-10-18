@@ -1,9 +1,12 @@
 # WP-F3 Report: Trust & Groundedness Upgrades
 
+> **Correction (2026-10-18):** The AST linter tests live in [tests/test_query_lint.py](../tests/test_query_lint.py); `tests/test_ast_linter.py` does not exist. The 73/73 mutation catch rate measures the numeric/citation verifier only; it does not show that generated SQL answers the right question (see the "verified but wrong" limitation in the README).
+
+
 **Work Package:** WP-F3  
-**Status:** Completed & Certified  
+**Status:** Completed (self-reported)  
 **Key Commit:** `a3013aa`  
-**Test Suite:** [`eval/mutation.py`](file:///d:/HackOctober/eval/mutation.py), [`tests/test_ast_linter.py`](file:///d:/HackOctober/tests/test_ast_linter.py)
+**Test Suite:** [`eval/mutation.py`](../eval/mutation.py), [`tests/test_query_lint.py`](../tests/test_query_lint.py)
 
 ---
 
@@ -35,7 +38,7 @@ WP-F3 closed this gap through deterministic query AST linting, assumptions discl
 * Allows human business users to immediately inspect and challenge assumptions.
 
 ### 2.3 12-Category Adversarial Mutation Benchmark
-Built an adversarial suite ([`eval/mutation.py`](file:///d:/HackOctober/eval/mutation.py)) testing 73 distinct real-world corruptions across 12 categories:
+Built an adversarial suite ([`eval/mutation.py`](../eval/mutation.py)) testing 73 distinct real-world corruptions across 12 categories:
 1. Number Perturbation (+/- 1.00 or random drift)
 2. Currency Unit Swaps ($ to €, BRL to USD)
 3. Magnitude Skews (10x, 100x scaling)

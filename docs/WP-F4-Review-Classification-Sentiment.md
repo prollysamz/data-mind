@@ -1,10 +1,13 @@
 # WP-F4 Report: Gemma Review Classification & Sentiment Agreement
 
+> **Correction (2026-10-18):** The latest recorded run ([REVIEW_CLASSIFICATION_REPORT.md](../eval/results/REVIEW_CLASSIFICATION_REPORT.md)) shows **53.0% sentiment agreement (106/200)** and 80.0% topic agreement (40/50). The 82.5% (33/40) figure below is from an earlier, smaller 40-review sample and should not be quoted as the headline result.
+
+
 **Work Package:** WP-F4  
-**Status:** Completed & Certified  
+**Status:** Completed (self-reported)  
 **Key Commit:** `6823fa0`  
 **Target Model:** Google Gemma 4 E2B (`gemma4:e2b` running locally)  
-**Artifacts:** [`eval/results/REVIEW_CLASSIFICATION_REPORT.md`](file:///d:/HackOctober/eval/results/REVIEW_CLASSIFICATION_REPORT.md), [`tests/test_review_classifier.py`](file:///d:/HackOctober/tests/test_review_classifier.py)
+**Artifacts:** [`eval/results/REVIEW_CLASSIFICATION_REPORT.md`](../eval/results/REVIEW_CLASSIFICATION_REPORT.md), [`tests/test_review_classifier.py`](../tests/test_review_classifier.py)
 
 ---
 

@@ -1,10 +1,10 @@
 # WP-F1 Report: Authentic Real Data Ingestion (Olist E-Commerce)
 
 **Work Package:** WP-F1  
-**Status:** Completed & Certified  
+**Status:** Completed (self-reported)  
 **Key Commit:** `c8cbd68`  
 **Dataset:** Brazilian E-Commerce Public Dataset by Olist (Kaggle)  
-**Artifacts:** [`examples/olist/semantic_model.yaml`](file:///d:/HackOctober/examples/olist/semantic_model.yaml), [`examples/olist/build_olist_duckdb.py`](file:///d:/HackOctober/examples/olist/build_olist_duckdb.py)
+**Artifacts:** [`examples/olist/semantic_model.yaml`](../examples/olist/semantic_model.yaml), [`examples/olist/build_olist_duckdb.py`](../examples/olist/build_olist_duckdb.py)
 
 ---
 
@@ -40,7 +40,7 @@ The dataset was ingested into both **local DuckDB** and **remote Snowflake** wit
 * **Cross-Dialect Normalization:** Automated dialect adapter handling timestamp truncation (`DATE_TRUNC('month', order_purchase_timestamp)`), string quoting, and null handling.
 
 ### 3.2 Semantic Model Specification
-Authored [`examples/olist/semantic_model.yaml`](file:///d:/HackOctober/examples/olist/semantic_model.yaml) defining:
+Authored [`examples/olist/semantic_model.yaml`](../examples/olist/semantic_model.yaml) defining:
 * Primary keys and foreign key join graph (`orders -> order_items -> products`, etc.).
 * Standard metric formulas (Gross Merchandise Value `GMV = SUM(price)`, Freight Margin, Average Order Value).
 * Default currency specified as Brazilian Real (`BRL`, symbol `R$`).

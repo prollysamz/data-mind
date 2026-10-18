@@ -1,9 +1,9 @@
 # WP-F8 Report: Model Registry, Trust Architecture & Red-Team
 
 **Work Package:** WP-F8  
-**Status:** Completed & Certified  
+**Status:** Completed (self-reported)  
 **Key Commits:** `d556f5e`, `8db5b44`, `a756a3f`  
-**Artifacts:** [`src/datamind/llm/models.py`](file:///d:/HackOctober/src/datamind/llm/models.py), [`src/datamind/guardrails/egress_guard.py`](file:///d:/HackOctober/src/datamind/guardrails/egress_guard.py), [`src/datamind/trust/receipts.py`](file:///d:/HackOctober/src/datamind/trust/receipts.py), [`src/datamind/agent/second_opinion.py`](file:///d:/HackOctober/src/datamind/agent/second_opinion.py)
+**Artifacts:** [`src/datamind/llm/models.py`](../src/datamind/llm/models.py), [`src/datamind/guardrails/egress_guard.py`](../src/datamind/guardrails/egress_guard.py), [`src/datamind/trust/receipts.py`](../src/datamind/trust/receipts.py), [`src/datamind/agent/second_opinion.py`](../src/datamind/agent/second_opinion.py)
 
 ---
 

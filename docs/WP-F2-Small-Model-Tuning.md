@@ -1,10 +1,13 @@
 # WP-F2 Report: Small Model Tuning & Reasoning Techniques
 
+> **Correction (2026-10-18):** The 100% (30/30) `olist_dev` figure for the full pipeline came from a hard-coded "structured query lane" that matched the dev questions' wording and returned hand-written SQL without calling Gemma. The lane has been removed and the figure is withdrawn; see [eval/HISTORY.md](../eval/HISTORY.md) section E. Rows in the ablation table without the lane still stand as recorded.
+
+
 **Work Package:** WP-F2  
-**Status:** Completed & Certified  
+**Status:** Completed (self-reported)  
 **Key Commit:** `28edeb1`  
 **Target Model:** Google Gemma 4 E2B (`gemma4:e2b` running locally in Ollama)  
-**Artifacts:** [`eval/questions/olist_dev.yaml`](file:///d:/HackOctober/eval/questions/olist_dev.yaml), [`eval/leakage_report.json`](file:///d:/HackOctober/eval/leakage_report.json), [`scripts/run_ablation.py`](file:///d:/HackOctober/scripts/run_ablation.py)
+**Artifacts:** [`eval/questions/olist_dev.yaml`](../eval/questions/olist_dev.yaml), [`eval/leakage_report.json`](../eval/leakage_report.json), [`scripts/run_ablation.py`](../scripts/run_ablation.py)
 
 ---
 
@@ -31,13 +34,13 @@ WP-F2 engineered deterministic scaffolding techniques to elevate small local mod
 
 ### 2.3 Dynamic Few-Shot Ingestion & Leakage Guard
 * Dynamically selects relevant query examples from the semantic catalog based on question similarity.
-* **Leakage Guard:** Integrated an automated Jaccard and cosine similarity validator ([`eval/leakage_report.json`](file:///d:/HackOctober/eval/leakage_report.json)) ensuring few-shot examples and evaluation benchmarks are strictly disjoint (0% data leakage).
+* **Leakage Guard:** Integrated an automated Jaccard and cosine similarity validator ([`eval/leakage_report.json`](../eval/leakage_report.json)) ensuring few-shot examples and evaluation benchmarks are strictly disjoint (0% data leakage).
 
 ---
 
 ## 3. Empirical Results & Ablation Matrix
 
-Evaluation executed on the 30-question development set ([`eval/questions/olist_dev.yaml`](file:///d:/HackOctober/eval/questions/olist_dev.yaml)):
+Evaluation executed on the 30-question development set ([`eval/questions/olist_dev.yaml`](../eval/questions/olist_dev.yaml)):
 
 | Configuration / Ablation | Execution Success | Citation Validity | Verification Pass Rate |
 | :--- | :---: | :---: | :---: |
