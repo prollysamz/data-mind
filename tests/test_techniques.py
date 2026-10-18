@@ -4,7 +4,6 @@ import pytest
 from datamind.semantic.loader import load_semantic_model
 from datamind.agent.techniques.schema_pruning import prune_semantic_model
 from datamind.agent.techniques.dynamic_few_shot import retrieve_dynamic_few_shot
-from datamind.agent.techniques.structured_query_lane import compile_structured_spec, try_structured_lane
 
 
 @pytest.fixture
@@ -26,26 +25,3 @@ def test_dynamic_few_shot_retrieval(olist_model):
     top_few = retrieve_dynamic_few_shot(olist_model.verified_queries, q, k=1)
     assert len(top_few) == 1
     assert "canceled" in top_few[0].question.lower()
-
-
-def test_structured_query_lane_total_orders(olist_model):
-    q = "What is the total number of delivered orders in the database?"
-    sql = try_structured_lane(q, olist_model)
-    assert sql is not None
-    assert "total_orders" in sql
-    assert "delivered" in sql
-
-
-def test_structured_query_lane_net_revenue(olist_model):
-    q = "What is the total net merchandise sales revenue for delivered orders?"
-    sql = try_structured_lane(q, olist_model)
-    assert sql is not None
-    assert "net_sales_revenue" in sql
-    assert "SUM" in sql
-
-
-def test_structured_query_lane_fallthrough(olist_model):
-    # Complex query that cannot be cleanly compiled in structured lane falls through to free-form
-    q = "Which top 3 customer states placed the most delivered orders?"
-    sql = try_structured_lane(q, olist_model)
-    assert sql is None

@@ -4,7 +4,7 @@ backend:
   snowflake:
     account_env: SNOWFLAKE_ACCOUNT
     user_env: SNOWFLAKE_USER
-    password_env: SNOWFLAKE_PASSWORD
+    password_env: SNOWFLAKE_PASSWORD  # pragma: allowlist secret -- environment variable name, not a credential
     role: DATAMIND_READONLY
     warehouse: DATAMIND_XS
     database: DATAMIND
@@ -27,7 +27,6 @@ agent:
   schema_pruning: true
   dynamic_few_shot: true
   execution_guided_repair: true
-  structured_query_lane: true
   self_consistency: false
 
 llm:

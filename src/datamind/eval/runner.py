@@ -526,7 +526,6 @@ def _save_eval_results(
                 "schema_pruning": getattr(agent_config, "schema_pruning", False),
                 "dynamic_few_shot": getattr(agent_config, "dynamic_few_shot", False),
                 "execution_guided_repair": getattr(agent_config, "execution_guided_repair", True),
-                "structured_query_lane": getattr(agent_config, "structured_query_lane", False),
                 "self_consistency": getattr(agent_config, "self_consistency", False),
             },
             model=model_name,

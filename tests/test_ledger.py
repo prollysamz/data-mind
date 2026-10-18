@@ -17,7 +17,7 @@ def test_run_ledger_record_and_read(tmp_path: Path):
         suite_name="olist_dev",
         question_set_hash="test_q_hash",
         config_hash="test_cfg_hash",
-        flags={"structured_query_lane": True},
+        flags={"dynamic_few_shot": True},
         model="gemma4:e2b",
         backend="duckdb",
         total=30,

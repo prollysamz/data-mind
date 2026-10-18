@@ -20,7 +20,6 @@ agent:
   schema_pruning: true
   dynamic_few_shot: true
   execution_guided_repair: true
-  structured_query_lane: true
   self_consistency: false
 
 llm:

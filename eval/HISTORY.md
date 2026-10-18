@@ -37,3 +37,7 @@ This document reconstructs every evaluation run in DataMind's development trajec
 ### D. Citation Review Sheet Was Agent-Generated
 - `eval/citation_review.csv` was previously populated by the coding agent rather than a human reviewer.
 - **Remediation:** The file has been reset to a header-only template for human verification in WP-F5.
+
+### E. Hard-Coded "Structured Query Lane" Removed (2026-10-18)
+- **Finding:** The WP-F2 `structured_query_lane` matched the wording of `olist_dev.yaml` questions with keyword rules and returned hand-written Olist SQL without calling the model. The 100% `olist_dev` figure (R6, commit `28edeb1` onward, median latency under 10 ms) therefore did not measure Gemma and does not count as a model result.
+- **Action:** The lane, its config flag, its tests and its ablation row were deleted. All runs recorded with `structured_query_lane: true` in `eval/run_ledger.jsonl` and the `olist_dev` 100% claim in older WP reports are superseded; only runs made after this change reflect the model's own SQL generation.

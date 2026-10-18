@@ -4,8 +4,7 @@ Techniques evaluated:
 1. Baseline (All OFF)
 2. Execution-Guided Repair (+EGR)
 3. Schema Pruning (+SP)
-4. Dynamic Few-Shot (+DFS)
-5. Structured Query Lane (+SQLane, Winning Configuration)
+4. Dynamic Few-Shot (+DFS, full stack)
 
 Outputs ablation markdown table reading directly from eval/run_ledger.jsonl.
 """
@@ -34,7 +33,6 @@ def run_ablation_matrix(config_path: str = "datamind_olist.yaml", max_items: int
                 "schema_pruning": False,
                 "dynamic_few_shot": False,
                 "execution_guided_repair": False,
-                "structured_query_lane": False,
                 "self_consistency": False,
             },
         },
@@ -44,7 +42,6 @@ def run_ablation_matrix(config_path: str = "datamind_olist.yaml", max_items: int
                 "schema_pruning": False,
                 "dynamic_few_shot": False,
                 "execution_guided_repair": True,
-                "structured_query_lane": False,
                 "self_consistency": False,
             },
         },
@@ -54,27 +51,15 @@ def run_ablation_matrix(config_path: str = "datamind_olist.yaml", max_items: int
                 "schema_pruning": True,
                 "dynamic_few_shot": False,
                 "execution_guided_repair": True,
-                "structured_query_lane": False,
                 "self_consistency": False,
             },
         },
         {
-            "name": "4. + Dynamic Few-Shot",
+            "name": "4. Full Stack (+ Dynamic Few-Shot)",
             "flags": {
                 "schema_pruning": True,
                 "dynamic_few_shot": True,
                 "execution_guided_repair": True,
-                "structured_query_lane": False,
-                "self_consistency": False,
-            },
-        },
-        {
-            "name": "5. Full Production Stack (+ Structured Query Lane)",
-            "flags": {
-                "schema_pruning": True,
-                "dynamic_few_shot": True,
-                "execution_guided_repair": True,
-                "structured_query_lane": True,
                 "self_consistency": False,
             },
         },

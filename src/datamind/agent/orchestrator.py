@@ -19,7 +19,6 @@ from datamind.agent.verifier import CitationReport, verify_citations
 from datamind.config import AgentConfig
 from datamind.agent.techniques.schema_pruning import prune_semantic_model
 from datamind.agent.techniques.dynamic_few_shot import retrieve_dynamic_few_shot
-from datamind.agent.techniques.structured_query_lane import try_structured_lane
 from datamind.guardrails.sql_guard import SQLGuard
 from datamind.llm.client import LLMClient, build_tool_messages
 from datamind.retrieval.base import Retriever
@@ -166,63 +165,6 @@ class AgentOrchestrator:
                     lane="schema_limitation_refusal",
                     messages=[{"role": "assistant", "content": unans_msg}],
                 )
-
-        # WP-F2 Technique: Structured query compilation lane for simple aggregations
-        if not conversation_history and self.config.structured_query_lane:
-            compiled_sql = try_structured_lane(question, self.semantic_model)
-            if compiled_sql:
-                execute_sql_tool(
-                    sql=compiled_sql,
-                    purpose="Structured query lane compilation",
-                    guard=self.sql_guard,
-                    adapter=self.db_adapter,
-                    evidence_store=self.evidence_store,
-                )
-                if self.evidence_store.queries:
-                    last_q = self.evidence_store.queries[-1]
-                    q_label = last_q.query_label
-                    rows = last_q.result.rows if last_q.result else []
-                    if rows:
-                        first_row_id = last_q.row_ids[0] if last_q.row_ids else f"{q_label}:R1"
-                        if len(rows) == 1 and len(rows[0]) == 1:
-                            val = rows[0][0]
-                            sym = "R$" if any(k in question.lower() for k in ["revenue", "freight", "aov", "value", "price"]) and "percentage" not in question.lower() else ""
-                            pct = "%" if "percentage" in question.lower() or "percent" in question.lower() else ""
-                            val_str = f"{sym}{val:,.2f}{pct}" if (isinstance(val, float) and (sym or pct)) else (f"{sym}{val:,}{pct}" if (sym or pct) else (f"{val:,.2f}" if isinstance(val, float) else str(val)))
-                            ans = f"Based on verified data, the result for '{question.strip('?')}' is {val_str} [[{first_row_id}]]."
-                        elif len(rows) == 1:
-                            parts = []
-                            for c in rows[0]:
-                                if isinstance(c, float):
-                                    parts.append(f"R${c:,.2f}" if any(k in question.lower() for k in ["revenue", "price", "sales"]) else f"{c:,.2f}")
-                                else:
-                                    parts.append(str(c))
-                            ans = f"Based on verified data, the result for '{question.strip('?')}' is {' - '.join(parts)} [[{first_row_id}]]."
-                        else:
-                            lines = [f"Based on verified data, the results for '{question.strip('?')}' are:"]
-                            for r_idx, r in enumerate(rows):
-                                r_id = last_q.row_ids[r_idx] if r_idx < len(last_q.row_ids) else f"{q_label}:R{r_idx+1}"
-                                r_cells = []
-                                for c in r:
-                                    if isinstance(c, float):
-                                        r_cells.append(f"R${c:,.2f}" if any(k in question.lower() for k in ["revenue", "price", "sales"]) else f"{c:,.2f}")
-                                    else:
-                                        r_cells.append(str(c))
-                                lines.append(f"- {' : '.join(r_cells)} [[{r_id}]]")
-                            ans = "\n".join(lines)
-
-                        rep = verify_citations(ans, self.evidence_store, self.semantic_model, question=question)
-                        return AgentResult(
-                            question=question,
-                            answer=ans,
-                            evidence_store=self.evidence_store,
-                            citation_report=rep,
-                            turns=1,
-                            success=True,
-                            lane="structured_query_lane",
-                            messages=[{"role": "assistant", "content": ans}],
-                            assumptions_card=getattr(rep, "assumptions_card", None),
-                        )
 
         # Apply schema pruning and dynamic few-shot if configured
         active_model = self.semantic_model
