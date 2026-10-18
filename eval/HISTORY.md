@@ -53,3 +53,8 @@ This document reconstructs every evaluation run in DataMind's development trajec
 - **Failure analysis (no prompt tuning applied):** `Q_MONTHLY_REVENUE_TREND` fails because the model groups by `product_name` and `order_month` for the phrasing "total sales revenue for each month" (15 rows instead of 5), and the verifier reports every number as verified, a verified-but-wrong case. Rephrased as "per month across all products" it answers correctly. `Q_MIXED_REVENUE_SUPPORT` fails intermittently when the model writes an invalid multi-CTE window query, exhausts the 2-repair limit, and falls back to document search only; its answer then says the SQL failed.
 - **Remaining dev-set tuning in the prompt:** the schema-specific rules in section 5 (support ticket `priority` vs `category` values, zero-issue catalog pattern, unit-price rule) were written against these questions and are not generalisation evidence.
 
+### H. Report Corrections and Citation Sheet Reset (2026-10-18)
+- `eval/citation_review.csv` held 40 rows marked as human-verified, but several values were malformed (currency digits missing) and the last three cited `policy.md`, `sla.md` and `compliance.md`, which do not exist. It was not a human audit and has been reset to a header-only template. No human citation audit exists yet.
+- WP-F5 quoted a sealed-set digest (`2e604f76...`) that matches no file; the committed digest `40d6cab3...` in `sealed_commitment.txt` matches `held_out_sealed.yaml` as stored in git (LF line endings; a Windows CRLF checkout hashes differently).
+- WP reports F2-F7 carry dated correction notes; "Completed & Certified" was changed to "Completed (self-reported)".
+
