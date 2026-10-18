@@ -19,6 +19,7 @@ from datamind.agent.evidence import EvidenceStore
 from datamind.agent.prompts import build_system_prompt
 from datamind.agent.techniques.dynamic_few_shot import retrieve_dynamic_few_shot
 from datamind.agent.techniques.schema_pruning import prune_semantic_model
+from datamind.agent.techniques.structured_query_lane import try_structured_lane
 from datamind.agent.tools import (
     TOOL_DEFINITIONS,
     execute_retrieval_tool,
@@ -112,6 +113,21 @@ class AgentOrchestrator:
                     success=True,
                     lane=lane,
                     messages=[{"role": "assistant", "content": msg}],
+                )
+
+        # Structured lane: when the question names one metric the semantic model already
+        # defines, run that metric's own SQL instead of asking the model to write it. The
+        # model still narrates the rows, so the answer is cited and verified as usual.
+        # Off by default; runs made with it on measure the semantic model, not SQL generation.
+        if self.config.structured_query_lane:
+            compiled_sql = try_structured_lane(question, self.semantic_model)
+            if compiled_sql:
+                execute_sql_tool(
+                    sql=compiled_sql,
+                    purpose="Structured lane: SQL declared by the semantic model",
+                    guard=self.sql_guard,
+                    adapter=self.db_adapter,
+                    evidence_store=self.evidence_store,
                 )
 
         # Apply schema pruning and dynamic few-shot if configured

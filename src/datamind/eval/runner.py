@@ -355,65 +355,23 @@ def run_evaluation(
 
     items_to_evaluate: list[dict[str, Any]] = []
 
-    # 1. Load Business Suite
-    if suite in ("all", "business"):
-        b_file = Path("eval/questions/business.yaml")
-        if b_file.exists():
-            with open(b_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                for q in data.get("questions", []):
-                    q["_suite"] = "business"
-                    items_to_evaluate.append(q)
+    # Suites load from eval/questions/<name>.yaml. "all" runs the everyday suites;
+    # sealed and reusability suites are opt-in so a normal run never touches them.
+    IN_ALL = ("business", "trust", "held_out", "held_out_fresh", "olist_dev")
+    BY_REQUEST = ("held_out_sealed", "tpch")
 
-    # 2. Load Trust Suite
-    if suite in ("all", "trust"):
-        t_file = Path("eval/questions/trust.yaml")
-        if t_file.exists():
-            with open(t_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                for q in data.get("questions", []):
-                    q["_suite"] = "trust"
-                    items_to_evaluate.append(q)
-
-    # 3. Load Held-Out Suite
-    if suite in ("all", "held_out"):
-        h_file = Path("eval/questions/held_out.yaml")
-        if h_file.exists():
-            with open(h_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                for q in data.get("questions", []):
-                    q["_suite"] = "held_out"
-                    items_to_evaluate.append(q)
-
-    # 4. Load Fresh Held-Out Suite
-    if suite in ("all", "held_out_fresh"):
-        hf_file = Path("eval/questions/held_out_fresh.yaml")
-        if hf_file.exists():
-            with open(hf_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                for q in data.get("questions", []):
-                    q["_suite"] = "held_out_fresh"
-                    items_to_evaluate.append(q)
-
-    # 5. Load Sealed Held-Out Suite (ONLY when explicitly requested for freeze)
-    if suite == "held_out_sealed":
-        hs_file = Path("eval/questions/held_out_sealed.yaml")
-        if hs_file.exists():
-            with open(hs_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                for q in data.get("questions", []):
-                    q["_suite"] = "held_out_sealed"
-                    items_to_evaluate.append(q)
-
-    # 6. Load Olist Development Suite
-    if suite in ("all", "olist_dev"):
-        dev_file = Path("eval/questions/olist_dev.yaml")
-        if dev_file.exists():
-            with open(dev_file, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-                for q in data.get("questions", []):
-                    q["_suite"] = "olist_dev"
-                    items_to_evaluate.append(q)
+    for name in (*IN_ALL, *BY_REQUEST):
+        wanted = suite == name or (suite == "all" and name in IN_ALL)
+        if not wanted:
+            continue
+        path = Path(f"eval/questions/{name}.yaml")
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        for q in data.get("questions", []):
+            q["_suite"] = name
+            items_to_evaluate.append(q)
 
     if max_items and max_items > 0:
         items_to_evaluate = items_to_evaluate[:max_items]

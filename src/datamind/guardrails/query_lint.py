@@ -2,7 +2,8 @@
 
 Analyzes executed SQL queries against the Semantic Model AST to catch
 "verified but wrong" semantic issues:
-1. Join Fan-Out: Multiplied row counts when aggregating across 1-to-many joins without DISTINCT.
+1. Join Fan-Out: Multiplied row counts when aggregating across 1-to-many joins without DISTINCT,
+   and sibling fan-out where one parent is joined to two of its child tables at once.
 2. Default-Filter Echo: Missing declared business filters (e.g. order_status = 'delivered').
 3. Empty or Null-Heavy Results: Zero rows returned or >50% null values.
 4. Row-Limit Truncation: Results truncated by limit ceiling.
@@ -251,6 +252,37 @@ class QueryLinter:
                                 remediation=f"Use COUNT(DISTINCT {agg.this.sql() if hasattr(agg, 'this') else '...'}) to prevent row multiplication.",
                             )
                         )
+
+        # ----------------------------------------------------------------------
+        # Check A2: Sibling Fan-Out (two 1-to-many children of the same parent)
+        # ----------------------------------------------------------------------
+        # Joining a parent to two of its child tables multiplies their rows together
+        # (3 items x 2 payments = 6 rows), so every aggregate over either child is
+        # inflated even when each individual join looks correct.
+        children_by_parent: dict[str, list[str]] = {}
+        for parent, child, _keys in one_to_many:
+            if parent in tables and child in tables:
+                children_by_parent.setdefault(parent, []).append(child)
+
+        for parent, children in children_by_parent.items():
+            if len(children) < 2:
+                continue
+            joined = ", ".join(f"'{c}'" for c in sorted(children))
+            findings.append(
+                QueryLintFinding(
+                    check_name="sibling_fan_out",
+                    severity="WARNING",
+                    message=(
+                        f"Sibling fan-out detected: query joins '{parent}' to more than one "
+                        f"1-to-many child table ({joined}) at once, so their rows multiply "
+                        f"together and every aggregate over them is inflated."
+                    ),
+                    remediation=(
+                        f"Aggregate each child separately (one CTE per child, grouped by the "
+                        f"'{parent}' key) and join those results together."
+                    ),
+                )
+            )
 
         # ----------------------------------------------------------------------
         # Check B: Default-Filter Echo Check

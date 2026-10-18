@@ -1,0 +1,111 @@
+# TPC-H reusability suite: a schema DataMind was never built or tuned for.
+#
+# Runs against SNOWFLAKE_SAMPLE_DATA.TPCH_SF1, which every Snowflake account already has,
+# so there is nothing to download or load. The semantic model in examples/tpch/ was
+# produced by `datamind init` introspecting the schema; no question, table or column
+# below appears anywhere in DataMind's code or prompts.
+#
+# Each question carries ground_truth_sql. The runner executes it against the same
+# database and compares, so a pass means the agent's own SQL reproduced the real answer
+# rather than matching a number committed here.
+#
+#   datamind eval --suite tpch --config datamind_tpch.yaml
+#
+# Requires Snowflake credentials and DATAMIND_READONLY (docs/snowflake.md).
+questions:
+  - id: TPCH_REGION_COUNT
+    question: "How many geographic regions are there?"
+    domain: tpch_reusability
+    category: simple_count
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(*) AS region_count FROM REGION;"
+
+  - id: TPCH_CUSTOMER_COUNT
+    question: "How many customers are in the CUSTOMER table?"
+    domain: tpch_reusability
+    category: simple_count
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(*) AS customer_count FROM CUSTOMER;"
+
+  - id: TPCH_AVG_BALANCE
+    question: "What is the average customer account balance?"
+    domain: tpch_reusability
+    category: aggregate
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT ROUND(AVG(C_ACCTBAL), 2) AS avg_balance FROM CUSTOMER;"
+
+  - id: TPCH_SEGMENT_BREAKDOWN
+    question: "How many customers are in each market segment?"
+    domain: tpch_reusability
+    category: group_by
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT C_MKTSEGMENT, COUNT(*) AS customer_count
+      FROM CUSTOMER
+      GROUP BY C_MKTSEGMENT
+      ORDER BY customer_count DESC;
+
+  - id: TPCH_URGENT_ORDERS
+    question: "How many orders have urgent priority?"
+    domain: tpch_reusability
+    category: filtered_count
+    required_tools: [run_sql]
+    ground_truth_sql: "SELECT COUNT(*) AS urgent_orders FROM ORDERS WHERE O_ORDERPRIORITY = '1-URGENT';"
+
+  - id: TPCH_REVENUE_BY_YEAR
+    question: "What was the total order value for each year?"
+    domain: tpch_reusability
+    category: time_series
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT YEAR(O_ORDERDATE) AS order_year, ROUND(SUM(O_TOTALPRICE), 2) AS total_value
+      FROM ORDERS
+      GROUP BY order_year
+      ORDER BY order_year;
+
+  - id: TPCH_NATIONS_IN_AMERICA
+    question: "Which nations belong to the AMERICA region?"
+    domain: tpch_reusability
+    category: join
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT N_NAME
+      FROM NATION
+      JOIN REGION ON N_REGIONKEY = R_REGIONKEY
+      WHERE R_NAME = 'AMERICA'
+      ORDER BY N_NAME;
+
+  - id: TPCH_TOP_NATIONS_BY_CUSTOMERS
+    question: "Which five nations have the most customers?"
+    domain: tpch_reusability
+    category: join_ranking
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT N_NAME, COUNT(*) AS customer_count
+      FROM CUSTOMER
+      JOIN NATION ON C_NATIONKEY = N_NATIONKEY
+      GROUP BY N_NAME
+      ORDER BY customer_count DESC
+      LIMIT 5;
+
+  - id: TPCH_REVENUE_AFTER_DISCOUNT
+    question: "What is the total revenue from line items after discounts?"
+    domain: tpch_reusability
+    category: expression
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT ROUND(SUM(L_EXTENDEDPRICE * (1 - L_DISCOUNT)), 2) AS net_revenue
+      FROM LINEITEM;
+
+  # Fan-out trap: ORDERS to LINEITEM is 1-to-many, so counting orders after the join
+  # without DISTINCT inflates the figure. The linter should flag it if the agent gets
+  # it wrong, and the ground-truth SQL shows the correct shape.
+  - id: TPCH_ORDERS_WITH_LINE_ITEMS
+    question: "How many distinct orders have at least one line item?"
+    domain: tpch_reusability
+    category: fan_out_trap
+    required_tools: [run_sql]
+    ground_truth_sql: |
+      SELECT COUNT(DISTINCT O_ORDERKEY) AS order_count
+      FROM ORDERS
+      JOIN LINEITEM ON O_ORDERKEY = L_ORDERKEY;

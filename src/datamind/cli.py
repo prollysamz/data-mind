@@ -726,7 +726,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     eval_parser.add_argument(
         "--suite",
-        choices=["all", "business", "trust", "held_out", "held_out_fresh", "held_out_sealed", "verifier", "security", "real_data", "olist_dev"],
+        choices=["all", "business", "trust", "held_out", "held_out_fresh", "held_out_sealed", "verifier", "security", "real_data", "olist_dev", "tpch"],
         default="all",
         help="Evaluation suite to run",
     )

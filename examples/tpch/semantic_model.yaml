@@ -1,0 +1,213 @@
+name: snowflake_sample_data_tpch_sf1
+description: Auto-generated semantic model for Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  created via datamind init.
+default_currency: USD
+currency_symbol: $
+tables:
+- name: CUSTOMER
+  description: Table CUSTOMER containing 8 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: C_CUSTKEY
+    type: NUMBER(38,0)
+    description: C_CUSTKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: C_NAME
+    type: VARCHAR(25)
+    description: C_NAME (VARCHAR(25)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: C_ADDRESS
+    type: VARCHAR(40)
+    description: C_ADDRESS (VARCHAR(40)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: C_NATIONKEY
+    type: NUMBER(38,0)
+    description: C_NATIONKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: C_PHONE
+    type: VARCHAR(15)
+    description: C_PHONE (VARCHAR(15)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: C_ACCTBAL
+    type: NUMBER(12,2)
+    description: C_ACCTBAL (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: C_MKTSEGMENT
+    type: VARCHAR(10)
+    description: C_MKTSEGMENT (VARCHAR(10)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: C_COMMENT
+    type: VARCHAR(117)
+    description: C_COMMENT (VARCHAR(117)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+- name: LINEITEM
+  description: Table LINEITEM containing 16 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: L_ORDERKEY
+    type: NUMBER(38,0)
+    description: L_ORDERKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_PARTKEY
+    type: NUMBER(38,0)
+    description: L_PARTKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_SUPPKEY
+    type: NUMBER(38,0)
+    description: L_SUPPKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_LINENUMBER
+    type: NUMBER(38,0)
+    description: L_LINENUMBER (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_QUANTITY
+    type: NUMBER(12,2)
+    description: L_QUANTITY (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_EXTENDEDPRICE
+    type: NUMBER(12,2)
+    description: L_EXTENDEDPRICE (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_DISCOUNT
+    type: NUMBER(12,2)
+    description: L_DISCOUNT (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_TAX
+    type: NUMBER(12,2)
+    description: L_TAX (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_RETURNFLAG
+    type: VARCHAR(1)
+    description: L_RETURNFLAG (VARCHAR(1)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_LINESTATUS
+    type: VARCHAR(1)
+    description: L_LINESTATUS (VARCHAR(1)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_SHIPDATE
+    type: DATE
+    description: L_SHIPDATE (DATE) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_COMMITDATE
+    type: DATE
+    description: L_COMMITDATE (DATE) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_RECEIPTDATE
+    type: DATE
+    description: L_RECEIPTDATE (DATE) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_SHIPINSTRUCT
+    type: VARCHAR(25)
+    description: L_SHIPINSTRUCT (VARCHAR(25)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_SHIPMODE
+    type: VARCHAR(10)
+    description: L_SHIPMODE (VARCHAR(10)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: L_COMMENT
+    type: VARCHAR(44)
+    description: L_COMMENT (VARCHAR(44)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+- name: NATION
+  description: Table NATION containing 4 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: N_NATIONKEY
+    type: NUMBER(38,0)
+    description: N_NATIONKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: N_NAME
+    type: VARCHAR(25)
+    description: N_NAME (VARCHAR(25)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: N_REGIONKEY
+    type: NUMBER(38,0)
+    description: N_REGIONKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: N_COMMENT
+    type: VARCHAR(152)
+    description: N_COMMENT (VARCHAR(152)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+- name: ORDERS
+  description: Table ORDERS containing 9 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: O_ORDERKEY
+    type: NUMBER(38,0)
+    description: O_ORDERKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_CUSTKEY
+    type: NUMBER(38,0)
+    description: O_CUSTKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_ORDERSTATUS
+    type: VARCHAR(1)
+    description: O_ORDERSTATUS (VARCHAR(1)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_TOTALPRICE
+    type: NUMBER(12,2)
+    description: O_TOTALPRICE (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_ORDERDATE
+    type: DATE
+    description: O_ORDERDATE (DATE) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_ORDERPRIORITY
+    type: VARCHAR(15)
+    description: O_ORDERPRIORITY (VARCHAR(15)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_CLERK
+    type: VARCHAR(15)
+    description: O_CLERK (VARCHAR(15)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_SHIPPRIORITY
+    type: NUMBER(38,0)
+    description: O_SHIPPRIORITY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: O_COMMENT
+    type: VARCHAR(79)
+    description: O_COMMENT (VARCHAR(79)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+- name: PART
+  description: Table PART containing 9 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: P_PARTKEY
+    type: NUMBER(38,0)
+    description: P_PARTKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_NAME
+    type: VARCHAR(55)
+    description: P_NAME (VARCHAR(55)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_MFGR
+    type: VARCHAR(25)
+    description: P_MFGR (VARCHAR(25)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_BRAND
+    type: VARCHAR(10)
+    description: P_BRAND (VARCHAR(10)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_TYPE
+    type: VARCHAR(25)
+    description: P_TYPE (VARCHAR(25)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_SIZE
+    type: NUMBER(38,0)
+    description: P_SIZE (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_CONTAINER
+    type: VARCHAR(10)
+    description: P_CONTAINER (VARCHAR(10)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_RETAILPRICE
+    type: NUMBER(12,2)
+    description: P_RETAILPRICE (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: P_COMMENT
+    type: VARCHAR(23)
+    description: P_COMMENT (VARCHAR(23)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+- name: PARTSUPP
+  description: Table PARTSUPP containing 5 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: PS_PARTKEY
+    type: NUMBER(38,0)
+    description: PS_PARTKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: PS_SUPPKEY
+    type: NUMBER(38,0)
+    description: PS_SUPPKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: PS_AVAILQTY
+    type: NUMBER(38,0)
+    description: PS_AVAILQTY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: PS_SUPPLYCOST
+    type: NUMBER(12,2)
+    description: PS_SUPPLYCOST (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: PS_COMMENT
+    type: VARCHAR(199)
+    description: PS_COMMENT (VARCHAR(199)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+- name: REGION
+  description: Table REGION containing 3 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: R_REGIONKEY
+    type: NUMBER(38,0)
+    description: R_REGIONKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: R_NAME
+    type: VARCHAR(25)
+    description: R_NAME (VARCHAR(25)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: R_COMMENT
+    type: VARCHAR(152)
+    description: R_COMMENT (VARCHAR(152)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+- name: SUPPLIER
+  description: Table SUPPLIER containing 7 columns in Snowflake SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  columns:
+  - name: S_SUPPKEY
+    type: NUMBER(38,0)
+    description: S_SUPPKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: S_NAME
+    type: VARCHAR(25)
+    description: S_NAME (VARCHAR(25)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: S_ADDRESS
+    type: VARCHAR(40)
+    description: S_ADDRESS (VARCHAR(40)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: S_NATIONKEY
+    type: NUMBER(38,0)
+    description: S_NATIONKEY (NUMBER(38,0)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: S_PHONE
+    type: VARCHAR(15)
+    description: S_PHONE (VARCHAR(15)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: S_ACCTBAL
+    type: NUMBER(12,2)
+    description: S_ACCTBAL (NUMBER(12,2)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1
+  - name: S_COMMENT
+    type: VARCHAR(101)
+    description: S_COMMENT (VARCHAR(101)) auto-introspected from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1

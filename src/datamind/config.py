@@ -153,6 +153,9 @@ class AgentConfig(BaseModel):
     schema_pruning: bool = False
     dynamic_few_shot: bool = False
     execution_guided_repair: bool = True
+    # Run a declared metric's own SQL when the question names exactly one metric.
+    # Off by default: it answers from the semantic model, not from generated SQL.
+    structured_query_lane: bool = False
     self_consistency: bool = False
     # Screen questions against the semantic model for ambiguity / missing attributes
     answerability_check: bool = True
